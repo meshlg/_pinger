@@ -2,6 +2,8 @@
 
 Async network monitoring tool with real-time terminal UI, alerts, and connection quality analysis.
 
+![Pinger Interface](assets/screenshot.jpg)
+
 Supports **Russian** and **English** localization — switch via `CURRENT_LANGUAGE` in `config.py`.
 
 ## Features
