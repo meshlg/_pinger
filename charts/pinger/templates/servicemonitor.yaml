@@ -1,0 +1,15 @@
+{{- if .Values.prometheus.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "pinger.fullname" . }}
+  labels: {{- toYaml .Values.prometheus.serviceMonitor.labels | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "pinger.name" . }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.prometheus.serviceMonitor.interval }}
+{{- end -}}

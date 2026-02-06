@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pinger.fullname" . }}
+  labels:
+    app: {{ include "pinger.name" . }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: metrics
+      port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+    - name: health
+      port: {{ .Values.service.healthPort }}
+      targetPort: health
+  selector:
+    app: {{ include "pinger.name" . }}

@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: pinger
+  pullPolicy: IfNotPresent
+  tag: latest
+
+service:
+  type: ClusterIP
+  metricsPort: 8000
+  healthPort: 8001
+
+env:
+  ENABLE_METRICS: true
+  METRICS_PORT: 8000
+  METRICS_ADDR: 0.0.0.0
+  ENABLE_HEALTH_ENDPOINT: true
+  HEALTH_PORT: 8001
+  HEALTH_ADDR: 0.0.0.0
+  LOG_TRUNCATE_ON_START: true
+
+resources: {}
+
+prometheus:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    labels: {}

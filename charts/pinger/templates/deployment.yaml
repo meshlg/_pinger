@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pinger.fullname" . }}
+  labels:
+    app: {{ include "pinger.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "pinger.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "pinger.name" . }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.metricsPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: pinger
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: ENABLE_METRICS
+              value: "{{ .Values.env.ENABLE_METRICS }}"
+            - name: METRICS_PORT
+              value: "{{ .Values.env.METRICS_PORT }}"
+            - name: METRICS_ADDR
+              value: "{{ .Values.env.METRICS_ADDR }}"
+            - name: ENABLE_HEALTH_ENDPOINT
+              value: "{{ .Values.env.ENABLE_HEALTH_ENDPOINT }}"
+            - name: HEALTH_PORT
+              value: "{{ .Values.env.HEALTH_PORT }}"
+            - name: HEALTH_ADDR
+              value: "{{ .Values.env.HEALTH_ADDR }}"
+            - name: LOG_TRUNCATE_ON_START
+              value: "{{ .Values.env.LOG_TRUNCATE_ON_START }}"
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+            - name: health
+              containerPort: {{ .Values.service.healthPort }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.healthPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.service.healthPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{ toYaml .Values.resources | nindent 12 }}
