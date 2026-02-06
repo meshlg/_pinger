@@ -91,6 +91,7 @@ HEALTH_PORT = 8001
 
 LOG_FILE = "ping_monitor.log"
 LOG_LEVEL = "INFO"
+
 # If True, truncate (clear) log file at startup
 LOG_TRUNCATE_ON_START = True
 

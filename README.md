@@ -128,7 +128,7 @@ ROUTE_CHANGE_CONSECUTIVE = 2    # Detections to confirm change
 ENABLE_HOP_MONITORING = True
 HOP_PING_INTERVAL = 1          # Seconds between ping cycles (all hops pinged in parallel)
 HOP_PING_TIMEOUT = 0.5         # Timeout per hop ping (seconds) - 500ms recommended
-HOP_REDISCOVER_INTERVAL = 600  # Seconds between route re-discovery
+HOP_REDISCOVER_INTERVAL = 600  # Seconds between automatic route re-discovery
 HOP_LATENCY_GOOD = 50          # Green threshold (ms)
 HOP_LATENCY_WARN = 100         # Yellow threshold (ms), above = red
 ```

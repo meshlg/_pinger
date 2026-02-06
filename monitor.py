@@ -223,6 +223,9 @@ class Monitor:
                         "info"
                     )
                     trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "ip")
+                    # Trigger immediate hop re-discovery on IP change
+                    if ENABLE_HOP_MONITORING:
+                        self.hop_monitor_service.request_rediscovery()
                 
                 # Update stats
                 self.stats_repo.update_public_ip(ip, country, code)
@@ -401,7 +404,13 @@ class Monitor:
 
         import time as _time
 
-        # Initial discovery
+        # Set up streaming callback — UI updates as each hop is discovered
+        def _on_hop_discovered(snapshot):
+            self.stats_repo.update_hop_monitor(snapshot, discovering=True)
+
+        self.hop_monitor_service.set_on_hop_callback(_on_hop_discovered)
+
+        # Initial discovery (streaming — hops appear one by one)
         self.stats_repo.update_hop_monitor([], discovering=True)
         await self.run_blocking(
             self.hop_monitor_service.discover_hops, TARGET_IP
@@ -414,17 +423,15 @@ class Monitor:
 
         while not self.stop_event.is_set():
             try:
-                # Ping all hops
-                await self.run_blocking(self.hop_monitor_service.ping_all_hops)
-                self.stats_repo.update_hop_monitor(
-                    self.hop_monitor_service.get_hops_snapshot(), discovering=False
+                # Check if IP change triggered immediate re-discovery
+                need_rediscovery = (
+                    self.hop_monitor_service.rediscovery_requested
+                    or _time.time() - last_discovery > HOP_REDISCOVER_INTERVAL
                 )
 
-                # Re-discover hops periodically
-                if _time.time() - last_discovery > HOP_REDISCOVER_INTERVAL:
-                    self.stats_repo.update_hop_monitor(
-                        self.hop_monitor_service.get_hops_snapshot(), discovering=True
-                    )
+                if need_rediscovery:
+                    self.hop_monitor_service.clear_rediscovery()
+                    self.stats_repo.update_hop_monitor([], discovering=True)
                     await self.run_blocking(
                         self.hop_monitor_service.discover_hops, TARGET_IP
                     )
@@ -432,6 +439,12 @@ class Monitor:
                         self.hop_monitor_service.get_hops_snapshot(), discovering=False
                     )
                     last_discovery = _time.time()
+                else:
+                    # Ping all hops
+                    await self.run_blocking(self.hop_monitor_service.ping_all_hops)
+                    self.stats_repo.update_hop_monitor(
+                        self.hop_monitor_service.get_hops_snapshot(), discovering=False
+                    )
 
             except Exception as exc:
                 logging.error(f"Hop monitor failed: {exc}")
