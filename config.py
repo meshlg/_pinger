@@ -50,6 +50,12 @@ MTU_DIFF_THRESHOLD = 50    # minimal difference between local and path MTU to co
 ENABLE_TTL_MONITORING = True
 TTL_CHECK_INTERVAL = 10
 
+ENABLE_HOP_MONITORING = True
+HOP_PING_INTERVAL = 30         # seconds between hop ping cycles
+HOP_REDISCOVER_INTERVAL = 600  # seconds between hop re-discovery (traceroute)
+HOP_LATENCY_GOOD = 50          # ms — green threshold
+HOP_LATENCY_WARN = 100         # ms — yellow threshold (above = red)
+
 ENABLE_PROBLEM_ANALYSIS = True
 PROBLEM_ANALYSIS_INTERVAL = 60
 PROBLEM_HISTORY_SIZE = 100
@@ -185,6 +191,21 @@ LANG: Dict[str, Dict[str, str]] = {
         "avg_latency_short": "Ср.задержка",
         "changed_hops": "Изменено",
         "changes": "Изменения",
+        # ── Hop monitoring ──
+        "hop_health": "ЗДОРОВЬЕ ХОПОВ",
+        "hop_discovering": "Обнаружение хопов...",
+        "hop_none": "Нет данных",
+        "hop_good": "OK",
+        "hop_slow": "Медл.",
+        "hop_down": "Недост.",
+        "hop_worst": "Худший",
+        "hop_loss_label": "Потери",
+        "hop_col_num": "#",
+        "hop_col_min": "Мин",
+        "hop_col_avg": "Ср",
+        "hop_col_last": "Посл",
+        "hop_col_loss": "Потери",
+        "hop_col_host": "Хост",
         # ── Monitoring panel ──
         "alerts_label": "Тревоги",
         "traceroute_running": "Идет...",
@@ -317,6 +338,21 @@ LANG: Dict[str, Dict[str, str]] = {
         "avg_latency_short": "Avg latency",
         "changed_hops": "Changed",
         "changes": "Changes",
+        # ── Hop monitoring ──
+        "hop_health": "HOP HEALTH",
+        "hop_discovering": "Discovering hops...",
+        "hop_none": "No data",
+        "hop_good": "OK",
+        "hop_slow": "Slow",
+        "hop_down": "Down",
+        "hop_worst": "Worst",
+        "hop_loss_label": "Loss",
+        "hop_col_num": "#",
+        "hop_col_min": "Min",
+        "hop_col_avg": "Avg",
+        "hop_col_last": "Last",
+        "hop_col_loss": "Loss",
+        "hop_col_host": "Host",
         # ── Monitoring panel ──
         "alerts_label": "Alerts",
         "traceroute_running": "Running...",

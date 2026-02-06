@@ -17,6 +17,7 @@ Supports **Russian** and **English** localization — switch via `CURRENT_LANGUA
 - **Auto traceroute** — triggered on connection problems, saved to `traceroutes/`
 - **Problem analysis** — automatic ISP/local/DNS/MTU problem classification, pattern detection, prediction
 - **Route analysis** — traceroute-based hop analysis, route change detection
+- **Hop health monitoring** — automatic hop discovery via traceroute, periodic ping of each intermediate hop, full traceroute-style table with min/avg/last latency and loss per hop
 - **Prometheus metrics** — `/metrics` endpoint for scraping
 - **Health endpoint** — `/health` and `/ready` for Kubernetes probes
 - **Docker & Helm** — ready for containerized deployment
@@ -121,6 +122,16 @@ ROUTE_ANALYSIS_INTERVAL = 300
 ROUTE_CHANGE_CONSECUTIVE = 2    # Detections to confirm change
 ```
 
+### Hop Health Monitoring
+
+```python
+ENABLE_HOP_MONITORING = True
+HOP_PING_INTERVAL = 30         # Seconds between hop ping cycles
+HOP_REDISCOVER_INTERVAL = 600  # Seconds between hop re-discovery
+HOP_LATENCY_GOOD = 50          # Green threshold (ms)
+HOP_LATENCY_WARN = 100         # Yellow threshold (ms), above = red
+```
+
 ### Logging
 
 ```python
@@ -141,19 +152,25 @@ HEALTH_PORT = 8001
 
 ## Interface
 
-The dashboard is split into a **header**, **status bar**, **2×2 grid**, and **footer**:
+The dashboard is split into a **header**, **status bar**, **3-row body**, and **footer**:
 
 ```
 ┌─────────────── Network Monitor → 8.8.8.8 │ 10:35:21 ───────────────┐
 ╔══ ● CONNECTED │ Ping: 12.3ms │ Loss: 0.0% │ Uptime: 2h 15m ══════╗
-┌─ LATENCY ──────────────┐  ┌─ STATISTICS ─────────────┐
+┌─ LATENCY ───────────────┐  ┌─ STATISTICS ─────────────┐
 │ Current/Best/Avg/Peak  │  │ Sent/OK/Lost + bars      │
-│ Sparkline chart ▁▂▃▅▃▂ │  │ ████████████████░░ 99.9% │
+│ Sparkline chart ▁▂▃▅▃▂ │  │ ██████████████████░░ 99.9% │
 └────────────────────────┘  └──────────────────────────┘
 ┌─ ANALYSIS ─────────────┐  ┌─ MONITORING ─────────────┐
 │ Problem type/Prediction│  │ DNS/MTU/TTL/Traceroute   │
 │ Route status/Hops      │  │ Notifications            │
 └────────────────────────┘  └──────────────────────────┘
+┌─ HOP HEALTH ───────────────────────────────────────────┐
+│  #   Min       Avg       Last      Loss    Host              │
+│  1   14 ms     14 ms     13 ms     0.0%    10.0.0.1          │
+│  2   14 ms     14 ms     14 ms     0.0%    69.30.89.2        │
+│  3   15 ms     14 ms     14 ms     0.0%    hostname [1.2.3.4]│
+└───────────────────────────────────────────────────────┘
 ```
 
 - **Status bar** — instant connection state (CONNECTED / DEGRADED / DISCONNECTED) with key metrics
@@ -161,6 +178,7 @@ The dashboard is split into a **header**, **status bar**, **2×2 grid**, and **f
 - **Statistics panel** — packet counters + Unicode progress bars for success rate and 30-min loss
 - **Analysis panel** — problem type, prediction, pattern + route analysis
 - **Monitoring panel** — DNS, MTU, TTL, traceroute status + notifications
+- **Hop Health panel** — full-width traceroute-style table with color-coded latency per hop
 
 ## Docker
 
@@ -209,20 +227,22 @@ _pinger/
 ├── requirements.txt           # Python dependencies
 │
 ├── services/                  # Service layer
-│   ├── ping_service.py        #   System ping / pythonping fallback
-│   ├── dns_service.py         #   DNS resolution monitoring
-│   ├── mtu_service.py         #   MTU / Path MTU discovery
-│   ├── ip_service.py          #   Public IP + geo info
-│   └── traceroute_service.py  #   Traceroute execution & file saving
+│   ├── ping_service.py        # System ping / pythonping fallback
+│   ├── dns_service.py         # DNS resolution monitoring
+│   ├── mtu_service.py         # MTU / Path MTU discovery
+│   ├── ip_service.py          # Public IP + geo info
+│   ├── traceroute_service.py  # Traceroute execution & file saving
+│   └── hop_monitor_service.py # Hop discovery & per-hop ping monitoring
 │
 ├── infrastructure/            # Infrastructure layer
-│   ├── metrics.py             #   Prometheus counters/gauges
-│   └── health.py              #   HTTP health server
+│   ├── metrics.py             # Prometheus counters/gauges
+│   └── health.py              # HTTP health server
 │
 ├── pinger/                    # Bootstrap package
-│   └── __init__.py            #   Dependency checker
+│   └── __init__.py            # Dependency checker
 │
 ├── traceroutes/               # Traceroute output files (auto-created)
+├── assets/                    # Screenshots and documentation images
 ├── charts/pinger/             # Helm chart
 ├── prometheus/                # Prometheus config
 ├── Dockerfile

@@ -20,6 +20,8 @@ try:
         ALERT_PANEL_LINES,
         SHOW_VISUAL_ALERTS,
         TARGET_IP,
+        HOP_LATENCY_GOOD,
+        HOP_LATENCY_WARN,
         t,
     )
     from monitor import Monitor  # type: ignore
@@ -28,6 +30,8 @@ except ImportError:
         ALERT_PANEL_LINES,
         SHOW_VISUAL_ALERTS,
         TARGET_IP,
+        HOP_LATENCY_GOOD,
+        HOP_LATENCY_WARN,
         t,
     )
     from .monitor import Monitor  # type: ignore
@@ -411,6 +415,140 @@ class MonitorUI:
             width=width,
         )
 
+    def render_hop_panel(self, width: int) -> Panel:
+        """Full-width panel: traceroute-style hop health table."""
+        snap = self.monitor.get_stats_snapshot()
+        hops = snap.get("hop_monitor_hops", [])
+        discovering = snap.get("hop_monitor_discovering", False)
+
+        if discovering and not hops:
+            grp = Group(Text.from_markup(f"  [dim]{t('hop_discovering')}[/dim]"))
+            return Panel(
+                grp,
+                title=f"[bold]{t('hop_health')}[/bold]",
+                title_align="left",
+                border_style="cyan",
+                box=box.ROUNDED,
+                width=width,
+            )
+
+        if not hops:
+            grp = Group(Text.from_markup(f"  [dim]{t('hop_none')}[/dim]"))
+            return Panel(
+                grp,
+                title=f"[bold]{t('hop_health')}[/bold]",
+                title_align="left",
+                border_style="cyan",
+                box=box.ROUNDED,
+                width=width,
+            )
+
+        # Build Rich Table in traceroute style
+        tbl = Table(
+            show_header=True,
+            header_style="bold dim",
+            box=None,
+            padding=(0, 1),
+            expand=True,
+        )
+        tbl.add_column(t("hop_col_num"), style="dim", width=3, justify="right")
+        tbl.add_column(t("hop_col_min"), width=9, justify="right")
+        tbl.add_column(t("hop_col_avg"), width=9, justify="right")
+        tbl.add_column(t("hop_col_last"), width=9, justify="right")
+        tbl.add_column(t("hop_col_loss"), width=7, justify="right")
+        tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True)
+
+        worst_hop = None
+        worst_lat = 0.0
+
+        for h in hops:
+            hop_num = h["hop"]
+            lat = h.get("last_latency")
+            avg = h.get("avg_latency", 0.0)
+            mn = h.get("min_latency")
+            ok = h.get("last_ok", True)
+            loss = h.get("loss_pct", 0.0)
+            ip = h.get("ip", "?")
+            hostname = h.get("hostname", ip)
+
+            # Host display: hostname [ip] or just ip
+            if hostname and hostname != ip:
+                host_txt = f"{hostname} [dim]\\[{ip}][/dim]"
+            else:
+                host_txt = ip
+
+            # Color based on latency
+            def _lat_fmt(val):
+                if val is None:
+                    return f"[red]  *[/red]"
+                if val > HOP_LATENCY_WARN:
+                    return f"[red]{val:.0f} {t('ms')}[/red]"
+                if val > HOP_LATENCY_GOOD:
+                    return f"[yellow]{val:.0f} {t('ms')}[/yellow]"
+                return f"[green]{val:.0f} {t('ms')}[/green]"
+
+            if not ok or lat is None:
+                last_txt = f"[red]  *[/red]"
+            else:
+                last_txt = _lat_fmt(lat)
+
+            min_txt = _lat_fmt(mn)
+            avg_txt = _lat_fmt(avg if avg > 0 else None)
+
+            # Loss color
+            if loss > 10:
+                loss_txt = f"[red]{loss:.1f}%[/red]"
+            elif loss > 0:
+                loss_txt = f"[yellow]{loss:.1f}%[/yellow]"
+            else:
+                loss_txt = f"[green]{loss:.1f}%[/green]"
+
+            # Row style for down hops
+            row_style = "dim" if (not ok and h.get("total_pings", 0) > 2) else ""
+
+            tbl.add_row(
+                str(hop_num),
+                min_txt,
+                avg_txt,
+                last_txt,
+                loss_txt,
+                host_txt,
+                style=row_style,
+            )
+
+            # Track worst
+            if not ok:
+                worst_hop = h
+                worst_lat = float("inf")
+            elif lat is not None and lat > worst_lat:
+                worst_lat = lat
+                worst_hop = h
+
+        items: list = [tbl]
+
+        # Worst hop summary line
+        if worst_hop and worst_lat > HOP_LATENCY_GOOD:
+            w_ip = worst_hop.get("ip", "?")
+            w_num = worst_hop.get("hop", "?")
+            if worst_lat == float("inf"):
+                w_txt = f"  [red]{t('hop_worst')}: #{w_num} {w_ip} \u2014 {t('hop_down')}[/red]"
+            else:
+                w_txt = f"  [yellow]{t('hop_worst')}: #{w_num} {w_ip} \u2014 {worst_lat:.0f} {t('ms')}[/yellow]"
+            items.append(Text.from_markup(w_txt))
+
+        if discovering:
+            items.append(Text.from_markup(f"  [dim italic]{t('hop_discovering')}[/dim italic]"))
+
+        grp = Group(*items)
+        return Panel(
+            grp,
+            title=f"[bold]{t('hop_health')}[/bold]",
+            title_align="left",
+            border_style="cyan",
+            box=box.ROUNDED,
+            width=width,
+        )
+
     def render_monitoring_panel(self, width: int) -> Panel:
         """Bottom-right: DNS, MTU, TTL, Traceroute + Alerts."""
         snap = self.monitor.get_stats_snapshot()
@@ -553,17 +691,18 @@ class MonitorUI:
         )
 
         body = Layout(name="body_inner")
-        body.split_row(
-            Layout(name="col_left"),
-            Layout(name="col_right"),
+        body.split_column(
+            Layout(name="upper", ratio=1),
+            Layout(name="lower", ratio=1),
+            Layout(self.render_hop_panel(w), name="hops", ratio=1),
         )
-        body["col_left"].split_column(
-            Layout(self.render_latency_panel(left_w), name="latency", ratio=1),
-            Layout(self.render_analysis_panel(left_w), name="analysis", ratio=1),
+        body["upper"].split_row(
+            Layout(self.render_latency_panel(left_w), name="latency"),
+            Layout(self.render_stats_panel(right_w), name="stats"),
         )
-        body["col_right"].split_column(
-            Layout(self.render_stats_panel(right_w), name="stats", ratio=1),
-            Layout(self.render_monitoring_panel(right_w), name="monitoring", ratio=1),
+        body["lower"].split_row(
+            Layout(self.render_analysis_panel(left_w), name="analysis"),
+            Layout(self.render_monitoring_panel(right_w), name="monitoring"),
         )
         layout["body"].update(body)
         return layout

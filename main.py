@@ -58,6 +58,7 @@ class PingerApp:
             asyncio.create_task(self.monitor.background_ttl_monitor()),
             asyncio.create_task(self.monitor.background_problem_analyzer()),
             asyncio.create_task(self.monitor.background_route_analyzer()),
+            asyncio.create_task(self.monitor.background_hop_monitor()),
         ]
 
         try:

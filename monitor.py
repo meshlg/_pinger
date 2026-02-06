@@ -23,7 +23,10 @@ from config import (
     ENABLE_PROBLEM_ANALYSIS,
     ENABLE_ROUTE_ANALYSIS,
     ENABLE_THRESHOLD_ALERTS,
+    ENABLE_HOP_MONITORING,
     HIGH_LATENCY_THRESHOLD,
+    HOP_PING_INTERVAL,
+    HOP_REDISCOVER_INTERVAL,
     JITTER_THRESHOLD,
     MTU_CHECK_INTERVAL,
     MTU_DIFF_THRESHOLD,
@@ -46,6 +49,7 @@ from services import (
     MTUService,
     IPService,
     TracerouteService,
+    HopMonitorService,
 )
 from problem_analyzer import ProblemAnalyzer
 from route_analyzer import RouteAnalyzer
@@ -92,6 +96,9 @@ class Monitor:
             stats=self.stats_repo.get_stats(),
             executor=self.executor,
         )
+        
+        # Hop monitor
+        self.hop_monitor_service = HopMonitorService(executor=self.executor)
         
         # Analyzers
         self.problem_analyzer = ProblemAnalyzer(stats_repo=self.stats_repo)
@@ -386,6 +393,50 @@ class Monitor:
                 logging.error(f"Problem analysis failed: {exc}")
             
             await asyncio.sleep(PROBLEM_ANALYSIS_INTERVAL)
+
+    async def background_hop_monitor(self) -> None:
+        """Discover hops and ping them periodically."""
+        if not ENABLE_HOP_MONITORING:
+            return
+
+        import time as _time
+
+        # Initial discovery
+        self.stats_repo.update_hop_monitor([], discovering=True)
+        await self.run_blocking(
+            self.hop_monitor_service.discover_hops, TARGET_IP
+        )
+        self.stats_repo.update_hop_monitor(
+            self.hop_monitor_service.get_hops_snapshot(), discovering=False
+        )
+
+        last_discovery = _time.time()
+
+        while not self.stop_event.is_set():
+            try:
+                # Ping all hops
+                await self.run_blocking(self.hop_monitor_service.ping_all_hops)
+                self.stats_repo.update_hop_monitor(
+                    self.hop_monitor_service.get_hops_snapshot(), discovering=False
+                )
+
+                # Re-discover hops periodically
+                if _time.time() - last_discovery > HOP_REDISCOVER_INTERVAL:
+                    self.stats_repo.update_hop_monitor(
+                        self.hop_monitor_service.get_hops_snapshot(), discovering=True
+                    )
+                    await self.run_blocking(
+                        self.hop_monitor_service.discover_hops, TARGET_IP
+                    )
+                    self.stats_repo.update_hop_monitor(
+                        self.hop_monitor_service.get_hops_snapshot(), discovering=False
+                    )
+                    last_discovery = _time.time()
+
+            except Exception as exc:
+                logging.error(f"Hop monitor failed: {exc}")
+
+            await asyncio.sleep(HOP_PING_INTERVAL)
 
     async def background_route_analyzer(self) -> None:
         """Analyze route periodically."""

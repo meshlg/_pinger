@@ -65,6 +65,8 @@ class StatsSnapshot(TypedDict):
     route_last_diff_count: int
     active_alerts: list[dict[str, Any]]
     recent_results: list[bool]  # copy of recent results for UI
+    hop_monitor_hops: list[dict[str, Any]]
+    hop_monitor_discovering: bool
 
 
 class StatsRepository:
@@ -140,6 +142,8 @@ class StatsRepository:
                 "route_last_diff_count": self._stats.get("route_last_diff_count", 0),
                 "active_alerts": list(self._stats.get("active_alerts", [])),
                 "recent_results": list(self._recent_results),
+                "hop_monitor_hops": list(self._stats.get("hop_monitor_hops", [])),
+                "hop_monitor_discovering": self._stats.get("hop_monitor_discovering", False),
             }
 
     def update_after_ping(
@@ -282,3 +286,9 @@ class StatsRepository:
         """Get current consecutive losses count."""
         with self._lock:
             return self._stats["consecutive_losses"]
+
+    def update_hop_monitor(self, hops: list[dict], discovering: bool = False) -> None:
+        """Update hop monitor data."""
+        with self._lock:
+            self._stats["hop_monitor_hops"] = hops
+            self._stats["hop_monitor_discovering"] = discovering

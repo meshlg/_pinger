@@ -25,6 +25,10 @@ ping_monitor.log
 # Traceroute outputs
 traceroutes/*.txt
 !traceroutes/.gitkeep
+traceroute_*.txt
+
+# Windows shortcuts
+*.lnk
 
 # Local config overrides (if you add personal settings)
 config_local.py
