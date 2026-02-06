@@ -321,6 +321,7 @@ class MonitorUI:
     def render_analysis_panel(self, width: int) -> Panel:
         """Bottom-left: problem analysis + route analysis combined."""
         snap = self.monitor.get_stats_snapshot()
+        inner_w = max(20, width - 4)
 
         # ── Problem analysis ──
         problem_type = snap.get("current_problem_type", t("problem_none"))
@@ -399,11 +400,10 @@ class MonitorUI:
         prob_time_tbl.add_row(f"{t('last_problem')}:", last_prob_txt)
 
         grp = Group(
-            Text.from_markup(f"  [bold dim]{t('problem_analysis')}[/bold dim]"),
+            self._section_header(t("problem_analysis"), inner_w),
             prob_tbl,
             prob_time_tbl,
-            Text(""),
-            Text.from_markup(f"  [bold dim]{t('route_analysis')}[/bold dim]"),
+            self._section_header(t("route_analysis"), inner_w),
             route_tbl,
         )
         return Panel(
@@ -549,28 +549,104 @@ class MonitorUI:
             width=width,
         )
 
+    def _section_header(self, label: str, width: int) -> Text:
+        """Render a dim section divider: ─── LABEL ───────────"""
+        line_len = max(0, width - len(label) - 7)
+        return Text.from_markup(f"  [dim]─── {label} {'─' * line_len}[/dim]")
+
     def render_monitoring_panel(self, width: int) -> Panel:
         """Bottom-right: DNS, MTU, TTL, Traceroute + Alerts."""
         snap = self.monitor.get_stats_snapshot()
+        inner_w = max(20, width - 4)
 
-        # ── DNS ──
-        if snap["dns_resolve_time"] is None:
-            dns_txt = f"[red]{t('error')}[/red]" if SHOW_VISUAL_ALERTS else "[dim]—[/dim]"
+        # ═══════════════ DNS SECTION ═══════════════
+        dns_results = snap.get("dns_results", {})
+        if dns_results:
+            type_parts = []
+            total_time = 0
+            time_count = 0
+            for rt, res in sorted(dns_results.items()):
+                status = res.get("status", t("failed"))
+                ms = res.get("response_time_ms")
+                if ms:
+                    total_time += ms
+                    time_count += 1
+                if status == t("ok"):
+                    type_parts.append(f"[green]{rt}✓[/green]")
+                elif status == t("slow"):
+                    type_parts.append(f"[yellow]{rt}~[/yellow]")
+                else:
+                    type_parts.append(f"[red]{rt}✗[/red]")
+            avg_time = total_time / time_count if time_count > 0 else 0
+            dns_types_txt = f"  {' '.join(type_parts)}  [dim]{avg_time:.0f}ms[/dim]"
+        elif snap["dns_resolve_time"] is None:
+            dns_types_txt = f"  [red]{t('error')}[/red]" if SHOW_VISUAL_ALERTS else "  [dim]—[/dim]"
         else:
             ms = snap["dns_resolve_time"]
             if snap["dns_status"] == t("ok"):
-                dns_txt = f"[green]OK[/green] [dim]({ms:.0f} {t('ms')})[/dim]"
+                dns_types_txt = f"  [green]OK[/green] [dim]({ms:.0f}ms)[/dim]"
             elif snap["dns_status"] == t("slow"):
-                dns_txt = f"[yellow]{t('slow')}[/yellow] [dim]({ms:.0f} {t('ms')})[/dim]"
+                dns_types_txt = f"  [yellow]{t('slow')}[/yellow] [dim]({ms:.0f}ms)[/dim]"
             else:
-                dns_txt = f"[red]{t('error')}[/red]"
+                dns_types_txt = f"  [red]{t('error')}[/red]"
 
-        # ── MTU ──
+        # ═══════════════ BENCHMARK ═══════════════
+        dns_benchmark = snap.get("dns_benchmark", {})
+        bench_txt = None
+        if dns_benchmark:
+            parts = []
+            total_queries = 0
+            all_avg = []
+            all_std = []
+            for tt in ["cached", "uncached", "dotcom"]:
+                r = dns_benchmark.get(tt, {})
+                label = tt[0].upper()
+                if not r.get("success"):
+                    parts.append(f"[red]{label}:✗[/red]")
+                else:
+                    ms = r.get("response_time_ms")
+                    val = f"{ms:.0f}" if ms else "—"
+                    status = r.get("status", "failed")
+                    color = "green" if status == t("ok") else ("yellow" if status == t("slow") else "red")
+                    parts.append(f"[{color}]{label}:{val}[/{color}]")
+                q = r.get("queries", 0)
+                total_queries = max(total_queries, q)
+                if r.get("avg_ms") is not None:
+                    all_avg.append(r["avg_ms"])
+                if r.get("std_dev") is not None:
+                    all_std.append(r["std_dev"])
+
+            bench_line = "  " + "  ".join(parts)
+            # Append compact aggregate stats
+            if total_queries > 1 and all_avg:
+                stats_suffix = f"[dim]│[/dim] [dim]{total_queries}q"
+                avg_all = sum(all_avg) / len(all_avg)
+                stats_suffix += f" avg:{avg_all:.0f}"
+                if all_std:
+                    avg_std = sum(all_std) / len(all_std)
+                    stats_suffix += f" σ:{avg_std:.0f}"
+                stats_suffix += "ms[/dim]"
+                bench_txt = f"{bench_line}  {stats_suffix}"
+            else:
+                bench_txt = bench_line
+
+        # ═══════════════ NETWORK METRICS ═══════════════
+        # TTL
+        ttl = snap["last_ttl"]
+        ttl_hops = snap["ttl_hops"]
+        if ttl:
+            ttl_txt = f"[white]{ttl}[/white]"
+            if ttl_hops:
+                ttl_txt += f" [dim]({ttl_hops} {t('hop_unit')})[/dim]"
+        else:
+            ttl_txt = "[dim]—[/dim]"
+
+        # MTU
         local_mtu = snap["local_mtu"]
         path_mtu = snap["path_mtu"]
         local_txt = f"{local_mtu}" if local_mtu else "—"
         path_txt = f"{path_mtu}" if path_mtu else "—"
-        mtu_val_txt = f"[white]{local_txt}[/white] / [white]{path_txt}[/white]"
+        mtu_val_txt = f"[white]{local_txt}[/white]/[white]{path_txt}[/white]"
 
         mtu_status = snap.get("mtu_status", "...")
         if mtu_status == t("mtu_ok"):
@@ -582,17 +658,7 @@ class MonitorUI:
         else:
             mtu_s_txt = f"[dim]{mtu_status}[/dim]"
 
-        # ── TTL ──
-        ttl = snap["last_ttl"]
-        ttl_hops = snap["ttl_hops"]
-        if ttl:
-            ttl_txt = f"[white]{ttl}[/white]"
-            if ttl_hops:
-                ttl_txt += f" [dim]({ttl_hops} {t('hop_unit')})[/dim]"
-        else:
-            ttl_txt = "[dim]—[/dim]"
-
-        # ── Traceroute ──
+        # Traceroute
         if snap["traceroute_running"]:
             tr_txt = f"[yellow]{t('traceroute_running')}[/yellow]"
         elif snap["last_traceroute_time"]:
@@ -600,62 +666,55 @@ class MonitorUI:
         else:
             tr_txt = f"[dim]{t('never')}[/dim]"
 
-        # ── Alerts count ──
+        # Alerts count
         if not SHOW_VISUAL_ALERTS:
             alert_txt = f"[dim]{t('alerts_off')}[/dim]"
         else:
             alert_cnt = len(snap["active_alerts"])
             alert_txt = f"[green]{t('none_label')}[/green]" if alert_cnt == 0 else f"[yellow]{alert_cnt}[/yellow]"
 
-        # Compact dual-column table
-        mon_tbl = self._dual_kv_table(width)
-        mon_tbl.add_row("DNS:", dns_txt, f"{t('mtu')}:", mtu_val_txt)
-        mon_tbl.add_row(f"{t('ttl')}:", ttl_txt, f"{t('mtu_status_label')}:", mtu_s_txt)
-        mon_tbl.add_row("Traceroute:", tr_txt, f"{t('alerts_label')}:", alert_txt)
+        # Network metrics table
+        net_tbl = self._dual_kv_table(width)
+        net_tbl.add_row(f"{t('ttl')}:", ttl_txt, f"{t('mtu')}:", mtu_val_txt)
+        net_tbl.add_row(f"{t('mtu_status_label')}:", mtu_s_txt, f"{t('alerts_label')}:", alert_txt)
+        net_tbl.add_row("Traceroute:", tr_txt, "", "")
 
-        # ── MTU details (if issues) ──
+        # MTU details (only if issues)
         mtu_issues = snap.get("mtu_consecutive_issues", 0)
-        mtu_extra_lines: list[Text] = []
+        mtu_extra: list[Text] = []
         if mtu_issues and mtu_status != t("mtu_ok"):
             mtu_last_change = snap.get("mtu_last_status_change")
             since_txt = self._fmt_since(mtu_last_change) if mtu_last_change else "..."
-            mtu_extra_lines.append(
+            mtu_extra.append(
                 Text.from_markup(f"  [dim]{t('mtu_issues_label')}: {mtu_issues} {t('checks_unit')} / {since_txt}[/dim]")
             )
 
-        # ── Alerts section ──
+        # ═══════════════ ALERTS ═══════════════
         self.monitor.cleanup_alerts()
         alert_lines: list[str] = []
         if SHOW_VISUAL_ALERTS and snap["active_alerts"]:
             for alert in snap["active_alerts"]:
-                icon = {
-                    "warning": "▲",
-                    "critical": "✖",
-                    "info": "●",
-                    "success": "✔",
-                }.get(alert["type"], "●")
-                color = {
-                    "warning": "yellow",
-                    "critical": "red",
-                    "info": "white",
-                    "success": "green",
-                }.get(alert["type"], "white")
+                icon = {"warning": "▲", "critical": "✖", "info": "●", "success": "✔"}.get(alert["type"], "●")
+                color = {"warning": "yellow", "critical": "red", "info": "white", "success": "green"}.get(alert["type"], "white")
                 alert_lines.append(f"  [{color}]{icon} {alert['message']}[/{color}]")
         else:
             alert_lines.append(f"  [dim]{t('no_alerts')}[/dim]")
-
-        # Pad / trim to ALERT_PANEL_LINES
         while len(alert_lines) < ALERT_PANEL_LINES:
             alert_lines.append(" ")
         alert_lines = alert_lines[:ALERT_PANEL_LINES]
 
+        # ═══════════════ ASSEMBLE ═══════════════
         items: list = [
-            mon_tbl,
+            self._section_header("DNS", inner_w),
+            Text.from_markup(dns_types_txt),
         ]
-        for line in mtu_extra_lines:
+        if bench_txt:
+            items.append(Text.from_markup(bench_txt))
+        items.append(self._section_header("Network", inner_w))
+        items.append(net_tbl)
+        for line in mtu_extra:
             items.append(line)
-        items.append(Text(""))
-        items.append(Text.from_markup(f"  [bold dim]{t('notifications')}[/bold dim]"))
+        items.append(self._section_header(t("notifications"), inner_w))
         for line in alert_lines:
             items.append(Text.from_markup(line))
 

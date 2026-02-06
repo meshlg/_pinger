@@ -2,3 +2,4 @@ rich>=13.0.0
 requests>=2.25.0
 pythonping>=1.1.0
 prometheus_client>=0.16.0
+dnspython>=2.4.0

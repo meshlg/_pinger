@@ -42,6 +42,7 @@ class StatsSnapshot(TypedDict):
     threshold_states: ThresholdStates
     dns_resolve_time: float | None
     dns_status: str
+    dns_results: dict[str, Any] | None  # Per-record-type DNS results
     last_traceroute_time: datetime | None
     traceroute_running: bool
     jitter: float
@@ -119,6 +120,8 @@ class StatsRepository:
                 "threshold_states": dict(self._stats["threshold_states"]),
                 "dns_resolve_time": self._stats["dns_resolve_time"],
                 "dns_status": self._stats["dns_status"],
+                "dns_results": dict(self._stats.get("dns_results", {})),
+                "dns_benchmark": dict(self._stats.get("dns_benchmark", {})),
                 "last_traceroute_time": self._stats["last_traceroute_time"],
                 "traceroute_running": self._stats["traceroute_running"],
                 "jitter": self._stats["jitter"],
@@ -213,10 +216,90 @@ class StatsRepository:
             self._stats["start_time"] = time
 
     def update_dns(self, resolve_time: float | None, status: str) -> None:
-        """Update DNS status."""
+        """Update DNS status (legacy - for backward compatibility)."""
         with self._lock:
             self._stats["dns_resolve_time"] = resolve_time
             self._stats["dns_status"] = status
+
+    def update_dns_detailed(self, dns_results: list[dict]) -> None:
+        """Update DNS status with per-record-type details.
+        
+        Args:
+            dns_results: List of DNS query results, each containing:
+                - record_type: str (A, AAAA, CNAME, etc.)
+                - success: bool
+                - response_time_ms: float | None
+                - status: str
+                - ttl: int | None
+                - records: list
+                - error: str | None
+        """
+        with self._lock:
+            # Store detailed results by record type
+            self._stats["dns_results"] = {
+                r["record_type"]: {
+                    "success": r["success"],
+                    "response_time_ms": r.get("response_time_ms"),
+                    "status": r["status"],
+                    "ttl": r.get("ttl"),
+                    "record_count": len(r.get("records", [])),
+                    "error": r.get("error"),
+                }
+                for r in dns_results
+            }
+            
+            # Calculate overall status
+            successful = [r for r in dns_results if r["success"]]
+            if not dns_results:
+                self._stats["dns_status"] = "failed"
+                self._stats["dns_resolve_time"] = None
+            elif not successful:
+                self._stats["dns_status"] = "failed"
+                self._stats["dns_resolve_time"] = None
+            else:
+                # Use average response time across all successful queries
+                avg_time = sum(r["response_time_ms"] for r in successful if r["response_time_ms"]) / len(successful)
+                self._stats["dns_resolve_time"] = avg_time
+                # Status is ok only if all types succeeded
+                self._stats["dns_status"] = "ok" if len(successful) == len(dns_results) else "slow"
+
+    def update_dns_benchmark(self, benchmark_results: list[dict]) -> None:
+        """Update DNS benchmark results (Cached/Uncached/DotCom).
+        
+        Args:
+            benchmark_results: List of benchmark results, each containing:
+                - server: str
+                - test_type: str ("cached", "uncached", "dotcom")
+                - domain: str
+                - queries: int
+                - min_ms: float | None
+                - avg_ms: float | None
+                - max_ms: float | None
+                - std_dev: float | None
+                - reliability: float
+                - response_time_ms: float | None
+                - success: bool
+                - status: str
+                - error: str | None
+        """
+        with self._lock:
+            self._stats["dns_benchmark"] = {
+                r["test_type"]: {
+                    "server": r.get("server", "system"),
+                    "domain": r["domain"],
+                    "queries": r.get("queries", 0),
+                    "min_ms": r.get("min_ms"),
+                    "avg_ms": r.get("avg_ms"),
+                    "max_ms": r.get("max_ms"),
+                    "std_dev": r.get("std_dev"),
+                    "reliability": r.get("reliability", 0.0),
+                    "response_time_ms": r.get("response_time_ms"),
+                    "success": r["success"],
+                    "status": r["status"],
+                    "error": r.get("error"),
+                }
+                for r in benchmark_results
+            }
 
     def update_mtu(self, local_mtu: int | None, path_mtu: int | None, status: str) -> None:
         """Update MTU info."""

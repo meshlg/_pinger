@@ -2,8 +2,10 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
+VERSION = "2.0.0"
+
 CURRENT_LANGUAGE = "en"  # Change to "en" for English
-TARGET_IP = "8.8.8.8"
+TARGET_IP = "1.1.1.1"
 INTERVAL = 1
 WINDOW_SIZE = 1800
 LATENCY_WINDOW = 600
@@ -26,13 +28,22 @@ IP_CHANGE_SOUND = True
 LOG_IP_CHANGES = True
 
 ENABLE_DNS_MONITORING = True
-DNS_TEST_DOMAIN = "google.com"
+DNS_TEST_DOMAIN = "cloudflare.com"
 DNS_CHECK_INTERVAL = 10
 DNS_SLOW_THRESHOLD = 100
 
-ENABLE_AUTO_TRACEROUTE = True
+# DNS record types to test (requires dnspython)
+DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"]
+
+# DNS Benchmark tests (Cached/Uncached/DotCom)
+ENABLE_DNS_BENCHMARK = True
+DNS_BENCHMARK_DOTCOM_DOMAIN = "cloudflare.com"  # Domain for DotCom test
+DNS_BENCHMARK_SERVERS = ["system"]  # "system" uses system resolver, or list IPs: ["1.1.1.1", "8.8.8.8"]
+DNS_BENCHMARK_HISTORY_SIZE = 50  # Number of queries to keep for statistics
+
+ENABLE_AUTO_TRACEROUTE = False  # Disabled — traceroute only on manual trigger or route change
 TRACEROUTE_TRIGGER_LOSSES = 3
-TRACEROUTE_COOLDOWN = 60
+TRACEROUTE_COOLDOWN = 300       # Min interval (seconds)
 TRACEROUTE_MAX_HOPS = 15
 
 ENABLE_MTU_MONITORING = True
@@ -53,7 +64,7 @@ TTL_CHECK_INTERVAL = 10
 ENABLE_HOP_MONITORING = True
 HOP_PING_INTERVAL = 1          # seconds between hop ping cycles
 HOP_PING_TIMEOUT = 0.5         # seconds per hop ping (500ms for fast response)
-HOP_REDISCOVER_INTERVAL = 600  # seconds between hop re-discovery (traceroute)
+HOP_REDISCOVER_INTERVAL = 3600 # Once per hour only
 HOP_LATENCY_GOOD = 50          # ms — green threshold
 HOP_LATENCY_WARN = 100         # ms — yellow threshold (above = red)
 
@@ -66,7 +77,7 @@ PROBLEM_LOG_SUPPRESSION_SECONDS = 6000
 ROUTE_LOG_SUPPRESSION_SECONDS = 6000
 
 ENABLE_ROUTE_ANALYSIS = True
-ROUTE_ANALYSIS_INTERVAL = 300
+ROUTE_ANALYSIS_INTERVAL = 1800  # Check route every 30 min
 ROUTE_HISTORY_SIZE = 10
 HOP_TIMEOUT_THRESHOLD = 3000
 
@@ -427,6 +438,8 @@ class StatsDict(TypedDict):
     threshold_states: ThresholdStates
     dns_resolve_time: float | None
     dns_status: str
+    dns_results: Dict[str, Any]
+    dns_benchmark: Dict[str, Any]
     last_traceroute_time: datetime | None
     traceroute_running: bool
     ping_missing_warned: bool
@@ -484,6 +497,8 @@ def create_stats() -> StatsDict:
         },
         "dns_resolve_time": None,
         "dns_status": "...",
+        "dns_results": {},
+        "dns_benchmark": {},
         "last_traceroute_time": None,
         "traceroute_running": False,
         "ping_missing_warned": False,

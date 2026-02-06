@@ -12,7 +12,7 @@ Supports **Russian** and **English** localization — switch via `CURRENT_LANGUA
 - **Real-time TUI** — Rich-based dashboard with sparkline charts, Unicode progress bars, color-coded status
 - **Smart alerts** — sound + visual notifications with threshold hysteresis (packet loss, latency, jitter, connection lost)
 - **Public IP monitoring** — change detection with geo info
-- **DNS monitoring** — resolution speed checks
+- **DNS monitoring** — resolution speed checks with multiple record types (A, AAAA, CNAME, MX, TXT, NS), benchmark tests (Cached/Uncached/DotCom) with statistics (min/avg/max/σ)
 - **MTU / TTL monitoring** — path MTU discovery, fragmentation detection
 - **Auto traceroute** — triggered on connection problems, saved to `traceroutes/`
 - **Problem analysis** — automatic ISP/local/DNS/MTU problem classification, pattern detection, prediction
@@ -42,6 +42,7 @@ pip install -r requirements.txt
 | `requests>=2.25.0` | Public IP info via ip-api.com |
 | `pythonping>=1.1.0` | Fallback ping when system `ping` is unavailable |
 | `prometheus_client>=0.16.0` | Prometheus metrics export (optional) |
+| `dnspython>=2.4.0` | Advanced DNS queries (multiple record types) |
 
 ## Usage
 
@@ -88,9 +89,36 @@ IP_CHECK_INTERVAL = 15          # Seconds
 
 ```python
 ENABLE_DNS_MONITORING = True
-DNS_TEST_DOMAIN = "google.com"
+DNS_TEST_DOMAIN = "cloudflare.com"
 DNS_CHECK_INTERVAL = 10
 DNS_SLOW_THRESHOLD = 100        # "Slow" DNS threshold (ms)
+DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"]  # Record types to test
+
+# DNS Benchmark tests (Cached/Uncached/DotCom)
+ENABLE_DNS_BENCHMARK = True
+DNS_BENCHMARK_DOTCOM_DOMAIN = "cloudflare.com"  # Domain for DotCom test
+DNS_BENCHMARK_SERVERS = ["system"]  # "system" uses system resolver, or list IPs: ["1.1.1.1", "8.8.8.8"]
+DNS_BENCHMARK_HISTORY_SIZE = 50  # Number of queries to keep for statistics
+```
+
+Monitors multiple DNS record types simultaneously using `dnspython`. Displays per-record-type status in the UI.
+
+**DNS Benchmark Tests:**
+- **Cached** — measures DNS response from cache (second query to same domain)
+- **Uncached** — measures full recursive resolution time (unique random domain)
+- **DotCom** — measures response time for popular .com domain
+
+UI display (compact single-line with aggregate stats):
+```
+C:12  U:45  D:25  │ 15q avg:27 σ:3ms
+```
+
+Color-coded: green (fast), yellow (slow), red (failed). Statistics accumulate over time (min/avg/max/σ/reliability).
+
+**Multi-Server Support:**
+Configure multiple DNS servers to compare performance:
+```python
+DNS_BENCHMARK_SERVERS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 ```
 
 ### MTU Monitoring
@@ -163,9 +191,14 @@ The dashboard is split into a **header**, **status bar**, **3-row body**, and **
 │ Sparkline chart ▁▂▃▅▃▂ │  │ ██████████████████░░ 99.9% │
 └────────────────────────┘  └──────────────────────────┘
 ┌─ ANALYSIS ─────────────┐  ┌─ MONITORING ─────────────┐
-│ Problem type/Prediction│  │ DNS/MTU/TTL/Traceroute   │
-│ Route status/Hops      │  │ Notifications            │
-└────────────────────────┘  └──────────────────────────┘
+│ ─── Problems ────────  │  │ ─── DNS ───────────────  │
+│ Type/Prediction/Pattern│  │ A✓ AAAA✓ MX✓ TXT✓ NS✓   │
+│ ─── Route ───────────  │  │ C:12  U:45  D:25  │ 15q  │
+│ Status/Hops/Changes    │  │ ─── Network ─────────── │
+└────────────────────────┘  │ TTL/MTU/Traceroute      │
+                            │ ─── Notifications ───── │
+                            │ No alerts.              │
+                            └──────────────────────────┘
 ┌─ HOP HEALTH ───────────────────────────────────────────┐
 │  #   Min       Avg       Last      Loss    Host              │
 │  1   14 ms     14 ms     13 ms     0.0%    10.0.0.1          │
@@ -177,8 +210,8 @@ The dashboard is split into a **header**, **status bar**, **3-row body**, and **
 - **Status bar** — instant connection state (CONNECTED / DEGRADED / DISCONNECTED) with key metrics
 - **Latency panel** — current/best/avg/peak/median/jitter + sparkline chart
 - **Statistics panel** — packet counters + Unicode progress bars for success rate and 30-min loss
-- **Analysis panel** — problem type, prediction, pattern + route analysis
-- **Monitoring panel** — DNS, MTU, TTL, traceroute status + notifications
+- **Analysis panel** — problem type, prediction, pattern + route analysis (with section dividers)
+- **Monitoring panel** — DNS records, benchmark (C/U/D), network metrics, notifications (with section dividers)
 - **Hop Health panel** — full-width traceroute-style table with color-coded latency per hop
 
 ## Docker
