@@ -51,7 +51,8 @@ ENABLE_TTL_MONITORING = True
 TTL_CHECK_INTERVAL = 10
 
 ENABLE_HOP_MONITORING = True
-HOP_PING_INTERVAL = 30         # seconds between hop ping cycles
+HOP_PING_INTERVAL = 1          # seconds between hop ping cycles
+HOP_PING_TIMEOUT = 0.5         # seconds per hop ping (500ms for fast response)
 HOP_REDISCOVER_INTERVAL = 600  # seconds between hop re-discovery (traceroute)
 HOP_LATENCY_GOOD = 50          # ms — green threshold
 HOP_LATENCY_WARN = 100         # ms — yellow threshold (above = red)

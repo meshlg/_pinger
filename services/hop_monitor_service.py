@@ -12,7 +12,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from config import TARGET_IP, TRACEROUTE_MAX_HOPS, t
+from config import (
+    TARGET_IP,
+    TRACEROUTE_MAX_HOPS,
+    HOP_PING_TIMEOUT,
+    t,
+)
 
 
 @dataclass
@@ -157,29 +162,45 @@ class HopMonitorService:
     # ── Ping hops ──
 
     def ping_all_hops(self) -> None:
-        """Ping each discovered hop and update status."""
+        """Ping each discovered hop in parallel and update status."""
         with self._lock:
             hops = list(self._hops)
 
-        for hop in hops:
-            ok, latency = self._ping_host(hop.ip)
-            self._update_hop_status(hop, ok, latency)
+        if not hops:
+            return
+
+        # Ping all hops in parallel using executor
+        futures = {
+            self._executor.submit(self._ping_host, hop.ip): hop
+            for hop in hops
+        }
+
+        for future in futures:
+            hop = futures[future]
+            try:
+                ok, latency = future.result(timeout=HOP_PING_TIMEOUT + 1)
+                self._update_hop_status(hop, ok, latency)
+            except Exception as exc:
+                logging.debug(f"Hop ping failed for {hop.ip}: {exc}")
+                self._update_hop_status(hop, False, None)
 
     def _ping_host(self, ip: str) -> Tuple[bool, Optional[float]]:
-        """Single ping to a hop IP."""
+        """Single ping to a hop IP with fast timeout."""
         try:
             if sys.platform == "win32":
-                cmd = ["ping", "-n", "1", "-w", "1000", ip]
+                # Windows: -w is timeout in milliseconds
+                cmd = ["ping", "-n", "1", "-w", str(HOP_PING_TIMEOUT * 1000), ip]
                 encoding = "oem"
             else:
-                cmd = ["ping", "-c", "1", "-W", "1", ip]
+                # Linux/Mac: -W is timeout in seconds
+                cmd = ["ping", "-c", "1", "-W", str(HOP_PING_TIMEOUT), ip]
                 encoding = "utf-8"
 
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=2,
+                timeout=HOP_PING_TIMEOUT + 0.5,  # subprocess timeout slightly higher
                 encoding=encoding,
                 errors="replace",
             )
