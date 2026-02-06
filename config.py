@@ -2,7 +2,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-CURRENT_LANGUAGE = "ru"  # Change to "en" for English
+CURRENT_LANGUAGE = "en"  # Change to "en" for English
 TARGET_IP = "8.8.8.8"
 INTERVAL = 1
 WINDOW_SIZE = 1800
