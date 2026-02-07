@@ -2,7 +2,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.0.0"
+VERSION = "2.1.2"
 
 CURRENT_LANGUAGE = "en"  # Change to "en" for English
 TARGET_IP = "1.1.1.1"
@@ -228,7 +228,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "alerts_off": "ВЫКЛ",
         "no_alerts": "Нет уведомлений.",
         # ── Footer ──
-        "footer": "Ctrl+C — остановка  │  Логи: ping_monitor.log",
+        "footer": "Ctrl+C — остановка  │  Логи: {log_file}",
+        "update_available": "Обновление доступно: {current} → {latest} — pipx upgrade network-pinger",
         # ── Alert messages (monitor.py) ──
         "alert_ip_changed": "IP изменен: {old} -> {new}",
         "alert_high_loss": "Высокие потери (30м): {val:.1f}%",
@@ -375,7 +376,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "alerts_off": "OFF",
         "no_alerts": "No notifications.",
         # ── Footer ──
-        "footer": "Ctrl+C — stop  |  Logs: ping_monitor.log",
+        "footer": "Ctrl+C — stop  |  Logs: {log_file}",
+        "update_available": "Update available: {current} → {latest} — pipx upgrade network-pinger",
         # ── Alert messages (monitor.py) ──
         "alert_ip_changed": "IP changed: {old} -> {new}",
         "alert_high_loss": "High packet loss (30m): {val:.1f}%",

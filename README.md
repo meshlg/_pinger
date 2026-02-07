@@ -46,6 +46,13 @@ pipx install .
 pinger
 ```
 
+### Upgrading (pipx)
+
+```bash
+# Check for updates and upgrade
+pipx upgrade network-pinger
+```
+
 ### Development Install (Poetry)
 
 ```bash

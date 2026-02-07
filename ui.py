@@ -22,6 +22,7 @@ try:
         TARGET_IP,
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
+        VERSION,
         t,
     )
     from monitor import Monitor  # type: ignore
@@ -32,6 +33,7 @@ except ImportError:
         TARGET_IP,
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
+        VERSION,
         t,
     )
     from .monitor import Monitor  # type: ignore
@@ -50,6 +52,8 @@ class MonitorUI:
         self._cached_jitter: float = 0.0
         self._last_jitter_update: float = 0.0
         self._jitter_cache_interval: float = 5.0
+        self._latest_version: str | None = None
+        self._version_checked: bool = False
 
     # ══════════════════ helpers ══════════════════
 
@@ -158,9 +162,27 @@ class MonitorUI:
 
     def render_header(self, width: int) -> Panel:
         now = datetime.now().strftime("%H:%M:%S")
+        # Check for updates once
+        if not self._version_checked:
+            try:
+                from services.version_service import check_update_available
+                update_available, current, latest = check_update_available()
+                if update_available and latest:
+                    self._latest_version = latest
+            except Exception:
+                pass
+            self._version_checked = True
+        
+        # Build version string
+        if self._latest_version:
+            version_txt = f"[dim]v{VERSION}[/dim] [yellow]→ v{self._latest_version}[/yellow]"
+        else:
+            version_txt = f"[dim]v{VERSION}[/dim]"
+        
         txt = (
             f"[bold white]{t('title')}[/bold white]  [dim]→[/dim]  "
-            f"[bold cyan]{TARGET_IP}[/bold cyan]    [dim]│[/dim]    [dim]{now}[/dim]"
+            f"[bold cyan]{TARGET_IP}[/bold cyan]    [dim]│[/dim]    "
+            f"{version_txt}    [dim]│[/dim]    [dim]{now}[/dim]"
         )
         return Panel(
             txt, border_style="cyan", box=box.HEAVY, width=width, style="on #1a1a2e"
@@ -728,9 +750,13 @@ class MonitorUI:
             width=width,
         )
 
-    @staticmethod
-    def render_footer(width: int) -> Panel:
-        txt = f"[dim]{t('footer')}[/dim]"
+    def render_footer(self, width: int) -> Panel:
+        from config import LOG_FILE, VERSION
+        log_path = LOG_FILE.replace(os.path.expanduser("~"), "~")
+        txt = f"[dim]{t('footer').format(log_file=log_path)}[/dim]"
+        # Show update notification
+        if self._latest_version:
+            txt += f"    [yellow]▲ {t('update_available').format(current=VERSION, latest=self._latest_version)}[/yellow]"
         return Panel(txt, border_style="dim", box=box.SIMPLE, width=width)
 
     # ══════════════════ layout ══════════════════
