@@ -8,6 +8,10 @@
 [![Python](https://img.shields.io/pypi/pyversions/network-pinger)](https://python.org)
 [![License](https://img.shields.io/github/license/meshlg/_pinger)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
+[![GitHub Stars](https://img.shields.io/github/stars/meshlg/_pinger?style=social)](https://github.com/meshlg/_pinger/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/meshlg/_pinger?style=social)](https://github.com/meshlg/_pinger/network)
+[![GitHub Issues](https://img.shields.io/github/issues/meshlg/_pinger)](https://github.com/meshlg/_pinger/issues)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/network-pinger)](https://pypi.org/project/network-pinger/)
 
 Async network monitoring tool with Rich-based terminal dashboard, smart alerts, DNS benchmarks, hop-by-hop health tracking, and automatic problem diagnosis.
 
