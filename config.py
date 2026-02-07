@@ -2,7 +2,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.1.3"
+VERSION = "2.1.4"
 
 CURRENT_LANGUAGE = "en"  # Change to "en" for English
 TARGET_IP = "1.1.1.1"
