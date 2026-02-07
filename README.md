@@ -116,7 +116,7 @@ CURRENT_LANGUAGE = "en"  # or "ru"
 The dashboard consists of a **header**, **status bar**, **multi-panel body**, and **footer**:
 
 ```
-┌────────────── Network Monitor → 8.8.8.8  v2.1.7 ✓  10:35:21 ──────────────┐
+┌────────────── Network Monitor → 1.1.1.1  v2.1.7 ✓  10:35:21 ──────────────┐
 ╔══ ● CONNECTED  │  Ping: 12.3ms  │  Loss: 0.0%  │  Uptime: 2h 15m ════════╗
 ┌─ LATENCY ─────────────────┐  ┌─ STATISTICS ──────────────┐
 │ Current  12 ms   Best 8 ms│  │ Sent    5400    ██████████ │
@@ -292,6 +292,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for building, publishing, and contributio
 
 <div align="center">
 
-**[MIT License](LICENSE)** · Made with Rich
+**[MIT License](LICENSE)** · 2026 © meshlg | Discord: [meshlg](https://discordapp.com/users/268440099828662274)
 
 </div>
