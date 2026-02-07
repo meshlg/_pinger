@@ -1,10 +1,33 @@
 from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
+import locale
 
-VERSION = "2.1.4"
+VERSION = "2.1.5"
 
-CURRENT_LANGUAGE = "en"  # Change to "en" for English
+# Supported languages
+SUPPORTED_LANGUAGES = ["en", "ru"]
+
+def _detect_system_language() -> str:
+    """Detect system language and return supported language code."""
+    try:
+        # Get system locale
+        system_locale = locale.getdefaultlocale()[0]
+        if system_locale:
+            lang_code = system_locale.lower()[:2]
+            # Map common Russian locale codes
+            if lang_code in ("ru", "be", "uk", "kk"):
+                return "ru"
+        # Check environment variable as fallback
+        import os
+        env_lang = os.environ.get("LANG", "")
+        if "ru" in env_lang.lower():
+            return "ru"
+    except Exception:
+        pass
+    return "en"
+
+CURRENT_LANGUAGE = _detect_system_language()
 TARGET_IP = "1.1.1.1"
 INTERVAL = 1
 WINDOW_SIZE = 1800

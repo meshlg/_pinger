@@ -4,7 +4,7 @@ Async network monitoring tool with real-time terminal UI, alerts, and connection
 
 ![Pinger Interface](assets/screenshot.jpg)
 
-Supports **Russian** and **English** localization — switch via `CURRENT_LANGUAGE` in `config.py`.
+Supports **Russian** and **English** localization — automatically detected from system locale, or manually set via `CURRENT_LANGUAGE` in `config.py` (v2.1.5+).
 
 ## Features
 

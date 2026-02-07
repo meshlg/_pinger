@@ -7,16 +7,18 @@ from config import VERSION
 
 
 def get_latest_version() -> Optional[str]:
-    """Fetch latest version from GitHub releases."""
+    """Fetch latest version from GitHub tags."""
     try:
         response = requests.get(
-            "https://api.github.com/repos/meshlg/_pinger/releases/latest",
+            "https://api.github.com/repos/meshlg/_pinger/tags",
             timeout=5,
         )
         response.raise_for_status()
         data = response.json()
-        latest = data.get("tag_name", "").lstrip("v")
-        return latest if latest else None
+        if data and len(data) > 0:
+            latest = data[0].get("name", "").lstrip("v")
+            return latest if latest else None
+        return None
     except Exception as exc:
         logging.debug(f"Version check failed: {exc}")
         return None
