@@ -56,6 +56,7 @@ class MonitorUI:
         self._jitter_cache_interval: float = 5.0
         self._latest_version: str | None = None
         self._version_checked: bool = False
+        self._version_up_to_date: bool = False
         self._version_check_thread: threading.Thread | None = None
         self._start_version_check()
 
@@ -67,6 +68,9 @@ class MonitorUI:
                 update_available, current, latest = check_update_available()
                 if update_available and latest:
                     self._latest_version = latest
+                elif latest:
+                    # Version is current - mark as up to date
+                    self._version_up_to_date = True
             except Exception:
                 pass
             self._version_checked = True
@@ -185,6 +189,8 @@ class MonitorUI:
         # Build version string
         if self._latest_version:
             version_txt = f"[dim]v{VERSION}[/dim] [yellow]→ v{self._latest_version}[/yellow]"
+        elif self._version_up_to_date:
+            version_txt = f"[dim]v{VERSION}[/dim] [green]✓[/green]"
         else:
             version_txt = f"[dim]v{VERSION}[/dim]"
         
