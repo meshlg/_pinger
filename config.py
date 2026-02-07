@@ -100,7 +100,10 @@ ENABLE_HEALTH_ENDPOINT = True
 HEALTH_ADDR = "0.0.0.0"
 HEALTH_PORT = 8001
 
-LOG_FILE = "ping_monitor.log"
+import os
+
+LOG_DIR = os.path.expanduser("~/.pinger")
+LOG_FILE = os.path.join(LOG_DIR, "ping_monitor.log")
 LOG_LEVEL = "INFO"
 
 # If True, truncate (clear) log file at startup

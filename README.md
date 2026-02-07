@@ -30,8 +30,45 @@ Supports **Russian** and **English** localization — switch via `CURRENT_LANGUA
 
 ## Installation
 
+### Quick Install (pipx — recommended for end users)
+
+```bash
+# Install pipx if you don't have it
+pip install pipx
+pipx ensurepath
+
+# Install from PyPI (when published) or local directory
+pipx install network-pinger
+# or for local development:
+pipx install .
+
+# Run anywhere
+pinger
+```
+
+### Development Install (Poetry)
+
+```bash
+# Install Poetry if you don't have it
+pip install poetry
+
+# Clone and setup
+git clone https://github.com/meshlg/_pinger.git
+cd _pinger
+poetry install
+
+# Run in Poetry environment
+poetry run pinger
+# or activate shell
+poetry shell
+pinger
+```
+
+### Traditional Install (pip)
+
 ```bash
 pip install -r requirements.txt
+python pinger.py
 ```
 
 ### Dependencies
@@ -44,10 +81,14 @@ pip install -r requirements.txt
 | `prometheus_client>=0.16.0` | Prometheus metrics export (optional) |
 | `dnspython>=2.4.0` | Advanced DNS queries (multiple record types) |
 
-## Usage
+### Building & Publishing (Poetry)
 
 ```bash
-python pinger.py
+# Build distributable package (wheel + source)
+poetry build
+
+# Publish to PyPI (configure token first)
+poetry publish
 ```
 
 Press `Ctrl+C` for graceful shutdown.
