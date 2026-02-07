@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import statistics
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 import time
+import threading
 
 from rich import box
 from rich.console import Console, Group
@@ -54,6 +56,23 @@ class MonitorUI:
         self._jitter_cache_interval: float = 5.0
         self._latest_version: str | None = None
         self._version_checked: bool = False
+        self._version_check_thread: threading.Thread | None = None
+        self._start_version_check()
+
+    def _start_version_check(self) -> None:
+        """Start background version check."""
+        def check_version():
+            try:
+                from services.version_service import check_update_available
+                update_available, current, latest = check_update_available()
+                if update_available and latest:
+                    self._latest_version = latest
+            except Exception:
+                pass
+            self._version_checked = True
+        
+        self._version_check_thread = threading.Thread(target=check_version, daemon=True)
+        self._version_check_thread.start()
 
     # ══════════════════ helpers ══════════════════
 
@@ -162,16 +181,6 @@ class MonitorUI:
 
     def render_header(self, width: int) -> Panel:
         now = datetime.now().strftime("%H:%M:%S")
-        # Check for updates once
-        if not self._version_checked:
-            try:
-                from services.version_service import check_update_available
-                update_available, current, latest = check_update_available()
-                if update_available and latest:
-                    self._latest_version = latest
-            except Exception:
-                pass
-            self._version_checked = True
         
         # Build version string
         if self._latest_version:
