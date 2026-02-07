@@ -53,6 +53,10 @@ pinger
 pipx upgrade network-pinger
 ```
 
+The app automatically checks for new versions on startup and displays a notification in the UI if an update is available:
+
+![Version Check Notification](assets/update.jpg)
+
 ### Development Install (Poetry)
 
 ```bash
