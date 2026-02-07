@@ -117,37 +117,36 @@ CURRENT_LANGUAGE = "en"  # or "ru"
 
 ## Interface
 
-The dashboard consists of a **header**, **status bar**, **multi-panel body**, and **footer**:
+The dashboard is organized into logical panels that update in real time:
 
-```
-┌────────────── Network Monitor → 1.1.1.1  v2.1.8 ✓  10:35:21 ──────────────┐
-╔══ ● CONNECTED  │  Ping: 12.3ms  │  Loss: 0.0%  │  Uptime: 2h 15m ════════╗
-┌─ LATENCY ─────────────────┐  ┌─ STATISTICS ──────────────┐
-│ Current  12 ms   Best 8 ms│  │ Sent    5400    ██████████ │
-│ Average  14 ms   Peak 45ms│  │ OK      5398    99.96%     │
-│ Median   13 ms   Jitter 3 │  │ Lost       2    ░░░░░░░░░░ │
-│ ▁▂▃▂▃▅▃▂▁▂▃▂▃▅▃▂▁▂▃▂▃▅▃▂ │  │ Consecutive: 0  Max: 1     │
-└───────────────────────────┘  └────────────────────────────┘
-┌─ ANALYSIS ────────────────┐  ┌─ MONITORING ──────────────┐
-│ ─── Problems ──────────── │  │ ─── DNS ──────────────── │
-│ Type: No problems         │  │ A✓ AAAA✓ MX✓ TXT✓ NS✓   │
-│ Prediction: Stable        │  │ C:12  U:45  D:25 │ avg:27│
-│ ─── Route ─────────────── │  │ ─── Network ──────────── │
-│ Status: Stable (6 hops)   │  │ TTL: 117  MTU: 1500 OK   │
-│ Changes: 0                │  │ ─── Notifications ────── │
-└───────────────────────────┘  │ No active alerts.         │
-                               └────────────────────────────┘
-┌─ HOP HEALTH ──────────────────────────────────────────────────┐
-│  #   Min       Avg       Last      Loss    Host               │
-│  1   1 ms      1 ms      1 ms      0.0%    192.168.1.1        │
-│  2   14 ms     14 ms     13 ms     0.0%    10.0.0.1           │
-│  3   15 ms     14 ms     14 ms     0.0%    hostname [1.2.3.4] │
-└───────────────────────────────────────────────────────────────┘
-```
+### Header & Status Bar
+- **Target IP** and **version** with update indicator
+- **Connection state** (● Connected / ▲ Degraded / ✕ Disconnected)
+- **Key metrics**: current ping, packet loss percentage, session uptime
+
+### Latency Panel
+Current / best / average / peak / median latency, jitter value, and a sparkline chart showing the last 60 seconds of latency history.
+
+### Statistics Panel
+Packet counters (sent/ok/lost), success rate with Unicode progress bars, and consecutive loss tracking with maximum streak.
+
+### Analysis Panel
+- **Problems**: detected issue type (ISP, local, DNS, MTU, or none)
+- **Prediction**: risk assessment based on recent history
+- **Route**: stability status, hop count, and change counter
+
+### Monitoring Panel
+- **DNS**: record type status (A, AAAA, CNAME, MX, TXT, NS) with checkmarks
+- **Benchmark**: cached / uncached / dot-com response times with statistics
+- **Network**: TTL value, MTU status, and fragmentation detection
+- **Notifications**: active alerts with timestamps
+
+### Hop Health Panel
+Per-hop table showing min/avg/last latency and loss percentage for each discovered intermediate router, color-coded by severity (green/yellow/red).
 
 | Panel | Description |
 |---|---|
-| **Status bar** | Connection state (CONNECTED / DEGRADED / DISCONNECTED), key metrics |
+| **Status bar** | Connection state, key metrics |
 | **Latency** | Current / best / avg / peak / median / jitter + sparkline chart |
 | **Statistics** | Packet counters, success rate with progress bars |
 | **Analysis** | Problem type & prediction + route status |
