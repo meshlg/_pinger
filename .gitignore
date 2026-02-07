@@ -42,3 +42,25 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+
+# Poetry
+# poetry.lock - usually committed for reproducibility, uncomment if you prefer not to
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+pyrightconfig.json
+
+# Jupyter
+.ipynb_checkpoints
+
+# Distribution packages
+*.whl
+*.tar.gz
