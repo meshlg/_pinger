@@ -1,7 +1,9 @@
 """Version check service - queries GitHub for latest release."""
-import requests
 import logging
+import re
 from typing import Optional
+
+import requests
 
 from config import VERSION
 
@@ -34,9 +36,13 @@ def check_update_available() -> tuple[bool, str, Optional[str]]:
     if latest is None:
         return False, VERSION, None
     
-    # Simple version comparison (assumes semver format X.Y.Z)
-    current_parts = [int(x) for x in VERSION.split(".")]
-    latest_parts = [int(x) for x in latest.split(".")]
+    # Simple version comparison (assumes semver format X.Y.Z, tolerates suffixes like -rc1)
+    try:
+        current_parts = [int(re.match(r"\d+", x).group()) for x in VERSION.split(".") if re.match(r"\d+", x)]
+        latest_parts = [int(re.match(r"\d+", x).group()) for x in latest.split(".") if re.match(r"\d+", x)]
+    except (AttributeError, ValueError):
+        logging.debug(f"Cannot parse version strings: current={VERSION}, latest={latest}")
+        return False, VERSION, latest
     
     # Pad to same length
     while len(current_parts) < len(latest_parts):

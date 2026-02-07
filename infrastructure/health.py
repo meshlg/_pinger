@@ -65,7 +65,8 @@ class HealthHandler(BaseHTTPRequestHandler):
 class HealthServer:
     """Health check HTTP server for container orchestration."""
     
-    def __init__(self, port: int = 8080, stats_repo: StatsRepository | None = None) -> None:
+    def __init__(self, addr: str = "0.0.0.0", port: int = 8080, stats_repo: StatsRepository | None = None) -> None:
+        self.addr = addr
         self.port = port
         self.stats_repo = stats_repo
         self.server: HTTPServer | None = None
@@ -79,7 +80,7 @@ class HealthServer:
         
         try:
             HealthHandler.stats_repo = self.stats_repo
-            self.server = HTTPServer(("0.0.0.0", self.port), HealthHandler)
+            self.server = HTTPServer((self.addr, self.port), HealthHandler)
             self.thread = threading.Thread(target=self._serve, daemon=True)
             self.thread.start()
             self._running = True
@@ -102,8 +103,8 @@ class HealthServer:
             self.server.shutdown()
 
 
-def start_health_server(port: int = 8080, stats_repo: StatsRepository | None = None) -> HealthServer:
+def start_health_server(addr: str = "0.0.0.0", port: int = 8080, stats_repo: StatsRepository | None = None) -> HealthServer:
     """Create and start health server."""
-    server = HealthServer(port, stats_repo)
+    server = HealthServer(addr, port, stats_repo)
     server.start()
     return server

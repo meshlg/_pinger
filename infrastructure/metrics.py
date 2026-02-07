@@ -55,7 +55,7 @@ except ImportError:
         pass
 
 
-def start_metrics_server(port: int = 9090) -> None:
+def start_metrics_server(port: int = 8000) -> None:
     """Start Prometheus metrics HTTP server."""
     if not METRICS_AVAILABLE:
         logging.warning("Prometheus metrics not available, metrics server not started")

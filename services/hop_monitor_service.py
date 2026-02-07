@@ -230,7 +230,7 @@ class HopMonitorService:
         try:
             if sys.platform == "win32":
                 # Windows: -w is timeout in milliseconds
-                cmd = ["ping", "-n", "1", "-w", str(HOP_PING_TIMEOUT * 1000), ip]
+                cmd = ["ping", "-n", "1", "-w", str(int(HOP_PING_TIMEOUT * 1000)), ip]
                 encoding = "oem"
             else:
                 # Linux/Mac: -W is timeout in seconds

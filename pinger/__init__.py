@@ -8,7 +8,7 @@ def check_project_dependencies() -> None:
     """
     Check all project dependencies before importing external packages.
     """
-    required_packages = ["rich", "requests", "pythonping"]
+    required_packages = ["rich", "requests", "dns"]
     missing_packages = []
     
     for pkg in required_packages:

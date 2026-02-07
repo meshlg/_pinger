@@ -15,6 +15,10 @@ from typing import Callable, Optional, TypeVar
 from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, t
 from alerts import add_visual_alert
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from stats_repository import StatsRepository
+
 try:
     from prometheus_client import Counter  # type: ignore
     METRICS_AVAILABLE = True
@@ -30,12 +34,10 @@ class TracerouteService:
 
     def __init__(
         self,
-        stats_lock: threading.RLock,
-        stats: dict,
+        stats_repo: StatsRepository,
         executor: ThreadPoolExecutor,
     ) -> None:
-        self._stats_lock = stats_lock
-        self._stats = stats
+        self._stats_repo = stats_repo
         self._executor = executor
         self._traceroute_available: bool | None = None
 
@@ -86,11 +88,9 @@ class TracerouteService:
         """Async worker to run traceroute and save to file."""
         loop = asyncio.get_running_loop()
         
-        with self._stats_lock:
-            self._stats["traceroute_running"] = True
-            self._stats["last_traceroute_time"] = datetime.now()
+        self._stats_repo.set_traceroute_running(True)
         
-        add_visual_alert(self._stats_lock, self._stats, f"[i] {t('traceroute_starting')}", "info")
+        add_visual_alert(self._stats_repo.lock, self._stats_repo.get_stats(), f"[i] {t('traceroute_starting')}", "info")
         logging.info(f"Starting traceroute to {target}")
         
         try:
@@ -112,8 +112,8 @@ class TracerouteService:
                 handle.write(data)
             
             add_visual_alert(
-                self._stats_lock,
-                self._stats,
+                self._stats_repo.lock,
+                self._stats_repo.get_stats(),
                 f"[+] {t('traceroute_saved').format(file=filename)}",
                 "success"
             )
@@ -124,25 +124,21 @@ class TracerouteService:
                 
         except Exception as exc:
             add_visual_alert(
-                self._stats_lock,
-                self._stats,
+                self._stats_repo.lock,
+                self._stats_repo.get_stats(),
                 f"[!] {t('traceroute_save_failed')}",
                 "warning"
             )
             logging.error(f"Failed save traceroute: {exc}")
         finally:
-            with self._stats_lock:
-                self._stats["traceroute_running"] = False
+            self._stats_repo.set_traceroute_running(False)
 
     def trigger_traceroute(self, target: str) -> bool:
         """Trigger traceroute if not running and cooldown passed."""
-        with self._stats_lock:
-            running = self._stats["traceroute_running"]
-            last = self._stats["last_traceroute_time"]
-        
-        if running:
+        if self._stats_repo.is_traceroute_running():
             return False
         
+        last = self._stats_repo.get_last_traceroute_time()
         if last and (datetime.now() - last).total_seconds() < TRACEROUTE_COOLDOWN:
             return False
         

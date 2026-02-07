@@ -8,7 +8,9 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Any
+from typing import Any, TypeVar
+
+T = TypeVar('T')
 
 from config import (
     ALERT_ON_HIGH_LATENCY,
@@ -41,6 +43,11 @@ from config import (
     TRACEROUTE_TRIGGER_LOSSES,
     TTL_CHECK_INTERVAL,
     IP_CHECK_INTERVAL,
+    ENABLE_METRICS,
+    METRICS_PORT,
+    ENABLE_HEALTH_ENDPOINT,
+    HEALTH_ADDR,
+    HEALTH_PORT,
     t,
 )
 from stats_repository import StatsRepository
@@ -93,8 +100,7 @@ class Monitor:
         self.mtu_service = MTUService()
         self.ip_service = IPService()
         self.traceroute_service = TracerouteService(
-            stats_lock=self.stats_repo.lock,
-            stats=self.stats_repo.get_stats(),
+            stats_repo=self.stats_repo,
             executor=self.executor,
         )
         
@@ -106,7 +112,11 @@ class Monitor:
         self.route_analyzer = RouteAnalyzer()
         
         # Infrastructure
-        self.health_server = start_health_server(stats_repo=self.stats_repo)
+        if ENABLE_METRICS:
+            start_metrics_server(METRICS_PORT)
+        self.health_server = None
+        if ENABLE_HEALTH_ENDPOINT:
+            self.health_server = start_health_server(addr=HEALTH_ADDR, port=HEALTH_PORT, stats_repo=self.stats_repo)
 
     @property
     def stats_lock(self):
@@ -133,7 +143,7 @@ class Monitor:
             self.health_server.stop()
         self.executor.shutdown(wait=True)
 
-    async def run_blocking[T](self, func, *args, **kwargs) -> T:
+    async def run_blocking(self, func, *args, **kwargs) -> T:
         """Run blocking function in executor."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
@@ -329,41 +339,33 @@ class Monitor:
                     elif diff >= MTU_DIFF_THRESHOLD and path_mtu < local_mtu:
                         status = t("mtu_low")
                 
-                # Update stats with hysteresis logic
-                with self.stats_repo.lock:
-                    stats = self.stats_repo.get_stats()
-                    current = stats.get("mtu_status", t("mtu_ok"))
-                    
-                    # Update counters
-                    if status in [t("mtu_low"), t("mtu_fragmented")]:
-                        stats["mtu_consecutive_issues"] = stats.get("mtu_consecutive_issues", 0) + 1
-                        stats["mtu_consecutive_ok"] = 0
-                    else:
-                        stats["mtu_consecutive_ok"] = stats.get("mtu_consecutive_ok", 0) + 1
-                        stats["mtu_consecutive_issues"] = 0
-                    
-                    # Apply hysteresis
-                    if status in [t("mtu_low"), t("mtu_fragmented")]:
-                        if stats["mtu_consecutive_issues"] >= MTU_ISSUE_CONSECUTIVE and current != status:
-                            self.stats_repo.update_mtu(local_mtu, path_mtu, status)
-                            stats["mtu_last_status_change"] = datetime.now()
-                            logging.info(f"MTU problem: {status}")
-                            if METRICS_AVAILABLE:
-                                try:
-                                    MTU_PROBLEMS_TOTAL.inc()
-                                    MTU_STATUS_GAUGE.set(1 if status == t("mtu_low") else 2)
-                                except Exception:
-                                    pass
-                    else:
-                        if stats["mtu_consecutive_ok"] >= MTU_CLEAR_CONSECUTIVE and current != t("mtu_ok"):
-                            self.stats_repo.update_mtu(local_mtu, path_mtu, t("mtu_ok"))
-                            stats["mtu_last_status_change"] = datetime.now()
-                            logging.info("MTU status cleared")
-                            if METRICS_AVAILABLE:
-                                try:
-                                    MTU_STATUS_GAUGE.set(0)
-                                except Exception:
-                                    pass
+                # Update hysteresis counters via repository
+                is_issue = status in [t("mtu_low"), t("mtu_fragmented")]
+                cons_issues, cons_ok = self.stats_repo.update_mtu_hysteresis(is_issue)
+                current = self.stats_repo.get_mtu_status()
+                
+                # Apply hysteresis
+                if is_issue:
+                    if cons_issues >= MTU_ISSUE_CONSECUTIVE and current != status:
+                        self.stats_repo.update_mtu(local_mtu, path_mtu, status)
+                        self.stats_repo.set_mtu_status_change_time()
+                        logging.info(f"MTU problem: {status}")
+                        if METRICS_AVAILABLE:
+                            try:
+                                MTU_PROBLEMS_TOTAL.inc()
+                                MTU_STATUS_GAUGE.set(1 if status == t("mtu_low") else 2)
+                            except Exception:
+                                pass
+                else:
+                    if cons_ok >= MTU_CLEAR_CONSECUTIVE and current != t("mtu_ok"):
+                        self.stats_repo.update_mtu(local_mtu, path_mtu, t("mtu_ok"))
+                        self.stats_repo.set_mtu_status_change_time()
+                        logging.info("MTU status cleared")
+                        if METRICS_AVAILABLE:
+                            try:
+                                MTU_STATUS_GAUGE.set(0)
+                            except Exception:
+                                pass
                 
             except Exception as exc:
                 logging.error(f"MTU monitor failed: {exc}")
@@ -528,73 +530,62 @@ class Monitor:
                 significant_diffs = [i for i in diff_indices if i >= ROUTE_IGNORE_FIRST_HOPS]
                 sig_count = len(significant_diffs)
                 
-                # Update consecutive counters
-                with self.stats_repo.lock:
-                    stats = self.stats_repo.get_stats()
-                    
-                    if sig_count >= ROUTE_CHANGE_HOP_DIFF:
-                        stats["route_consecutive_changes"] = stats.get("route_consecutive_changes", 0) + 1
-                        stats["route_consecutive_ok"] = 0
-                    else:
-                        stats["route_consecutive_ok"] = stats.get("route_consecutive_ok", 0) + 1
-                        stats["route_consecutive_changes"] = 0
-                    
-                    # Update route status
-                    route_changed = False
-                    if stats["route_consecutive_changes"] >= ROUTE_CHANGE_CONSECUTIVE:
-                        if not stats.get("route_changed"):
-                            route_changed = True
-                            stats["route_changed"] = True
-                            stats["route_last_change_time"] = datetime.now()
-                            add_visual_alert(
-                                self.stats_repo.lock,
-                                stats,
-                                f"[i] {t('route_changed')}",
-                                "info"
-                            )
-                            if METRICS_AVAILABLE:
-                                try:
-                                    ROUTE_CHANGES_TOTAL.inc()
-                                    ROUTE_CHANGED_GAUGE.set(1)
-                                except Exception:
-                                    pass
-                            
-                            # Auto-trigger traceroute on route change
-                            if stats["route_consecutive_changes"] >= ROUTE_SAVE_ON_CHANGE_CONSECUTIVE:
-                                self.traceroute_service.trigger_traceroute(TARGET_IP)
-                    
-                    elif stats["route_consecutive_ok"] >= ROUTE_CHANGE_CONSECUTIVE:
-                        if stats.get("route_changed"):
-                            stats["route_changed"] = False
-                            stats["route_last_change_time"] = datetime.now()
-                            add_visual_alert(
-                                self.stats_repo.lock,
-                                stats,
-                                f"[i] {t('route_stable')}",
-                                "info"
-                            )
-                            if METRICS_AVAILABLE:
-                                try:
-                                    ROUTE_CHANGED_GAUGE.set(0)
-                                except Exception:
-                                    pass
-                    
-                    # Update route info
-                    self.stats_repo.update_route(
-                        hops,
-                        analysis["problematic_hop"],
-                        stats["route_changed"],
-                        sig_count
-                    )
-                    
-                    # Alert on problematic hop
-                    if analysis["problematic_hop"]:
+                # Update hysteresis counters via repository
+                is_significant = sig_count >= ROUTE_CHANGE_HOP_DIFF
+                cons_changes, cons_ok = self.stats_repo.update_route_hysteresis(is_significant)
+                
+                # Update route status
+                if cons_changes >= ROUTE_CHANGE_CONSECUTIVE:
+                    if not self.stats_repo.is_route_changed():
+                        self.stats_repo.set_route_changed(True)
                         add_visual_alert(
                             self.stats_repo.lock,
-                            stats,
-                            f"[!] {t('problematic_hop')}: {analysis['problematic_hop']}",
-                            "warning"
+                            self.stats_repo.get_stats(),
+                            f"[i] {t('route_changed')}",
+                            "info"
                         )
+                        if METRICS_AVAILABLE:
+                            try:
+                                ROUTE_CHANGES_TOTAL.inc()
+                                ROUTE_CHANGED_GAUGE.set(1)
+                            except Exception:
+                                pass
+                        
+                        # Auto-trigger traceroute on route change
+                        if cons_changes >= ROUTE_SAVE_ON_CHANGE_CONSECUTIVE:
+                            self.traceroute_service.trigger_traceroute(TARGET_IP)
+                
+                elif cons_ok >= ROUTE_CHANGE_CONSECUTIVE:
+                    if self.stats_repo.is_route_changed():
+                        self.stats_repo.set_route_changed(False)
+                        add_visual_alert(
+                            self.stats_repo.lock,
+                            self.stats_repo.get_stats(),
+                            f"[i] {t('route_stable')}",
+                            "info"
+                        )
+                        if METRICS_AVAILABLE:
+                            try:
+                                ROUTE_CHANGED_GAUGE.set(0)
+                            except Exception:
+                                pass
+                
+                # Update route info
+                self.stats_repo.update_route(
+                    hops,
+                    analysis["problematic_hop"],
+                    self.stats_repo.is_route_changed(),
+                    sig_count
+                )
+                
+                # Alert on problematic hop
+                if analysis["problematic_hop"]:
+                    add_visual_alert(
+                        self.stats_repo.lock,
+                        self.stats_repo.get_stats(),
+                        f"[!] {t('problematic_hop')}: {analysis['problematic_hop']}",
+                        "warning"
+                    )
                 
             except Exception as exc:
                 logging.error(f"Route analysis failed: {exc}")

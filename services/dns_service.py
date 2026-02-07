@@ -311,6 +311,7 @@ class DNSService:
         test_domain = DNS_TEST_DOMAIN
         record_type = "A"
         test_type = "cached"
+        error_msg: str | None = None
         
         try:
             # First query - may be uncached
@@ -330,6 +331,7 @@ class DNSService:
         except Exception as exc:
             response_time = None
             status = t("failed")
+            error_msg = str(exc)
             self._update_history(server, test_type, None, False)
         
         # Calculate stats
@@ -348,7 +350,7 @@ class DNSService:
             response_time_ms=response_time,
             success=response_time is not None,
             status=status,
-            error=None if response_time is not None else str(exc) if 'exc' in dir() else "Failed"
+            error=error_msg,
         )
 
     def _test_uncached(self, server: str) -> DNSBenchmarkResult:
@@ -366,25 +368,13 @@ class DNSService:
         try:
             rdtype = dns.rdatatype.from_text(record_type)
             start = time.time()
-            self._resolver.resolve(test_domain, rdtype)
+            try:
+                self._resolver.resolve(test_domain, rdtype)
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                pass  # NXDOMAIN/NoAnswer are valid — DNS server responded
             response_time = (time.time() - start) * 1000
             status = t("slow") if response_time > DNS_SLOW_THRESHOLD else t("ok")
             success = True
-            
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            # Valid responses - measure time
-            try:
-                rdtype = dns.rdatatype.from_text(record_type)
-                start = time.time()
-                try:
-                    self._resolver.resolve(test_domain, rdtype)
-                except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-                    pass
-                response_time = (time.time() - start) * 1000
-                status = t("slow") if response_time > DNS_SLOW_THRESHOLD else t("ok")
-                success = True
-            except Exception:
-                pass
                 
         except Exception as exc:
             error = str(exc)
@@ -415,6 +405,7 @@ class DNSService:
         """Test popular .com domain response time."""
         record_type = "A"
         test_type = "dotcom"
+        error_msg: str | None = None
         
         try:
             rdtype = dns.rdatatype.from_text(record_type)
@@ -430,6 +421,7 @@ class DNSService:
         except Exception as exc:
             response_time = None
             status = t("failed")
+            error_msg = str(exc)
             self._update_history(server, test_type, None, False)
         
         # Calculate stats
@@ -448,7 +440,7 @@ class DNSService:
             response_time_ms=response_time,
             success=response_time is not None,
             status=status,
-            error=None if response_time is not None else str(exc) if 'exc' in dir() else "Failed"
+            error=error_msg,
         )
 
     # Legacy method for backward compatibility

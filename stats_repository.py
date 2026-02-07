@@ -11,12 +11,9 @@ from config import (
     create_stats,
     t,
     ThresholdStates,
+    WINDOW_SIZE,
+    LATENCY_WINDOW,
 )
-
-
-# Window sizes for statistics (moved from config.py for encapsulation)
-WINDOW_SIZE = 1800  # Recent results window
-LATENCY_WINDOW = 600  # Latency history window
 
 
 class StatsSnapshot(TypedDict):
@@ -182,13 +179,13 @@ class StatsRepository:
                     if alert_on_high_latency and latency > high_latency_threshold:
                         high_latency_flag = True
                     
-                    # Update jitter
+                    # Update jitter incrementally (exponential moving average)
                     if len(self._stats["latencies"]) >= 2:
-                        latencies_list = list(self._stats["latencies"])
-                        self._stats["jitter"] = statistics.mean(
-                            abs(latencies_list[i] - latencies_list[i - 1])
-                            for i in range(1, len(latencies_list))
-                        )
+                        prev = self._stats["latencies"][-2]
+                        diff = abs(latency - prev)
+                        alpha = 0.1  # smoothing factor
+                        old_jitter = self._stats["jitter"]
+                        self._stats["jitter"] = old_jitter + alpha * (diff - old_jitter)
                 else:
                     self._stats["last_latency_ms"] = t("na")
             else:
@@ -251,17 +248,17 @@ class StatsRepository:
             # Calculate overall status
             successful = [r for r in dns_results if r["success"]]
             if not dns_results:
-                self._stats["dns_status"] = "failed"
+                self._stats["dns_status"] = t("failed")
                 self._stats["dns_resolve_time"] = None
             elif not successful:
-                self._stats["dns_status"] = "failed"
+                self._stats["dns_status"] = t("failed")
                 self._stats["dns_resolve_time"] = None
             else:
                 # Use average response time across all successful queries
                 avg_time = sum(r["response_time_ms"] for r in successful if r["response_time_ms"]) / len(successful)
                 self._stats["dns_resolve_time"] = avg_time
                 # Status is ok only if all types succeeded
-                self._stats["dns_status"] = "ok" if len(successful) == len(dns_results) else "slow"
+                self._stats["dns_status"] = t("ok") if len(successful) == len(dns_results) else t("slow")
 
     def update_dns_benchmark(self, benchmark_results: list[dict]) -> None:
         """Update DNS benchmark results (Cached/Uncached/DotCom).
@@ -369,6 +366,66 @@ class StatsRepository:
         """Get current consecutive losses count."""
         with self._lock:
             return self._stats["consecutive_losses"]
+
+    def update_mtu_hysteresis(self, is_issue: bool) -> tuple[int, int]:
+        """Update MTU hysteresis counters. Returns (consecutive_issues, consecutive_ok)."""
+        with self._lock:
+            if is_issue:
+                self._stats["mtu_consecutive_issues"] = self._stats.get("mtu_consecutive_issues", 0) + 1
+                self._stats["mtu_consecutive_ok"] = 0
+            else:
+                self._stats["mtu_consecutive_ok"] = self._stats.get("mtu_consecutive_ok", 0) + 1
+                self._stats["mtu_consecutive_issues"] = 0
+            return self._stats["mtu_consecutive_issues"], self._stats["mtu_consecutive_ok"]
+
+    def get_mtu_status(self) -> str:
+        """Get current MTU status."""
+        with self._lock:
+            return self._stats.get("mtu_status", t("mtu_ok"))
+
+    def set_mtu_status_change_time(self) -> None:
+        """Record MTU status change time."""
+        with self._lock:
+            self._stats["mtu_last_status_change"] = datetime.now()
+
+    def update_route_hysteresis(self, is_change: bool) -> tuple[int, int]:
+        """Update route change hysteresis counters. Returns (consecutive_changes, consecutive_ok)."""
+        with self._lock:
+            if is_change:
+                self._stats["route_consecutive_changes"] = self._stats.get("route_consecutive_changes", 0) + 1
+                self._stats["route_consecutive_ok"] = 0
+            else:
+                self._stats["route_consecutive_ok"] = self._stats.get("route_consecutive_ok", 0) + 1
+                self._stats["route_consecutive_changes"] = 0
+            return self._stats["route_consecutive_changes"], self._stats["route_consecutive_ok"]
+
+    def set_route_changed(self, changed: bool) -> None:
+        """Set route changed flag with timestamp."""
+        with self._lock:
+            self._stats["route_changed"] = changed
+            self._stats["route_last_change_time"] = datetime.now()
+
+    def is_route_changed(self) -> bool:
+        """Get current route changed state."""
+        with self._lock:
+            return self._stats.get("route_changed", False)
+
+    def set_traceroute_running(self, running: bool) -> None:
+        """Set traceroute running state."""
+        with self._lock:
+            self._stats["traceroute_running"] = running
+            if running:
+                self._stats["last_traceroute_time"] = datetime.now()
+
+    def is_traceroute_running(self) -> bool:
+        """Check if traceroute is currently running."""
+        with self._lock:
+            return self._stats.get("traceroute_running", False)
+
+    def get_last_traceroute_time(self) -> datetime | None:
+        """Get last traceroute time."""
+        with self._lock:
+            return self._stats.get("last_traceroute_time")
 
     def update_hop_monitor(self, hops: list[dict], discovering: bool = False) -> None:
         """Update hop monitor data."""

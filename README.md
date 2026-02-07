@@ -120,7 +120,7 @@ CURRENT_LANGUAGE = "en"  # or "ru"
 The dashboard consists of a **header**, **status bar**, **multi-panel body**, and **footer**:
 
 ```
-┌────────────── Network Monitor → 1.1.1.1  v2.1.7 ✓  10:35:21 ──────────────┐
+┌────────────── Network Monitor → 1.1.1.1  v2.1.8 ✓  10:35:21 ──────────────┐
 ╔══ ● CONNECTED  │  Ping: 12.3ms  │  Loss: 0.0%  │  Uptime: 2h 15m ════════╗
 ┌─ LATENCY ─────────────────┐  ┌─ STATISTICS ──────────────┐
 │ Current  12 ms   Best 8 ms│  │ Sent    5400    ██████████ │
@@ -216,9 +216,9 @@ MTU_CHECK_INTERVAL = 30
 <summary><b>Traceroute & Hop Monitoring</b></summary>
 
 ```python
-ENABLE_AUTO_TRACEROUTE = True
+ENABLE_AUTO_TRACEROUTE = False   # Manual trigger or on route change
 TRACEROUTE_TRIGGER_LOSSES = 3
-TRACEROUTE_COOLDOWN = 60
+TRACEROUTE_COOLDOWN = 300
 TRACEROUTE_MAX_HOPS = 15
 
 ENABLE_HOP_MONITORING = True
@@ -237,7 +237,7 @@ ENABLE_PROBLEM_ANALYSIS = True
 PROBLEM_ANALYSIS_INTERVAL = 60
 
 ENABLE_ROUTE_ANALYSIS = True
-ROUTE_ANALYSIS_INTERVAL = 300
+ROUTE_ANALYSIS_INTERVAL = 1800
 ROUTE_CHANGE_CONSECUTIVE = 2
 ```
 </details>

@@ -139,6 +139,13 @@ class ProblemAnalyzer:
         """Record problem occurrence in history."""
         now = datetime.now()
         last_record = self.problem_history[-1] if self.problem_history else None
+
+        # Suppress duplicate problems within cooldown window
+        if last_record and last_record.get("type") == problem_type:
+            delta = (now - last_record.get("timestamp")).total_seconds()
+            if delta < PROBLEM_LOG_SUPPRESSION_SECONDS:
+                return
+
         problem_record = {
             "type": problem_type,
             "timestamp": now,
@@ -147,13 +154,6 @@ class ProblemAnalyzer:
             "jitter": snap.get("jitter", 0),
         }
         self.problem_history.append(problem_record)
-
-        # Suppress logging of repeated identical problems within cooldown window
-        if last_record and last_record.get("type") == problem_type:
-            delta = (now - last_record.get("timestamp")).total_seconds()
-            if delta < PROBLEM_LOG_SUPPRESSION_SECONDS:
-                return
-
         logging.info(f"Problem recorded: {problem_type}")
 
     def get_problem_summary(self) -> Dict[str, Any]:

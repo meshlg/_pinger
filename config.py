@@ -1,9 +1,10 @@
+import locale
+import os
 from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
-import locale
 
-VERSION = "2.1.7"
+VERSION = "2.1.8"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -12,14 +13,13 @@ def _detect_system_language() -> str:
     """Detect system language and return supported language code."""
     try:
         # Get system locale
-        system_locale = locale.getdefaultlocale()[0]
+        system_locale = locale.getlocale()[0]
         if system_locale:
             lang_code = system_locale.lower()[:2]
             # Map common Russian locale codes
             if lang_code in ("ru", "be", "uk", "kk"):
                 return "ru"
         # Check environment variable as fallback
-        import os
         env_lang = os.environ.get("LANG", "")
         if "ru" in env_lang.lower():
             return "ru"
@@ -116,21 +116,19 @@ ALERT_PANEL_LINES = 3
 MAX_ACTIVE_ALERTS = 3
 
 # Metrics / health endpoint
-ENABLE_METRICS = True
-METRICS_ADDR = "0.0.0.0"
-METRICS_PORT = 8000
-ENABLE_HEALTH_ENDPOINT = True
-HEALTH_ADDR = "0.0.0.0"
-HEALTH_PORT = 8001
-
-import os
+ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1", "yes")
+METRICS_ADDR = os.environ.get("METRICS_ADDR", "0.0.0.0")
+METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
+ENABLE_HEALTH_ENDPOINT = os.environ.get("ENABLE_HEALTH_ENDPOINT", "true").lower() in ("true", "1", "yes")
+HEALTH_ADDR = os.environ.get("HEALTH_ADDR", "0.0.0.0")
+HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8001"))
 
 LOG_DIR = os.path.expanduser("~/.pinger")
 LOG_FILE = os.path.join(LOG_DIR, "ping_monitor.log")
-LOG_LEVEL = "INFO"
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 # If True, truncate (clear) log file at startup
-LOG_TRUNCATE_ON_START = True
+LOG_TRUNCATE_ON_START = os.environ.get("LOG_TRUNCATE_ON_START", "true").lower() in ("true", "1", "yes")
 
 LANG: Dict[str, Dict[str, str]] = {
     "ru": {
@@ -552,7 +550,6 @@ def create_stats() -> StatsDict:
         "route_last_change_time": None,
         "route_last_diff_count": 0,
         "route_history": [],
-        "last_route_change_time": None,
     }
 
 

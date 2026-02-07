@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from config import TARGET_IP
 
@@ -26,7 +26,7 @@ class PingService:
 
     def __init__(self) -> None:
         self._ping_available: bool | None = None
-        self._dns_cache: dict[str, dict[str, any]] = {}
+        self._dns_cache: dict[str, dict[str, Any]] = {}
         self._dns_cache_lock = threading.Lock()
 
     def _check_ping_available(self) -> bool:

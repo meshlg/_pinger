@@ -66,11 +66,24 @@ class RouteAnalyzer:
         return hops
 
     def identify_problematic_hop(self, hops: List[Dict[str, Any]]) -> Optional[int]:
-        """Identify the problematic hop in the route."""
+        """Identify the problematic hop in the route.
+        
+        Avoids false positives: single timeout hops are common (routers that
+        don't respond to ICMP) and are NOT considered problematic by themselves.
+        """
+        consecutive_timeouts = 0
         for hop in hops:
-            # Check for timeout
-            if hop.get("is_timeout"):
-                return hop["hop"]
+            is_timeout = hop.get("is_timeout", False)
+            latencies = hop.get("latencies", [])
+
+            # Track consecutive timeout-only hops (2+ in a row = real problem)
+            if is_timeout and not latencies:
+                consecutive_timeouts += 1
+                if consecutive_timeouts >= 2:
+                    return hop["hop"]
+                continue
+            else:
+                consecutive_timeouts = 0
 
             # Check for high latency
             avg_latency = hop.get("avg_latency")
@@ -78,9 +91,8 @@ class RouteAnalyzer:
                 return hop["hop"]
 
             # Check for high variance in latencies
-            latencies = hop.get("latencies", [])
             if len(latencies) >= 2:
-                variance = statistics.stdev(latencies) if len(latencies) > 1 else 0
+                variance = statistics.stdev(latencies)
                 if variance > 100:  # High variance
                     return hop["hop"]
 
