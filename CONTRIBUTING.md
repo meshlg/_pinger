@@ -138,9 +138,12 @@ Maintainers follow this process for releases:
 # Update version in pyproject.toml and config.py
 poetry build
 poetry publish
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
+
+**⚠️ CRITICAL: Always create and push a git tag!**  
+The in-app version check feature uses GitHub Tags API (`api.github.com/repos/meshlg/_pinger/tags`) to detect new releases. If you don't create a tag, users won't be notified about available updates.
 
 ## Questions?
 
