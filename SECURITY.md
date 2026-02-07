@@ -15,6 +15,7 @@ If you discover a security vulnerability in network-pinger, please report it res
 **Do NOT open a public issue** for security vulnerabilities.
 
 **Discord:** meshlg
+
 **Email:** meshlgfox@gmail.com
 
 Please include:
