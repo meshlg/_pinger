@@ -38,6 +38,9 @@ class PingerApp:
                 uptime_txt = self.ui._fmt_uptime(snap["start_time"])
                 self.console.print(f"[dim]{t('uptime_label')}: {uptime_txt}[/dim]")
             self.monitor.stop_event.set()
+            # Graceful shutdown
+            self.monitor.shutdown()
+            sys.exit(0)
 
         signal.signal(signal.SIGINT, handler)
         if hasattr(signal, "SIGTERM"):

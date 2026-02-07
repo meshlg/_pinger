@@ -3,7 +3,7 @@ from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 import locale
 
-VERSION = "2.1.5"
+VERSION = "2.1.6"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
