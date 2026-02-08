@@ -125,10 +125,10 @@ The dashboard is organized into logical panels that update in real time:
 - **Key metrics**: current ping, packet loss percentage, session uptime
 
 ### Latency Panel
-Current / best / average / peak / median latency, jitter value, p95, и двойной спарклайн (latency + jitter) для последних минут наблюдений.
+Current / best / average / peak / median latency, jitter value, p95, plus dual sparklines (latency + jitter) for the most recent minutes of activity.
 
 ### Statistics Panel
-Packet counters (sent/ok/lost), success rate with Unicode progress bars, и отдельная панель **Trends** с loss 30m, jitter trend/now и количеством хопов.
+Packet counters (sent/ok/lost), success rate with Unicode progress bars, plus a dedicated **Trends** sub-panel showing loss (30 m), jitter trend/now, and hop count.
 
 ### Analysis Panel
 - **Problems**: detected issue type (ISP, local, DNS, MTU, or none)
