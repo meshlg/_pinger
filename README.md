@@ -26,7 +26,7 @@ Async network monitoring tool with Rich-based terminal dashboard, smart alerts, 
 |  |  |  |
 |:---:|:---:|:---:|
 | **Ping & Latency** | **DNS Benchmark** | **Hop Health** |
-| Sparkline charts, jitter, loss trends | Cached / Uncached / DotCom tests | Per-hop latency & loss in real time |
+| Dual sparklines (latency + jitter), p95, loss trends | Cached / Uncached / DotCom tests | Per-hop latency & loss in real time |
 | **Smart Alerts** | **Problem Analysis** | **Route Tracking** |
 | Sound + visual, threshold hysteresis | ISP / local / DNS / MTU auto-diagnosis | Change detection, auto traceroute |
 
@@ -125,10 +125,10 @@ The dashboard is organized into logical panels that update in real time:
 - **Key metrics**: current ping, packet loss percentage, session uptime
 
 ### Latency Panel
-Current / best / average / peak / median latency, jitter value, and a sparkline chart showing the last 60 seconds of latency history.
+Current / best / average / peak / median latency, jitter value, p95, и двойной спарклайн (latency + jitter) для последних минут наблюдений.
 
 ### Statistics Panel
-Packet counters (sent/ok/lost), success rate with Unicode progress bars, and consecutive loss tracking with maximum streak.
+Packet counters (sent/ok/lost), success rate with Unicode progress bars, и отдельная панель **Trends** с loss 30m, jitter trend/now и количеством хопов.
 
 ### Analysis Panel
 - **Problems**: detected issue type (ISP, local, DNS, MTU, or none)
@@ -147,8 +147,8 @@ Per-hop table showing min/avg/last latency and loss percentage for each discover
 | Panel | Description |
 |---|---|
 | **Status bar** | Connection state, key metrics |
-| **Latency** | Current / best / avg / peak / median / jitter + sparkline chart |
-| **Statistics** | Packet counters, success rate with progress bars |
+| **Latency** | Current / best / avg / peak / median / jitter, p95 + dual sparklines |
+| **Statistics** | Packet counters, success rate, plus Trends (loss/jitter/hops) |
 | **Analysis** | Problem type & prediction + route status |
 | **Monitoring** | DNS records, benchmark, TTL/MTU, notifications |
 | **Hop Health** | Per-hop latency & loss table, color-coded |

@@ -4,7 +4,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.1.9"
+VERSION = "2.2.0"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -202,6 +202,10 @@ LANG: Dict[str, Dict[str, str]] = {
         "peak": "Пиковый",
         "median": "Медиана",
         "jitter": "Джиттер",
+        "jitter_trend": "Тренд джиттера",
+        "jitter_now": "Текущий джиттер",
+        "p95": "p95",
+        "trends": "Тренды",
         "spread": "Разброс",
         "latency_chart": "Задержка (последние значения):",
         "no_data": "нет данных",
@@ -354,6 +358,10 @@ LANG: Dict[str, Dict[str, str]] = {
         "peak": "Peak",
         "median": "Median",
         "jitter": "Jitter",
+        "jitter_trend": "Jitter trend",
+        "jitter_now": "Jitter now",
+        "p95": "p95",
+        "trends": "Trends",
         "spread": "Spread",
         "latency_chart": "Latency (recent values):",
         "no_data": "no data",
@@ -541,6 +549,7 @@ def create_stats() -> StatsDict:
         "max_latency": 0.0,
         "total_latency_sum": 0.0,
         "latencies": deque(maxlen=LATENCY_WINDOW),
+        "jitter_history": deque(maxlen=LATENCY_WINDOW),
         "consecutive_losses": 0,
         "max_consecutive_losses": 0,
         "public_ip": "...",

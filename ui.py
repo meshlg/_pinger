@@ -243,13 +243,14 @@ class MonitorUI:
         )
 
     def render_latency_panel(self, width: int) -> Panel:
-        """Top-left: latency stats + sparkline."""
+        """Latency and jitter analytics with dual sparklines."""
         snap = self.monitor.get_stats_snapshot()
         latencies = snap["latencies"]
+        jitter_hist = snap.get("jitter_history", [])
         avg = (snap["total_latency_sum"] / snap["success"]) if snap["success"] > 0 else 0.0
         med = statistics.median(latencies) if latencies else 0.0
         jit = snap.get("jitter", 0.0)
-        var = statistics.stdev(latencies) if len(latencies) > 1 else 0.0
+        p95 = statistics.quantiles(latencies, n=20)[18] if len(latencies) >= 20 else (max(latencies) if latencies else 0.0)
 
         current = snap["last_latency_ms"]
         current_txt = f"[bold white]{current}[/bold white] {t('ms')}" if current != t("na") else "[dim]—[/dim]"
@@ -257,38 +258,66 @@ class MonitorUI:
         peak = f"[red]{snap['max_latency']:.1f}[/red]" if snap["max_latency"] > 0 else "[dim]—[/dim]"
         med_txt = f"[white]{med:.1f}[/white]" if latencies else "[dim]—[/dim]"
         avg_txt = f"[yellow]{avg:.1f}[/yellow]" if snap["success"] > 0 else "[dim]—[/dim]"
-        if snap["threshold_states"]["high_avg_latency"] and snap["success"]:
+        p95_txt = f"[white]{p95:.1f}[/white]" if latencies else "[dim]—[/dim]"
+        if snap["threshold_states"].get("high_avg_latency") and snap["success"]:
             avg_txt = f"[bold red]{avg:.1f} (!)[/bold red]"
 
         jit_txt = f"[white]{jit:.1f}[/white]" if jit > 0 else "[dim]—[/dim]"
-        if snap["threshold_states"]["high_jitter"]:
+        if snap["threshold_states"].get("high_jitter"):
             jit_txt = f"[bold red]{jit:.1f} (!)[/bold red]"
-        var_txt = f"[white]{var:.1f}[/white]" if var > 0 else "[dim]—[/dim]"
 
-        # Dual-column key-value
         tbl = self._dual_kv_table(width)
         tbl.add_row(f"{t('current')}:", current_txt, f"{t('best')}:", f"{best} {t('ms')}")
-        tbl.add_row(f"{t('average')}:", f"{avg_txt} {t('ms')}", f"{t('peak')}:", f"{peak} {t('ms')}")
+        tbl.add_row(f"{t('average')}:", f"{avg_txt} {t('ms')}", f"{t('p95')}:", f"{p95_txt} {t('ms')}")
         tbl.add_row(f"{t('median')}:", f"{med_txt} {t('ms')}", f"{t('jitter')}:", f"{jit_txt} {t('ms')}")
-        tbl.add_row(f"{t('spread')}:", f"{var_txt} {t('ms')}", "", "")
 
-        # Sparkline
+        # Sparklines
         spark_width = max(20, width - 6)
-        spark = self._sparkline(list(latencies), width=spark_width)
-        mn_txt = f"{min(latencies):.0f}" if latencies else "—"
-        mx_txt = f"{max(latencies):.0f}" if latencies else "—"
-        avg_s = f"{avg:.0f}" if snap["success"] > 0 else "—"
+        lat_spark = self._sparkline(list(latencies), width=spark_width)
+        jit_spark = self._sparkline(list(jitter_hist) or [jit], width=spark_width)
 
         grp = Group(
             tbl,
             Text(""),
             Text.from_markup(f"  [dim]{t('latency_chart')}[/dim]"),
-            Text.from_markup(f"  {spark}"),
-            Text.from_markup(f"  [dim]{mn_txt}{t('ms')}{'':>10}avg {avg_s}{t('ms')}{'':>10}{mx_txt}{t('ms')}[/dim]"),
+            Text.from_markup(f"  {lat_spark}"),
+            Text.from_markup(f"  [dim]Jitter[/dim]"),
+            Text.from_markup(f"  {jit_spark}"),
         )
         return Panel(
             grp,
             title=f"[bold]{t('lat')}[/bold]",
+            title_align="left",
+            border_style="cyan",
+            box=box.ROUNDED,
+            width=width,
+        )
+
+    def render_trend_panel(self, width: int) -> Panel:
+        """Compact trends: packet loss, jitter, hop changes."""
+        snap = self.monitor.get_stats_snapshot()
+        recent = snap["recent_results"]
+        loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
+        jitter_hist = snap.get("jitter_history", [])
+        hops = snap.get("route_hops", [])
+
+        trend_tbl = self._kv_table(width, key_width=18)
+        loss_color = "green" if loss30 < 1 else ("yellow" if loss30 < 5 else "red")
+        trend_tbl.add_row(f"{t('loss_30m')}:", f"[{loss_color}]{loss30:.1f}%[/{loss_color}]")
+
+        if jitter_hist:
+            jit_now = jitter_hist[-1]
+            trend_tbl.add_row(f"{t('jitter_trend')}:", self._sparkline(jitter_hist, width=max(10, width - 24)))
+            trend_tbl.add_row(f"{t('jitter_now')}:", f"[white]{jit_now:.1f} {t('ms')}[/white]")
+        else:
+            trend_tbl.add_row(f"{t('jitter_trend')}:", "[dim]—[/dim]")
+
+        hop_count = len(hops)
+        trend_tbl.add_row(f"{t('hops_count')}:", f"[white]{hop_count}[/white]")
+
+        return Panel(
+            trend_tbl,
+            title=f"[bold]{t('trends')}[/bold]",
             title_align="left",
             border_style="cyan",
             box=box.ROUNDED,
@@ -798,11 +827,15 @@ class MonitorUI:
         )
         body["upper"].split_row(
             Layout(self.render_latency_panel(left_w), name="latency"),
+            Layout(name="stats_trends", ratio=1),
+        )
+        body["upper"]["stats_trends"].split_column(
             Layout(self.render_stats_panel(right_w), name="stats"),
+            Layout(self.render_trend_panel(right_w), name="trends"),
         )
         body["lower"].split_row(
             Layout(self.render_analysis_panel(left_w), name="analysis"),
-            Layout(self.render_monitoring_panel(right_w), name="monitoring"),
+            Layout(self.render_monitoring_panel(right_w), name="mon"),
         )
         layout["body"].update(body)
         return layout

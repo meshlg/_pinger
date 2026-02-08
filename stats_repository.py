@@ -27,6 +27,7 @@ class StatsSnapshot(TypedDict):
     max_latency: float
     total_latency_sum: float
     latencies: list[float]
+    jitter_history: list[float]
     consecutive_losses: int
     max_consecutive_losses: int
     public_ip: str
@@ -77,6 +78,7 @@ class StatsRepository:
         self._stats: dict[str, Any] = create_stats()
         self._recent_results: deque[bool] = deque(maxlen=WINDOW_SIZE)
         self._stats["latencies"] = deque(maxlen=LATENCY_WINDOW)
+        self._stats["jitter_history"] = deque(maxlen=LATENCY_WINDOW)
         self._lock = threading.RLock()
 
     @property
@@ -105,6 +107,7 @@ class StatsRepository:
                 "max_latency": self._stats["max_latency"],
                 "total_latency_sum": self._stats["total_latency_sum"],
                 "latencies": list(self._stats["latencies"]),
+                "jitter_history": list(self._stats.get("jitter_history", [])),
                 "consecutive_losses": self._stats["consecutive_losses"],
                 "max_consecutive_losses": self._stats["max_consecutive_losses"],
                 "public_ip": self._stats["public_ip"],
@@ -186,6 +189,9 @@ class StatsRepository:
                         alpha = 0.1  # smoothing factor
                         old_jitter = self._stats["jitter"]
                         self._stats["jitter"] = old_jitter + alpha * (diff - old_jitter)
+                        self._stats["jitter_history"].append(self._stats["jitter"])
+                    elif len(self._stats["latencies"]) == 1:
+                        self._stats["jitter_history"].append(self._stats["jitter"])
                 else:
                     self._stats["last_latency_ms"] = t("na")
             else:
