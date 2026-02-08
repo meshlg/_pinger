@@ -432,3 +432,62 @@ class StatsRepository:
         with self._lock:
             self._stats["hop_monitor_hops"] = hops
             self._stats["hop_monitor_discovering"] = discovering
+
+    def get_memory_usage_mb(self) -> float | None:
+        """Get current memory usage in MB. Returns None if monitoring disabled."""
+        from config import ENABLE_MEMORY_MONITORING
+        if not ENABLE_MEMORY_MONITORING:
+            return None
+        
+        try:
+            import psutil
+            process = psutil.Process()
+            return process.memory_info().rss / 1024 / 1024
+        except (ImportError, Exception):
+            return None
+
+    def check_memory_limit(self) -> tuple[bool, float | None]:
+        """Check if memory usage exceeds limit. Returns (exceeded, current_mb)."""
+        from config import MAX_MEMORY_MB
+        
+        current_mb = self.get_memory_usage_mb()
+        if current_mb is None:
+            return False, None
+        
+        exceeded = current_mb > MAX_MEMORY_MB
+        return exceeded, current_mb
+
+    def cleanup_old_data(self) -> dict[str, int]:
+        """Clean up old data to prevent memory leaks. Returns items removed per collection."""
+        from config import (
+            MAX_ALERTS_HISTORY,
+            MAX_PROBLEM_HISTORY,
+            MAX_ROUTE_HISTORY,
+            MAX_DNS_BENCHMARK_HISTORY,
+        )
+        
+        cleaned = {}
+        
+        with self._lock:
+            # Clean old alerts
+            alerts = self._stats.get("active_alerts", [])
+            if len(alerts) > MAX_ALERTS_HISTORY:
+                removed = len(alerts) - MAX_ALERTS_HISTORY
+                self._stats["active_alerts"] = alerts[-MAX_ALERTS_HISTORY:]
+                cleaned["alerts"] = removed
+            
+            # Clean problem history
+            problem_history = self._stats.get("problem_history", [])
+            if len(problem_history) > MAX_PROBLEM_HISTORY:
+                removed = len(problem_history) - MAX_PROBLEM_HISTORY
+                self._stats["problem_history"] = problem_history[-MAX_PROBLEM_HISTORY:]
+                cleaned["problems"] = removed
+            
+            # Clean route history
+            route_history = self._stats.get("route_history", [])
+            if len(route_history) > MAX_ROUTE_HISTORY:
+                removed = len(route_history) - MAX_ROUTE_HISTORY
+                self._stats["route_history"] = route_history[-MAX_ROUTE_HISTORY:]
+                cleaned["routes"] = removed
+        
+        return cleaned

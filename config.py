@@ -4,7 +4,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.1.8"
+VERSION = "2.1.9"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -28,8 +28,8 @@ def _detect_system_language() -> str:
     return "en"
 
 CURRENT_LANGUAGE = _detect_system_language()
-TARGET_IP = "1.1.1.1"
-INTERVAL = 1
+TARGET_IP = os.environ.get("TARGET_IP", "1.1.1.1")
+INTERVAL = float(os.environ.get("INTERVAL", "1"))
 WINDOW_SIZE = 1800
 LATENCY_WINDOW = 600
 
@@ -115,7 +115,34 @@ ALERT_DISPLAY_TIME = 10
 ALERT_PANEL_LINES = 3
 MAX_ACTIVE_ALERTS = 3
 
-# Metrics / health endpoint
+# Resource limits and safety settings
+# Prevent excessive resource usage and memory leaks
+MAX_WORKER_THREADS = int(os.environ.get("MAX_WORKER_THREADS", "4"))  # Limit thread pool size
+MAX_EXECUTOR_QUEUE_SIZE = int(os.environ.get("MAX_EXECUTOR_QUEUE_SIZE", "100"))  # Prevent task queue overflow
+MAX_MEMORY_MB = int(os.environ.get("MAX_MEMORY_MB", "500"))  # Memory limit warning threshold
+ENABLE_MEMORY_MONITORING = os.environ.get("ENABLE_MEMORY_MONITORING", "true").lower() in ("true", "1", "yes")
+
+# Collection size limits to prevent memory leaks
+MAX_ALERTS_HISTORY = int(os.environ.get("MAX_ALERTS_HISTORY", "100"))  # Max alerts in history
+MAX_TRACEROUTE_FILES = int(os.environ.get("MAX_TRACEROUTE_FILES", "100"))  # Auto-cleanup old traceroutes
+MAX_PROBLEM_HISTORY = int(os.environ.get("MAX_PROBLEM_HISTORY", "50"))  # Problem analyzer history limit
+MAX_ROUTE_HISTORY = int(os.environ.get("MAX_ROUTE_HISTORY", "20"))  # Route changes history
+MAX_DNS_BENCHMARK_HISTORY = int(os.environ.get("MAX_DNS_BENCHMARK_HISTORY", "100"))  # DNS benchmark results
+
+# Rate limiting to prevent excessive operations
+PING_BURST_LIMIT = int(os.environ.get("PING_BURST_LIMIT", "10"))  # Max concurrent pings
+DNS_CHECK_COOLDOWN = int(os.environ.get("DNS_CHECK_COOLDOWN", "5"))  # Seconds between DNS checks
+TRACEROUTE_MIN_INTERVAL = int(os.environ.get("TRACEROUTE_MIN_INTERVAL", "60"))  # Minimum seconds between traceroutes
+
+# Graceful shutdown timeout
+SHUTDOWN_TIMEOUT_SECONDS = int(os.environ.get("SHUTDOWN_TIMEOUT_SECONDS", "10"))
+FORCE_KILL_TIMEOUT = int(os.environ.get("FORCE_KILL_TIMEOUT", "5"))
+
+# Enable single instance enforcement (prevents multiple copies running simultaneously)
+ENABLE_SINGLE_INSTANCE = os.environ.get("ENABLE_SINGLE_INSTANCE", "true").lower() in ("true", "1", "yes")
+# Check for stale lock files (remove lock if owning process is dead, requires psutil)
+ENABLE_STALE_LOCK_CHECK = os.environ.get("ENABLE_STALE_LOCK_CHECK", "true").lower() in ("true", "1", "yes")
+
 ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1", "yes")
 METRICS_ADDR = os.environ.get("METRICS_ADDR", "0.0.0.0")
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
@@ -261,9 +288,14 @@ LANG: Dict[str, Dict[str, str]] = {
         "alert_connection_restored": "Соединение восстановлено",
         "alert_high_jitter": "Высокий джиттер: {val:.1f}мс",
         "alert_jitter_normalized": "Джиттер нормализовался",
+        # ── Memory alerts ──
+        "alert_memory_exceeded_shutdown": "Лимит памяти превышен ({current}MB > {limit}MB), завершение работы",
         # ── Main app ──
         "uptime_label": "Время работы",
         "bg_stopped": "Все фоновые потоки остановлены.",
+        # ── Single instance ──
+        "err_another_instance_running": "Ошибка: другой экземпляр программы уже запущен.",
+        "alert_second_instance_attempt": "[!] Попытка открыть второе окно в {time}",
         # ── Dependency check ──
         "err_missing_commands": "Ошибка: отсутствуют системные команды: {cmds}",
         "install_commands_hint": "Для установки системных команд:",
@@ -409,9 +441,14 @@ LANG: Dict[str, Dict[str, str]] = {
         "alert_connection_restored": "Connection restored",
         "alert_high_jitter": "High jitter: {val:.1f}ms",
         "alert_jitter_normalized": "Jitter normalized",
+        # ── Memory alerts ──
+        "alert_memory_exceeded_shutdown": "Memory limit exceeded ({current}MB > {limit}MB), shutting down",
         # ── Main app ──
         "uptime_label": "Uptime",
         "bg_stopped": "All background threads stopped.",
+        # ── Single instance ──
+        "err_another_instance_running": "Error: another instance is already running.",
+        "alert_second_instance_attempt": "[!] Attempt to open second window at {time}",
         # ── Dependency check ──
         "err_missing_commands": "Error: missing system commands: {cmds}",
         "install_commands_hint": "To install system commands:",

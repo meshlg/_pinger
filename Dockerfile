@@ -14,7 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY config.py main.py monitor.py ui.py alerts.py pinger.py \
-     stats_repository.py problem_analyzer.py route_analyzer.py ./
+     stats_repository.py problem_analyzer.py route_analyzer.py \
+     single_instance.py single_instance_notifications.py \
+     ./
 COPY services/ ./services/
 COPY infrastructure/ ./infrastructure/
 COPY pinger/ ./pinger/
@@ -22,8 +24,13 @@ COPY pinger/ ./pinger/
 # Create data directories
 RUN mkdir -p /app/logs /app/traceroutes
 
+# Create non-root user
+RUN useradd -m -u 1000 pinger && chown -R pinger:pinger /app
+USER pinger
+
 # Environment
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV ENABLE_METRICS=true
 ENV METRICS_ADDR=0.0.0.0
 ENV METRICS_PORT=8000
@@ -34,4 +41,14 @@ ENV HEALTH_PORT=8001
 # Expose metrics and health ports
 EXPOSE 8000 8001
 
-CMD ["python", "pinger.py"]
+# Health check (handles optional basic auth via env vars)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "\
+import os, urllib.request, base64; \
+r = urllib.request.Request('http://localhost:8001/health'); \
+u = os.environ.get('HEALTH_AUTH_USER',''); p = os.environ.get('HEALTH_AUTH_PASS',''); \
+(r.add_header('Authorization','Basic '+base64.b64encode(f'{u}:{p}'.encode()).decode()) if u and p else None); \
+urllib.request.urlopen(r)" || exit 1
+
+ENTRYPOINT ["python", "-m", "pinger"]
+CMD []

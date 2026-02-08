@@ -1,0 +1,45 @@
+[Unit]
+Description=Network Pinger - Network monitoring and diagnostics tool
+Documentation=https://github.com/meshlg/_pinger
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=pinger
+Group=pinger
+ExecStart=/usr/bin/python3 -m pinger
+WorkingDirectory=/opt/pinger
+Restart=always
+RestartSec=5
+
+# Resource limits
+MemoryMax=500M
+MemoryLimit=500M
+CPUQuota=10%
+TasksMax=50
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pinger/logs /opt/pinger/traceroutes
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pinger
+
+[Install]
+WantedBy=multi-user.target

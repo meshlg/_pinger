@@ -5,11 +5,55 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import base64
+import os
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from stats_repository import StatsRepository
+
+
+def _get_basic_auth_credentials() -> tuple[str, str] | None:
+    """Get basic auth credentials from environment variables.
+    
+    Returns:
+        Tuple of (username, password) if HEALTH_AUTH_USER and HEALTH_AUTH_PASS are set,
+        None otherwise.
+    """
+    user = os.environ.get("HEALTH_AUTH_USER")
+    password = os.environ.get("HEALTH_AUTH_PASS")
+    if user and password:
+        return (user, password)
+    return None
+
+
+def _check_basic_auth(handler: BaseHTTPRequestHandler, credentials: tuple[str, str] | None) -> bool:
+    """Check if request has valid basic auth header.
+    
+    Args:
+        handler: The HTTP request handler
+        credentials: Tuple of (username, password) or None if auth disabled
+        
+    Returns:
+        True if auth is disabled or valid credentials provided, False otherwise.
+    """
+    if credentials is None:
+        return True
+    
+    auth_header = handler.headers.get("Authorization")
+    if not auth_header:
+        return False
+    
+    try:
+        scheme, encoded = auth_header.split(" ", 1)
+        if scheme.lower() != "basic":
+            return False
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        return username == credentials[0] and password == credentials[1]
+    except Exception:
+        return False
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -17,8 +61,24 @@ class HealthHandler(BaseHTTPRequestHandler):
     
     stats_repo: StatsRepository | None = None
     
+    def _require_auth(self) -> bool:
+        """Check if authentication is required and valid."""
+        credentials = _get_basic_auth_credentials()
+        if credentials is None:
+            return True
+        if not _check_basic_auth(self, credentials):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="Health"')
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Unauthorized"}).encode())
+            return False
+        return True
+    
     def do_GET(self) -> None:
         """Handle GET requests for health checks."""
+        if not self._require_auth():
+            return
         if self.path == "/health":
             self._handle_health()
         elif self.path == "/ready":

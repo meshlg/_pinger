@@ -44,10 +44,13 @@ from config import (
     TTL_CHECK_INTERVAL,
     IP_CHECK_INTERVAL,
     ENABLE_METRICS,
+    METRICS_ADDR,
     METRICS_PORT,
     ENABLE_HEALTH_ENDPOINT,
     HEALTH_ADDR,
     HEALTH_PORT,
+    MAX_WORKER_THREADS,
+    SHUTDOWN_TIMEOUT_SECONDS,
     t,
 )
 from stats_repository import StatsRepository
@@ -87,9 +90,18 @@ class Monitor:
     """
 
     def __init__(self) -> None:
-        # Core infrastructure
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        # Core infrastructure - use configured max workers
+        self.executor = ThreadPoolExecutor(
+            max_workers=MAX_WORKER_THREADS,
+            thread_name_prefix="pinger_"
+        )
+        self._executor_tasks: set[asyncio.Task] = set()
         self.stop_event = asyncio.Event()
+        self._shutdown_complete = asyncio.Event()
+        
+        # Memory monitoring counter (check every N pings)
+        self._ping_counter = 0
+        self._memory_check_interval = 10
         
         # Data repository
         self.stats_repo = StatsRepository()
@@ -112,8 +124,9 @@ class Monitor:
         self.route_analyzer = RouteAnalyzer()
         
         # Infrastructure
+        self.metrics_server = None
         if ENABLE_METRICS:
-            start_metrics_server(METRICS_PORT)
+            self.metrics_server = start_metrics_server(addr=METRICS_ADDR, port=METRICS_PORT)
         self.health_server = None
         if ENABLE_HEALTH_ENDPOINT:
             self.health_server = start_health_server(addr=HEALTH_ADDR, port=HEALTH_PORT, stats_repo=self.stats_repo)
@@ -138,10 +151,66 @@ class Monitor:
         return self.stats_repo.get_snapshot()
 
     def shutdown(self) -> None:
-        """Shutdown the monitor."""
+        """Shutdown the monitor gracefully with timeout and force kill fallback."""
+        logging.info("Monitor shutdown initiated...")
+        
+        # Signal all background tasks to stop
+        self.stop_event.set()
+        
+        # Cancel any pending executor tasks
+        for task in list(self._executor_tasks):
+            if not task.done():
+                task.cancel()
+        
+        # Shutdown executor with manual timeout (shutdown() has no timeout param)
+        try:
+            import threading as _threading
+            _shutdown_done = _threading.Event()
+            
+            def _do_executor_shutdown():
+                try:
+                    if sys.version_info >= (3, 9):
+                        self.executor.shutdown(wait=True, cancel_futures=True)
+                    else:
+                        self.executor.shutdown(wait=True)
+                finally:
+                    _shutdown_done.set()
+            
+            _t = _threading.Thread(target=_do_executor_shutdown, daemon=True)
+            _t.start()
+            
+            if _shutdown_done.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS):
+                logging.info("Executor shutdown completed gracefully")
+            else:
+                logging.warning(f"Executor shutdown timed out after {SHUTDOWN_TIMEOUT_SECONDS}s, forcing close")
+                try:
+                    if sys.version_info >= (3, 9):
+                        self.executor.shutdown(wait=False, cancel_futures=True)
+                    else:
+                        self.executor.shutdown(wait=False)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logging.warning(f"Executor shutdown error: {exc}")
+        
+        # Stop metrics server
+        if self.metrics_server:
+            try:
+                self.metrics_server.stop()
+                logging.info("Metrics server stopped")
+            except Exception as exc:
+                logging.warning(f"Metrics server shutdown error: {exc}")
+        
+        # Stop health server
         if self.health_server:
-            self.health_server.stop()
-        self.executor.shutdown(wait=True)
+            try:
+                self.health_server.stop()
+                logging.info("Health server stopped")
+            except Exception as exc:
+                logging.warning(f"Health server shutdown error: {exc}")
+        
+        self._shutdown_complete.set()
+        logging.info("Monitor shutdown complete")
 
     async def run_blocking(self, func, *args, **kwargs) -> T:
         """Run blocking function in executor."""
@@ -194,7 +263,64 @@ class Monitor:
             except Exception:
                 pass
         
+        # Periodic memory check and cleanup (every N pings)
+        self._ping_counter += 1
+        if self._ping_counter >= self._memory_check_interval:
+            self._ping_counter = 0
+            self._check_memory_and_cleanup()
+            # Also check for instance notifications periodically
+            self._check_instance_notifications()
+        
         return ok, latency
+
+    def _check_memory_and_cleanup(self) -> None:
+        """Check memory usage, cleanup old data, and shutdown if limit exceeded."""
+        from config import ENABLE_MEMORY_MONITORING, MAX_MEMORY_MB
+        
+        if not ENABLE_MEMORY_MONITORING:
+            return
+        
+        try:
+            # Cleanup old data first to free memory
+            cleaned = self.stats_repo.cleanup_old_data()
+            if cleaned:
+                logging.debug(f"Cleaned up old data: {cleaned}")
+            
+            # Check memory limit
+            exceeded, current_mb = self.stats_repo.check_memory_limit()
+            if exceeded and current_mb is not None:
+                # Memory limit exceeded - trigger graceful shutdown
+                msg = t('alert_memory_exceeded_shutdown').format(current=f"{current_mb:.0f}", limit=MAX_MEMORY_MB)
+                add_visual_alert(
+                    self.stats_repo.lock,
+                    self.stats_repo.get_stats(),
+                    f"[X] {msg}",
+                    "critical"
+                )
+                logging.critical(
+                    f"Memory limit exceeded: {current_mb:.0f}MB > {MAX_MEMORY_MB}MB. Initiating shutdown."
+                )
+                # Trigger shutdown
+                self.stop_event.set()
+        except Exception as exc:
+            logging.warning(f"Memory check failed: {exc}")
+
+    def _check_instance_notifications(self) -> None:
+        """Check for notifications from other instances trying to start."""
+        try:
+            from single_instance_notifications import check_instance_notification
+            
+            notification = check_instance_notification()
+            if notification:
+                add_visual_alert(
+                    self.stats_repo.lock,
+                    self.stats_repo.get_stats(),
+                    notification,
+                    "warning"
+                )
+                logging.info(f"Instance notification: {notification}")
+        except Exception:
+            pass  # Silently ignore if notification system fails
 
     def _check_auto_traceroute(self) -> None:
         """Trigger traceroute if conditions met."""

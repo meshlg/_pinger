@@ -2,11 +2,16 @@ from __future__ import annotations
 
 """Prometheus metrics initialization and management."""
 
+import base64
+import json
 import logging
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry
 
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -55,14 +60,134 @@ except ImportError:
         pass
 
 
-def start_metrics_server(port: int = 8000) -> None:
-    """Start Prometheus metrics HTTP server."""
-    if not METRICS_AVAILABLE:
-        logging.warning("Prometheus metrics not available, metrics server not started")
-        return
+def _get_metrics_auth_credentials() -> tuple[str, str] | None:
+    """Get metrics auth credentials from environment variables.
+    
+    Returns:
+        Tuple of (username, password) if METRICS_AUTH_USER and METRICS_AUTH_PASS are set,
+        None otherwise.
+    """
+    user = os.environ.get("METRICS_AUTH_USER")
+    password = os.environ.get("METRICS_AUTH_PASS")
+    if user and password:
+        return (user, password)
+    return None
+
+
+def _check_basic_auth(auth_header: str | None, credentials: tuple[str, str]) -> bool:
+    """Check if request has valid basic auth header.
+    
+    Args:
+        auth_header: The Authorization header value
+        credentials: Tuple of (username, password)
+        
+    Returns:
+        True if valid credentials provided, False otherwise.
+    """
+    if not auth_header:
+        return False
     
     try:
-        start_http_server(port)
-        logging.info(f"Prometheus metrics server started on port {port}")
+        scheme, encoded = auth_header.split(" ", 1)
+        if scheme.lower() != "basic":
+            return False
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        return username == credentials[0] and password == credentials[1]
+    except Exception:
+        return False
+
+
+class AuthenticatedMetricsHandler(BaseHTTPRequestHandler):
+    """Metrics handler with optional basic auth."""
+    
+    def do_GET(self) -> None:
+        """Handle GET requests for metrics."""
+        credentials = _get_metrics_auth_credentials()
+        
+        # Check authentication if credentials are configured
+        if credentials is not None:
+            auth_header = self.headers.get("Authorization")
+            if not _check_basic_auth(auth_header, credentials):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="Metrics"')
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Unauthorized"}).encode())
+                return
+        
+        # Serve metrics
+        if self.path == "/metrics":
+            try:
+                from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, REGISTRY
+                data = generate_latest(REGISTRY)
+                self.send_response(200)
+                self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as exc:
+                logging.error(f"Metrics error: {exc}")
+                self.send_error(500, "Internal Server Error")
+        else:
+            self.send_error(404)
+    
+    def log_message(self, format: str, *args) -> None:
+        """Suppress default HTTP logging."""
+        logging.debug(f"Metrics server: {format % args}")
+
+
+class MetricsServer:
+    """Prometheus metrics HTTP server with optional auth."""
+    
+    def __init__(self, addr: str = "0.0.0.0", port: int = 8000) -> None:
+        self.addr = addr
+        self.port = port
+        self.server: HTTPServer | None = None
+        self.thread: threading.Thread | None = None
+        self._running = False
+    
+    def start(self) -> None:
+        """Start metrics server in background thread."""
+        if self._running:
+            return
+        
+        try:
+            self.server = HTTPServer((self.addr, self.port), AuthenticatedMetricsHandler)
+            self.thread = threading.Thread(target=self._serve, daemon=True)
+            self.thread.start()
+            self._running = True
+            
+            auth_status = "with auth" if _get_metrics_auth_credentials() else "no auth"
+            logging.info(f"Metrics server started on port {self.port} ({auth_status})")
+        except Exception as exc:
+            logging.error(f"Failed to start metrics server: {exc}")
+    
+    def _serve(self) -> None:
+        """Server loop."""
+        while self._running and self.server:
+            try:
+                self.server.handle_request()
+            except Exception as exc:
+                logging.debug(f"Metrics server request error: {exc}")
+    
+    def stop(self) -> None:
+        """Stop metrics server."""
+        self._running = False
+        if self.server:
+            self.server.shutdown()
+
+
+def start_metrics_server(addr: str = "0.0.0.0", port: int = 8000) -> MetricsServer | None:
+    """Start Prometheus metrics HTTP server with optional auth."""
+    if not METRICS_AVAILABLE:
+        logging.warning("Prometheus metrics not available, metrics server not started")
+        return None
+    
+    try:
+        server = MetricsServer(addr=addr, port=port)
+        server.start()
+        return server
     except Exception as exc:
         logging.error(f"Failed to start metrics server: {exc}")
+        return None

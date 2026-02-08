@@ -15,11 +15,11 @@ if TYPE_CHECKING:
     from .ui import MonitorUI
 
 try:  # pragma: no cover - fallback when run outside package context
-    from .config import INTERVAL, TARGET_IP, t
+    from .config import INTERVAL, TARGET_IP, t, SHUTDOWN_TIMEOUT_SECONDS
     from .monitor import Monitor
     from .ui import MonitorUI
 except ImportError:  # pragma: no cover
-    from config import INTERVAL, TARGET_IP, t
+    from config import INTERVAL, TARGET_IP, t, SHUTDOWN_TIMEOUT_SECONDS
     from monitor import Monitor
     from ui import MonitorUI
 
@@ -45,11 +45,13 @@ class PingerApp:
         signal.signal(signal.SIGINT, handler)
         if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, handler)
+        if hasattr(signal, "SIGHUP"):
+            signal.signal(signal.SIGHUP, handler)  # Terminal closed (x button)
 
     async def run(self) -> None:
         self._install_signal_handlers()
         self.console.print(
-            f"\n[bold green]>>> {t('start').format(target=TARGET_IP)} <<<[/bold green]"
+            f"\n[bold green]>>> {t('start').format(target=TARGET_IP)} <<<[/bold green]"  # TARGET_IP from config (env-overridable)
         )
         self.console.print(f"[dim]{t('press')}[/dim]\n")
         self.monitor.stats_repo.set_start_time(datetime.now())
@@ -80,7 +82,19 @@ class PingerApp:
             logging.error(f"Main loop error: {exc}")
         finally:
             self.monitor.stop_event.set()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Cancel all background tasks with timeout
+            for task in tasks:
+                task.cancel()
+            
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=SHUTDOWN_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logging.warning("Some background tasks did not terminate in time")
+            
             self.monitor.shutdown()
             self.console.print(f"[dim]{t('bg_stopped')}[/dim]")
 
