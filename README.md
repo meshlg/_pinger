@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/v/network-pinger?color=blue&label=PyPI" alt="PyPI"></a>
-  <a href="https://python.org"><img src="https://img.shields.io/pypi/pyversions/network-pinger" alt="Python Versions"></a>
+  <a href="python.org"><img src="https://img.shields.io/pypi/pyversions/network-pinger" alt="Python Versions"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/meshlg/_pinger" alt="License"></a>
   <a href=""><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platforms"></a>
   <br>
   <a href="https://github.com/meshlg/_pinger/stargazers"><img src="https://img.shields.io/github/stars/meshlg/_pinger?style=social" alt="GitHub Stars"></a>
   <a href="https://github.com/meshlg/_pinger/network"><img src="https://img.shields.io/github/forks/meshlg/_pinger?style=social" alt="GitHub Forks"></a>
-  <a href="https://github.com/meshlg/_pinger/issues"><img src="https://img.shields.io/github/issues/meshlg/_pinger" alt="GitHub Issues"></a>
+  <a href="https://github.com/meshlg/_pinger/issues"><img src="https://img.shields.io/github/issues/pinger" alt="GitHub Issues"></a>
   <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/dm/network-pinger" alt="PyPI Downloads"></a>
 </p>
 
@@ -32,7 +32,7 @@
 
 </div>
 
-> **Works everywhere:** Windows, Linux, and macOS with system `ping` + `traceroute` (`tracert` on Windows).
+> **Works everywhere:** Windows, Linux, and macOS with system `ping` and `traceroute` (`tracert` on Windows).
 
 ---
 
@@ -60,8 +60,7 @@
 > [!IMPORTANT]
 > Python 3.10+ required plus system `ping` and `traceroute` (`tracert` on Windows).
 
-<details open>
-<summary><b>✴︎ pipx (recommended)</b></summary>
+### ✴︎ pipx (recommended)
 
 ```bash
 pipx install network-pinger
@@ -74,20 +73,14 @@ Press `Ctrl+C` for graceful shutdown.
 pipx upgrade network-pinger
 ```
 
-</details>
-
-<details>
-<summary><b>▣ pip</b></summary>
+### ▣ pip
 
 ```bash
 python -m pip install --upgrade network-pinger
 pinger
 ```
 
-</details>
-
-<details>
-<summary><b>⚒︎ From source</b></summary>
+### ⚒︎ From source
 
 ```bash
 git clone https://github.com/meshlg/_pinger.git
@@ -95,8 +88,6 @@ cd _pinger
 pip install -r requirements.txt
 python pinger.py
 ```
-
-</details>
 
 > [!TIP]
 > The app checks for new releases on startup and surfaces a Rich notification when an update is available.
@@ -202,8 +193,7 @@ All knobs live in [`config.py`](config.py)—versioned defaults with inline comm
 > [!TIP]
 > Copy `config.py` next to your binary or set env vars to keep custom tweaks under version control.
 
-<details>
-<summary><b>⚙︎ Core</b></summary>
+### ⚙︎ Core
 
 ```python
 TARGET_IP = "8.8.8.8"          # Ping target
@@ -211,24 +201,20 @@ INTERVAL = 1                    # Ping interval (seconds)
 WINDOW_SIZE = 1800              # Stats window (30 min)
 LATENCY_WINDOW = 600            # Latency history (10 min)
 ```
-</details>
 
-<details>
-<summary><b>⚑ Thresholds & Alerts</b></summary>
+### ⚑ Thresholds & Alerts
 
 ```python
 PACKET_LOSS_THRESHOLD = 5.0     # Packet loss warning (%)
 AVG_LATENCY_THRESHOLD = 100     # Average latency warning (ms)
 JITTER_THRESHOLD = 30           # Jitter warning (ms)
-CONSECUTIVE_LOSS_THRESHOLD = 5  # Consecutive lost packets
+CONSECUTIVE_LOSS_THRESHOLD = 5   # Consecutive lost packets
 
 ENABLE_SOUND_ALERTS = True
 ALERT_COOLDOWN = 5              # Min interval between sounds (seconds)
 ```
-</details>
 
-<details>
-<summary><b>✧ DNS Monitoring</b></summary>
+### ✧ DNS Monitoring
 
 ```python
 ENABLE_DNS_MONITORING = True
@@ -240,10 +226,8 @@ DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"]
 ENABLE_DNS_BENCHMARK = True
 DNS_BENCHMARK_SERVERS = ["system"]  # or ["1.1.1.1", "8.8.8.8"]
 ```
-</details>
 
-<details>
-<summary><b>⌂ IP / MTU / TTL</b></summary>
+### ⌂ IP / MTU / TTL
 
 ```python
 ENABLE_IP_CHANGE_ALERT = True
@@ -252,10 +236,8 @@ IP_CHECK_INTERVAL = 15
 ENABLE_MTU_MONITORING = True
 MTU_CHECK_INTERVAL = 30
 ```
-</details>
 
-<details>
-<summary><b>⌁ Traceroute & Hop Monitoring</b></summary>
+### ⌁ Traceroute & Hop Monitoring
 
 ```python
 ENABLE_AUTO_TRACEROUTE = False   # Manual trigger or on route change
@@ -269,10 +251,8 @@ HOP_PING_TIMEOUT = 0.5
 HOP_LATENCY_GOOD = 50          # Green (ms)
 HOP_LATENCY_WARN = 100         # Yellow (ms), above = red
 ```
-</details>
 
-<details>
-<summary><b>✪ Analysis</b></summary>
+### ✪ Analysis
 
 ```python
 ENABLE_PROBLEM_ANALYSIS = True
@@ -282,10 +262,61 @@ ENABLE_ROUTE_ANALYSIS = True
 ROUTE_ANALYSIS_INTERVAL = 1800
 ROUTE_CHANGE_CONSECUTIVE = 2
 ```
-</details>
 
-<details>
-<summary><b>▤ Logging & Metrics</b></summary>
+## Health HTTP Server
+
+### Configuration
+
+```python
+# Security: Defaults to localhost-only (127.0.0.1)
+HEALTH_ADDR = "127.0.0.1"         # Bind address (127.0.0.1 = localhost-only)
+HEALTH_PORT = 8001                  # Health endpoint port
+
+# Authentication (REQUIRED if HEALTH_ADDR != 127.0.0.1):
+# Method 1: Basic Auth
+HEALTH_AUTH_USER = ""               # Username
+HEALTH_AUTH_PASS = ""               # Password
+# Method 2: Token Auth (simpler for load balancers/Prometheus)
+HEALTH_TOKEN = ""                   # API token
+HEALTH_TOKEN_HEADER = "X-Health-Token"  # Custom header name
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `HEALTH_ADDR` | `127.0.0.1` | Bind to localhost only (secure by default) |
+| `HEALTH_PORT` | `8001` | Health check port |
+| `HEALTH_AUTH_USER` | - | Basic Auth username (with `HEALTH_AUTH_PASS`) |
+| `HEALTH_AUTH_PASS` | - | Basic Auth password (with `HEALTH_AUTH_USER`) |
+| `HEALTH_TOKEN` | - | Token for `X-Health-Token` header |
+| `HEALTH_TOKEN_HEADER` | `X-Health-Token` | Custom header name for token |
+
+> [!IMPORTANT]
+> **Security Requirement:** If you set `HEALTH_ADDR=0.0.0.0` (pod network), you MUST configure at least one authentication method (Basic Auth or Token). Without authentication, the server will refuse to start.
+
+### Token Auth (Recommended)
+
+Token Auth is simpler for load balancers and Prometheus:
+
+```bash
+export HEALTH_TOKEN=your-secret-token
+```
+
+Prometheus configuration:
+
+```yaml
+scrape_configs:
+  - job_name: pinger-health
+    metrics_path: /health
+    static_configs:
+      - targets: [pinger:8001]
+    scheme: http
+    http_headers:
+      X-Health-Token: ${HEALTH_TOKEN}
+```
+
+---
+
+## Logging & Metrics
 
 ```python
 LOG_FILE = "~/.pinger/ping_monitor.log"
@@ -295,7 +326,6 @@ LOG_TRUNCATE_ON_START = True
 ENABLE_METRICS = True           # Prometheus on :8000
 ENABLE_HEALTH_ENDPOINT = True   # Health on :8001
 ```
-</details>
 
 ---
 
@@ -355,6 +385,6 @@ poetry run pinger
 <div align="center">
 
 **[MIT License](LICENSE)** · 2026 © meshlg  
-✉︎ [Join the Discord](https://discordapp.com/users/268440099828662274) · ⚑ [Report an issue](https://github.com/meshlg/_pinger/issues/new/choose) · ☆ [Star the repo](https://github.com/meshlg/_pinger)
+✉︎ [Join the Discord](https://discordapp.com/users/268440099828662274) · ⚑ [Report an issue](https://github.com/meshlg/_pinger/issues/new/choose) · ☆ [Star the repo](https://github.com/meshlg/_pinger/stargazers)
 
 </div>

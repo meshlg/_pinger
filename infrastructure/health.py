@@ -14,33 +14,71 @@ if TYPE_CHECKING:
     from stats_repository import StatsRepository
 
 
-def _get_basic_auth_credentials() -> tuple[str, str] | None:
-    """Get basic auth credentials from environment variables.
+# Module-level cached credentials/tokens (loaded once)
+_cached_config: dict = {}
+_credentials_loaded: bool = False
+
+
+def _load_security_config() -> dict:
+    """Load and cache security configuration from environment.
     
     Returns:
-        Tuple of (username, password) if HEALTH_AUTH_USER and HEALTH_AUTH_PASS are set,
-        None otherwise.
+        Dict with:
+        - auth_type: "basic", "token", "both", or "none"
+        - basic_user: str | None
+        - basic_pass: str | None
+        - token: str | None
     """
-    user = os.environ.get("HEALTH_AUTH_USER")
-    password = os.environ.get("HEALTH_AUTH_PASS")
-    if user and password:
-        return (user, password)
-    return None
+    global _cached_config, _credentials_loaded
+    
+    if _credentials_loaded:
+        return _cached_config
+    
+    basic_user = os.environ.get("HEALTH_AUTH_USER")
+    basic_pass = os.environ.get("HEALTH_AUTH_PASS")
+    token = os.environ.get("HEALTH_TOKEN")
+    token_header = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
+    
+    # Determine auth type
+    has_basic = bool(basic_user and basic_pass)
+    has_token = bool(token)
+    
+    if has_basic and has_token:
+        auth_type = "both"
+    elif has_basic:
+        auth_type = "basic"
+    elif has_token:
+        auth_type = "token"
+    else:
+        auth_type = "none"
+    
+    _cached_config = {
+        "auth_type": auth_type,
+        "basic_user": basic_user,
+        "basic_pass": basic_pass,
+        "token": token,
+        "token_header": token_header,
+    }
+    
+    _credentials_loaded = True
+    return _cached_config
 
 
-def _check_basic_auth(handler: BaseHTTPRequestHandler, credentials: tuple[str, str] | None) -> bool:
-    """Check if request has valid basic auth header.
+def _check_basic_auth(handler: BaseHTTPRequestHandler, credentials: dict) -> bool:
+    """Check Basic Auth credentials.
     
     Args:
         handler: The HTTP request handler
-        credentials: Tuple of (username, password) or None if auth disabled
+        credentials: Dict with basic_user and basic_pass
         
     Returns:
-        True if auth is disabled or valid credentials provided, False otherwise.
+        True if auth disabled, valid credentials provided, or header missing (partial auth).
     """
-    if credentials is None:
+    auth_type = credentials.get("auth_type", "none")
+    if auth_type not in ("basic", "both"):
         return True
     
+    # If expecting basic auth, header is required
     auth_header = handler.headers.get("Authorization")
     if not auth_header:
         return False
@@ -51,9 +89,35 @@ def _check_basic_auth(handler: BaseHTTPRequestHandler, credentials: tuple[str, s
             return False
         decoded = base64.b64decode(encoded).decode("utf-8")
         username, password = decoded.split(":", 1)
-        return username == credentials[0] and password == credentials[1]
+        return (username == credentials.get("basic_user") and 
+                password == credentials.get("basic_pass"))
     except Exception:
         return False
+
+
+def _check_token_auth(handler: BaseHTTPRequestHandler, credentials: dict) -> bool:
+    """Check token auth via custom header.
+    
+    Args:
+        handler: The HTTP request handler
+        credentials: Dict with token and token_header
+        
+    Returns:
+        True if auth disabled, valid token provided, or header missing (partial auth).
+    """
+    auth_type = credentials.get("auth_type", "none")
+    if auth_type not in ("token", "both"):
+        return True
+    
+    # If expecting token auth, header is required
+    token_header = credentials.get("token_header", "X-Health-Token")
+    expected_token = credentials.get("token")
+    
+    provided_token = handler.headers.get(token_header)
+    if not provided_token:
+        return False
+    
+    return provided_token == expected_token
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -62,18 +126,46 @@ class HealthHandler(BaseHTTPRequestHandler):
     stats_repo: StatsRepository | None = None
     
     def _require_auth(self) -> bool:
-        """Check if authentication is required and valid."""
-        credentials = _get_basic_auth_credentials()
-        if credentials is None:
+        """Check if authentication is required and valid.
+        
+        Supports:
+        - Basic Auth (Authorization: Basic <base64>)
+        - Token Auth (X-Health-Token: <token>)
+        - Both methods (either is accepted)
+        """
+        credentials = _load_security_config()
+        auth_type = credentials.get("auth_type", "none")
+        
+        if auth_type == "none":
             return True
-        if not _check_basic_auth(self, credentials):
-            self.send_response(401)
-            self.send_header("WWW-Authenticate", 'Basic realm="Health"')
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": "Unauthorized"}).encode())
+        
+        # Check auth
+        if auth_type == "basic":
+            if _check_basic_auth(self, credentials):
+                return True
+            self._send_auth_response("Basic")
             return False
-        return True
+        
+        if auth_type == "token":
+            if _check_token_auth(self, credentials):
+                return True
+            self._send_auth_response(credentials.get("token_header", "X-Health-Token"))
+            return False
+        
+        # Both methods - either is valid
+        if _check_basic_auth(self, credentials) or _check_token_auth(self, credentials):
+            return True
+        self._send_auth_response("Basic or " + credentials.get("token_header", "X-Health-Token"))
+        return False
+    
+    def _send_auth_response(self, method: str) -> None:
+        """Send 401 Unauthorized response."""
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", f'Basic realm="Health"')
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        response = {"error": f"Unauthorized - requires {method} authentication"}
+        self.wfile.write(json.dumps(response).encode())
     
     def do_GET(self) -> None:
         """Handle GET requests for health checks."""
@@ -123,9 +215,16 @@ class HealthHandler(BaseHTTPRequestHandler):
 
 
 class HealthServer:
-    """Health check HTTP server for container orchestration."""
+    """Health check HTTP server for container orchestration.
     
-    def __init__(self, addr: str = "0.0.0.0", port: int = 8080, stats_repo: StatsRepository | None = None) -> None:
+    Security:
+        - Default binding to 127.0.0.1 (localhost-only)
+        - Auth required for non-localhost bindings
+        - Supports Basic Auth and Token Auth
+        - GET-only endpoints (safe from CSRF attacks)
+    """
+    
+    def __init__(self, addr: str = "127.0.0.1", port: int = 8080, stats_repo: StatsRepository | None = None) -> None:
         self.addr = addr
         self.port = port
         self.stats_repo = stats_repo
@@ -133,9 +232,50 @@ class HealthServer:
         self.thread: threading.Thread | None = None
         self._running = False
     
+    def _check_security(self) -> bool:
+        """Check security configuration and warn/fail if insecure.
+        
+        Returns:
+            True if configuration is acceptable, False if should not start.
+        """
+        credentials = _load_security_config()
+        auth_type = credentials.get("auth_type", "none")
+        is_localhost = self.addr in ("127.0.0.1", "localhost")
+        
+        # Localhost binding - always allowed
+        if is_localhost:
+            return True
+        
+        # Non-localhost binding requires authentication
+        if auth_type == "none":
+            allow_no_auth = os.environ.get("HEALTH_ALLOW_NO_AUTH", "").lower() in ("1", "true", "yes")
+            if allow_no_auth:
+                logging.warning(
+                    f"HEALTH_ADDR={self.addr} without authentication! "
+                    f"Set HEALTH_AUTH_USER/PASS (Basic) or HEALTH_TOKEN. "
+                    f"Server will START but is INSECURE."
+                )
+                return True
+            else:
+                logging.error(
+                    f"SECURITY ERROR: HEALTH_ADDR={self.addr} requires authentication. "
+                    f"Set one of:\n"
+                    f"  - HEALTH_AUTH_USER and HEALTH_AUTH_PASS (Basic Auth)\n"
+                    f"  - HEALTH_TOKEN (Token Auth)\n"
+                    f"  - Or set HEALTH_ALLOW_NO_AUTH=1 to override (NOT recommended)"
+                )
+                return False
+        
+        return True
+    
     def start(self) -> None:
         """Start health server in background thread."""
         if self._running:
+            return
+        
+        # Security check
+        if not self._check_security():
+            logging.error("Health server not started due to security configuration.")
             return
         
         try:
@@ -144,7 +284,22 @@ class HealthServer:
             self.thread = threading.Thread(target=self._serve, daemon=True)
             self.thread.start()
             self._running = True
-            logging.info(f"Health server started on port {self.port}")
+            
+            # Log configuration
+            credentials = _load_security_config()
+            auth_type = credentials.get("auth_type", "none")
+            
+            if self.addr in ("127.0.0.1", "localhost"):
+                logging.info(f"Health server started on http://127.0.0.1:{self.port} (localhost-only)")
+            else:
+                auth_desc = {
+                    "none": "NO AUTH (INSECURE!)",
+                    "basic": "Basic Auth",
+                    "token": f"Token ({credentials.get('token_header', 'X-Health-Token')})",
+                    "both": "Basic or Token",
+                }.get(auth_type, "Unknown")
+                logging.info(f"Health server started on http://{self.addr}:{self.port} ({auth_desc})")
+                
         except Exception as exc:
             logging.error(f"Failed to start health server: {exc}")
     
@@ -163,8 +318,26 @@ class HealthServer:
             self.server.shutdown()
 
 
-def start_health_server(addr: str = "0.0.0.0", port: int = 8080, stats_repo: StatsRepository | None = None) -> HealthServer:
-    """Create and start health server."""
+def start_health_server(addr: str = "127.0.0.1", port: int = 8080, stats_repo: StatsRepository | None = None) -> HealthServer:
+    """Create and start health server.
+    
+    Security:
+        - Default binds to 127.0.0.1 (localhost only)
+        - Set addr="0.0.0.0" for pod network (Kubernetes)
+        - Authentication via environment variables:
+            - Basic Auth: HEALTH_AUTH_USER + HEALTH_AUTH_PASS
+            - Token Auth: HEALTH_TOKEN [+ HEALTH_TOKEN_HEADER]
+            - Both: Either method is accepted
+        - Set HEALTH_ALLOW_NO_AUTH=1 to bypass auth requirement (not recommended)
+    
+    Args:
+        addr: Network address to bind to (127.0.0.1 for localhost-only)
+        port: Port to listen on
+        stats_repo: Optional stats repository for readiness checks
+    
+    Returns:
+        HealthServer instance
+    """
     server = HealthServer(addr, port, stats_repo)
     server.start()
     return server

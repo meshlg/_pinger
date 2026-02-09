@@ -4,7 +4,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -147,8 +147,20 @@ ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1
 METRICS_ADDR = os.environ.get("METRICS_ADDR", "0.0.0.0")
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
 ENABLE_HEALTH_ENDPOINT = os.environ.get("ENABLE_HEALTH_ENDPOINT", "true").lower() in ("true", "1", "yes")
-HEALTH_ADDR = os.environ.get("HEALTH_ADDR", "0.0.0.0")
+# Health server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
+# For Kubernetes/Docker: use internal network (e.g., "0.0.0.0" for pod network)
+# WARNING: Authentication is REQUIRED for non-localhost bindings (see below)
+# Set HEALTH_ALLOW_NO_AUTH=1 to bypass auth requirement (NOT recommended for production)
+HEALTH_ADDR = os.environ.get("HEALTH_ADDR", "127.0.0.1")
 HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8001"))
+
+# Authentication methods (at least one required for non-localhost):
+# 1. Basic Auth: Set both variables
+HEALTH_AUTH_USER = os.environ.get("HEALTH_AUTH_USER", "")
+HEALTH_AUTH_PASS = os.environ.get("HEALTH_AUTH_PASS", "")
+# 2. Token Auth: Set this variable (simpler for load balancers/Prometheus)
+HEALTH_TOKEN = os.environ.get("HEALTH_TOKEN", "")
+HEALTH_TOKEN_HEADER = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
 
 LOG_DIR = os.path.expanduser("~/.pinger")
 LOG_FILE = os.path.join(LOG_DIR, "ping_monitor.log")

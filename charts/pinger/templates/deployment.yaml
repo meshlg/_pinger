@@ -37,6 +37,27 @@ spec:
               value: "{{ .Values.env.HEALTH_ADDR }}"
             - name: LOG_TRUNCATE_ON_START
               value: "{{ .Values.env.LOG_TRUNCATE_ON_START }}"
+            {{- if .Values.env.healthAuthUser }}
+            # Basic Auth (Method 1)
+            - name: HEALTH_AUTH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pinger.fullname" . }}-secrets
+                  key: health-auth-user
+            - name: HEALTH_AUTH_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pinger.fullname" . }}-secrets
+                  key: health-auth-pass
+            {{- end }}
+            {{- if .Values.env.healthToken }}
+            # Token Auth (Method 2)
+            - name: HEALTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "pinger.fullname" . }}-secrets
+                  key: health-token
+            {{- end }}
           ports:
             - name: metrics
               containerPort: {{ .Values.service.metricsPort }}

@@ -16,8 +16,26 @@ env:
   METRICS_ADDR: 0.0.0.0
   ENABLE_HEALTH_ENDPOINT: true
   HEALTH_PORT: 8001
+  # Health endpoint security:
+  # - Default: 127.0.0.1 (localhost-only, NOT exposed via Service)
+  # - For Service internal access: 0.0.0.0 (pod network)
+  # - Health Service type: ClusterIP (not exposed externally)
+  # - Authentication REQUIRED if HEALTH_ADDR != 127.0.0.1
+  # - Set HEALTH_ALLOW_NO_AUTH=1 ONLY for development (logs warning)
   HEALTH_ADDR: 0.0.0.0
   LOG_TRUNCATE_ON_START: true
+  # Authentication (choose ONE method, use secrets in production):
+  # Method 1: Basic Auth
+  # healthAuthUser: admin
+  # Method 2: Token Auth (recommended for Prometheus)
+  # healthToken: ${HEALTH_TOKEN}
+
+# Secrets for health endpoint authentication
+# Create separately: kubectl create secret generic pinger-secrets \
+#   --from-literal=health-auth-user=admin \
+#   --from-literal=health-auth-pass=secret \
+#   --from-literal=health-token=your-token
+secrets: {}
 
 resources: {}
 

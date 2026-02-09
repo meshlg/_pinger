@@ -8,7 +8,18 @@ services:
       - METRICS_ADDR=0.0.0.0
       - METRICS_PORT=8000
       - ENABLE_HEALTH_ENDPOINT=true
-      - HEALTH_ADDR=0.0.0.0
+      # Health endpoint security:
+      # - Default: 127.0.0.1 (localhost-only) - secure, no auth needed
+      # - For Kubernetes/internal network: HEALTH_ADDR=0.0.0.0 + authentication REQUIRED
+      - HEALTH_ADDR=0.0.0.0  # Pod network access
+      # Authentication (choose ONE method):
+      # Method 1: Basic Auth
+      # - HEALTH_AUTH_USER=admin
+      # - HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS}
+      # Method 2: Token Auth (recommended for load balancers/Prometheus)
+      # - HEALTH_TOKEN=${HEALTH_TOKEN}
+      # For testing only (logs warning):
+      # - HEALTH_ALLOW_NO_AUTH=1
       - HEALTH_PORT=8001
       - LOG_TRUNCATE_ON_START=true
     ports:
@@ -18,6 +29,7 @@ services:
       - ./logs:/app/logs
       - ./traceroutes:/app/traceroutes
     restart: unless-stopped
+    # Security: Health endpoint not exposed to host by default (use 127.0.0.1 binding)
 
   prometheus:
     image: prom/prometheus:latest

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-09
+### Security
+- **Health endpoints security hardening** — Default binding changed from `0.0.0.0` to `127.0.0.1` (localhost-only)
+- **Mandatory authentication for non-localhost bindings** — Health server refuses to start without credentials when bound to non-localhost addresses
+- **Token-based authentication support** — Added `HEALTH_TOKEN` and `HEALTH_TOKEN_HEADER` environment variables for simple API token authentication
+- **Basic Auth support** — Added `HEALTH_AUTH_USER` and `HEALTH_AUTH_PASS` environment variables
+- **Dual authentication support** — Either Basic Auth or Token Auth is accepted when both are configured
+- **Security enforcement at startup** — Server logs warning/error and refuses to start if insecure configuration detected
+- **Environment variable `HEALTH_ALLOW_NO_AUTH`** — Optional bypass for development (logs warning)
+- **Credentials caching** — Environment variables read once at startup (performance optimization)
+
+### Changed
+- **Default `HEALTH_ADDR`** — Changed from `0.0.0.0` to `127.0.0.1` for secure-by-default behavior
+- **README restructuring** — Removed `<details>` collapsible sections, all documentation now visible by default
+
+### Documentation
+- **Health HTTP Server section** — New dedicated section with configuration examples and Prometheus integration
+- **SECURITY.md updated** — Comprehensive security documentation for health endpoints
+- **README alerts** — Added `[!IMPORTANT]` and `[!NOTE]` blocks for critical security information
+
 ## [2.2.0] - 2026-02-09
 ### Added
 - Dual-sparkline latency panel showing latency and jitter histories with new p95 metric.
