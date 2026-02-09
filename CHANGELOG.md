@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-02-09
+### Security
+- **Metrics server security hardening** — Default binding changed from `0.0.0.0` to `127.0.0.1` (localhost-only)
+- **Mandatory authentication for non-localhost bindings** — Metrics server refuses to start without credentials when bound to non-localhost addresses
+- **Security check implementation** — Added `_check_security` method to `MetricsServer` class
+- **METRICS_ALLOW_NO_AUTH environment variable** — Added option to bypass authentication for metrics server (not recommended)
+- **Consistent security behavior** — Metrics server now follows the same security pattern as health endpoint
+- **Enhanced security logging** — Added detailed security-related logging for metrics server
+
+### Changed
+- **Metrics server initialization** — Updated `MetricsServer` class to include security validation before starting
+- **Default METRICS_ADDR** — Changed from `0.0.0.0` to `127.0.0.1` for secure-by-default behavior
+- **config.py documentation** — Updated METRICS_ADDR comment with security recommendations
+- **start_metrics_server docstring** — Added comprehensive security documentation
+
 ## [2.3.0] - 2026-02-09
 ### Security
 - **Health endpoints security hardening** — Default binding changed from `0.0.0.0` to `127.0.0.1` (localhost-only)

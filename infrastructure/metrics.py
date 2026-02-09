@@ -140,16 +140,54 @@ class AuthenticatedMetricsHandler(BaseHTTPRequestHandler):
 class MetricsServer:
     """Prometheus metrics HTTP server with optional auth."""
     
-    def __init__(self, addr: str = "0.0.0.0", port: int = 8000) -> None:
+    def __init__(self, addr: str = "127.0.0.1", port: int = 8000) -> None:
         self.addr = addr
         self.port = port
         self.server: HTTPServer | None = None
         self.thread: threading.Thread | None = None
         self._running = False
     
+    def _check_security(self) -> bool:
+        """Check security configuration and warn/fail if insecure.
+        
+        Returns:
+            True if configuration is acceptable, False if should not start.
+        """
+        credentials = _get_metrics_auth_credentials()
+        is_localhost = self.addr in ("127.0.0.1", "localhost")
+        
+        # Localhost binding - always allowed
+        if is_localhost:
+            return True
+        
+        # Non-localhost binding requires authentication
+        if credentials is None:
+            allow_no_auth = os.environ.get("METRICS_ALLOW_NO_AUTH", "").lower() in ("1", "true", "yes")
+            if allow_no_auth:
+                logging.warning(
+                    f"METRICS_ADDR={self.addr} without authentication! "
+                    f"Set METRICS_AUTH_USER and METRICS_AUTH_PASS (Basic Auth). "
+                    f"Server will START but is INSECURE."
+                )
+                return True
+            else:
+                logging.error(
+                    f"SECURITY ERROR: METRICS_ADDR={self.addr} requires authentication. "
+                    f"Set METRICS_AUTH_USER and METRICS_AUTH_PASS (Basic Auth)\n"
+                    f"  - Or set METRICS_ALLOW_NO_AUTH=1 to override (NOT recommended)"
+                )
+                return False
+        
+        return True
+    
     def start(self) -> None:
         """Start metrics server in background thread."""
         if self._running:
+            return
+        
+        # Security check
+        if not self._check_security():
+            logging.error("Metrics server not started due to security configuration.")
             return
         
         try:
@@ -159,7 +197,10 @@ class MetricsServer:
             self._running = True
             
             auth_status = "with auth" if _get_metrics_auth_credentials() else "no auth"
-            logging.info(f"Metrics server started on port {self.port} ({auth_status})")
+            if self.addr in ("127.0.0.1", "localhost"):
+                logging.info(f"Metrics server started on http://127.0.0.1:{self.port} (localhost-only, {auth_status})")
+            else:
+                logging.info(f"Metrics server started on http://{self.addr}:{self.port} ({auth_status})")
         except Exception as exc:
             logging.error(f"Failed to start metrics server: {exc}")
     
@@ -178,8 +219,22 @@ class MetricsServer:
             self.server.shutdown()
 
 
-def start_metrics_server(addr: str = "0.0.0.0", port: int = 8000) -> MetricsServer | None:
-    """Start Prometheus metrics HTTP server with optional auth."""
+def start_metrics_server(addr: str = "127.0.0.1", port: int = 8000) -> MetricsServer | None:
+    """Start Prometheus metrics HTTP server with optional auth.
+    
+    Security:
+        - Default binds to 127.0.0.1 (localhost only)
+        - Set addr="0.0.0.0" for pod network (Kubernetes)
+        - Authentication via METRICS_AUTH_USER + METRICS_AUTH_PASS (Basic Auth)
+        - Set METRICS_ALLOW_NO_AUTH=1 to bypass auth requirement (not recommended)
+    
+    Args:
+        addr: Network address to bind to (127.0.0.1 for localhost-only)
+        port: Port to listen on
+    
+    Returns:
+        MetricsServer instance or None if Prometheus client is not available
+    """
     if not METRICS_AVAILABLE:
         logging.warning("Prometheus metrics not available, metrics server not started")
         return None

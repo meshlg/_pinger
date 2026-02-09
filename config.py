@@ -4,7 +4,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -144,7 +144,10 @@ ENABLE_SINGLE_INSTANCE = os.environ.get("ENABLE_SINGLE_INSTANCE", "true").lower(
 ENABLE_STALE_LOCK_CHECK = os.environ.get("ENABLE_STALE_LOCK_CHECK", "true").lower() in ("true", "1", "yes")
 
 ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1", "yes")
-METRICS_ADDR = os.environ.get("METRICS_ADDR", "0.0.0.0")
+# Metrics server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
+# For Kubernetes/Docker: use internal network (e.g., "0.0.0.0" for pod network)
+# Authentication via METRICS_AUTH_USER and METRICS_AUTH_PASS (Basic Auth)
+METRICS_ADDR = os.environ.get("METRICS_ADDR", "127.0.0.1")
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
 ENABLE_HEALTH_ENDPOINT = os.environ.get("ENABLE_HEALTH_ENDPOINT", "true").lower() in ("true", "1", "yes")
 # Health server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
