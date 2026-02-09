@@ -4,7 +4,7 @@
 
 **Asynchronous network monitoring with real-time terminal interface**
 
-[🇷🇺 Русский](README.ru.md) · [🇬🇧 English](README.md)
+[Русский](README.ru.md) · [English](README.md)
 
 <p align="center">
   <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/v/network-pinger?color=blue&label=PyPI" alt="PyPI"></a>
