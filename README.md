@@ -2,7 +2,9 @@
 
 # Pinger
 
-**Real-time network monitoring in your terminal**
+**Asynchronous network monitoring with real-time terminal interface**
+
+[🇷🇺 Русский](README.ru.md) · [🇬🇧 English](README.md)
 
 <p align="center">
   <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/v/network-pinger?color=blue&label=PyPI" alt="PyPI"></a>
@@ -12,75 +14,83 @@
   <br>
   <a href="https://github.com/meshlg/_pinger/stargazers"><img src="https://img.shields.io/github/stars/meshlg/_pinger?style=social" alt="GitHub Stars"></a>
   <a href="https://github.com/meshlg/_pinger/network"><img src="https://img.shields.io/github/forks/meshlg/_pinger?style=social" alt="GitHub Forks"></a>
-  <a href="https://github.com/meshlg/_pinger/issues"><img src="https://img.shields.io/github/issues/pinger" alt="GitHub Issues"></a>
+  <a href="https://github.com/meshlg/_pinger/issues"><img src="https://img.shields.io/github/issues/meshlg/_pinger" alt="GitHub Issues"></a>
   <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/dm/network-pinger" alt="PyPI Downloads"></a>
 </p>
 
-<p><em>Async network monitoring tool with Rich-based terminal dashboard, smart alerts, DNS benchmarks, hop-by-hop health tracking, and automatic problem diagnosis.</em></p>
+<p><em>Asynchronous network monitoring tool with Rich-based terminal interface, smart alerts, DNS benchmarks, hop health tracking, and automatic problem diagnosis.</em></p>
 
 <p>
   <a href="#quick-start"><kbd>✴︎ Quick Start</kbd></a>
-  <a href="#features"><kbd>▣ Feature Tour</kbd></a>
-  <a href="#configuration"><kbd>⚒︎ Configure</kbd></a>
+  <a href="#features"><kbd>▣ Features</kbd></a>
+  <a href="#configuration"><kbd>⚒︎ Configuration</kbd></a>
+  <a href="#deployment"><kbd>⚓︎ Deployment</kbd></a>
 </p>
 
 <div align="center">
-  <sub>Live metrics · Smart alerts · DNS insights · Prometheus-ready observability</sub>
+  <sub>Real-time metrics · Smart alerts · DNS analytics · Prometheus-ready</sub>
 </div>
 
 ![Pinger Interface](assets/screenshot.jpg)
 
 </div>
 
-> **Works everywhere:** Windows, Linux, and macOS with system `ping` and `traceroute` (`tracert` on Windows).
+> **Works everywhere:** Windows, Linux, and macOS with system `ping` and `traceroute` (`tracert` on Windows) commands.
 
 ---
 
-## Highlights
+## About
 
-<div align="center">
-<table>
-  <tr>
-    <td><strong>✴︎ Ping & Latency</strong><br><small>Dual sparklines, jitter tracking, loss trends, and p95 insight.</small></td>
-    <td><strong>✧ DNS Benchmark</strong><br><small>Cached / Uncached / DotCom tests with side-by-side providers.</small></td>
-    <td><strong>⌁ Hop Health</strong><br><small>Traceroute-aware per-hop latency & loss heatmap.</small></td>
-  </tr>
-  <tr>
-    <td><strong>⚑ Smart Alerts</strong><br><small>Sound + visual notifications with hysteresis & cooldowns.</small></td>
-    <td><strong>✪ Problem Analysis</strong><br><small>Auto-diagnosis of ISP vs local vs DNS vs MTU issues.</small></td>
-    <td><strong>☲ Route Tracking</strong><br><small>Change detection and auto traceroute when paths shift.</small></td>
-  </tr>
-</table>
-</div>
+**Pinger** is a professional real-time network connection monitoring tool designed for system administrators, DevOps engineers, and enthusiasts who value network reliability and transparency.
+
+### Key Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Real-time monitoring** | Visualization of latency, packet loss, jitter, and p95 metrics with updates every second |
+| **Intuitive terminal interface** | Beautiful UI based on Rich library with color-coded statuses and progress bars |
+| **Flexible configuration** | All settings via environment variables — easy to adapt to any requirements |
+| **Multi-level diagnostics** | Automatic problem source detection (ISP/local network/DNS/MTU) based on patterns |
+| **Prometheus integration** | Native metrics support for monitoring and alerting |
+| **Docker/Kubernetes ready** | Helm chart and docker-compose for quick container deployment |
+| **Localization** | Russian and English language support with automatic detection |
+| **Security** | Mandatory authentication for public health endpoints |
+
+### Who is this for
+
+- **System administrators** — monitoring network infrastructure status
+- **DevOps engineers** — integration with monitoring systems (Prometheus, Grafana)
+- **Developers** — debugging network problems and routing analysis
+- **Enthusiasts** — visualizing home connection quality
 
 ---
 
 ## Quick Start
 
 > [!IMPORTANT]
-> Python 3.10+ required plus system `ping` and `traceroute` (`tracert` on Windows).
+> Python 3.10+ is required, as well as system `ping` and `traceroute` (`tracert` on Windows) commands.
 
-### ✴︎ pipx (recommended)
+### Installation via pipx (recommended)
 
 ```bash
 pipx install network-pinger
 pinger
 ```
 
-Press `Ctrl+C` for graceful shutdown.
+Press `Ctrl+C` to stop gracefully.
 
 ```bash
 pipx upgrade network-pinger
 ```
 
-### ▣ pip
+### Installation via pip
 
 ```bash
 python -m pip install --upgrade network-pinger
 pinger
 ```
 
-### ⚒︎ From source
+### Installation from source
 
 ```bash
 git clone https://github.com/meshlg/_pinger.git
@@ -89,72 +99,75 @@ pip install -r requirements.txt
 python pinger.py
 ```
 
-> [!TIP]
-> The app checks for new releases on startup and surfaces a Rich notification when an update is available.
-
-![Update Notification](assets/update.jpg)
-
 ---
 
 ## Features
 
-Six live panels keep the pulse of your link—from edge latency to observability endpoints.
+Six real-time panels track your connection status — from edge latency to route analysis.
 
 ### ✴︎ Ping Monitoring
-- Real-time current / best / average / peak / median / jitter metrics.
-- Dual sparklines + Unicode progress bars for at-a-glance drift detection.
-- Packet-loss detection with consecutive loss counter and p95 latency insight.
 
-### ✧ DNS Monitoring & Benchmark
-- Parallel monitoring of A, AAAA, CNAME, MX, TXT, and NS records.
-- Built-in benchmark suite:
+- Real-time metrics: current / best / average / peak / median / jitter / p95
+- Dual sparkline charts and Unicode progress bars for drift visualization
+- Packet loss detection with consecutive loss counter and p95 latency metric
+
+### ✧ DNS Monitoring and Benchmarking
+
+- Parallel monitoring of A, AAAA, CNAME, MX, TXT, and NS records
+- Built-in test suite for benchmarking:
 
 | Test | What it measures |
-|---|---|
-| **Cached** | DNS response from resolver cache (repeat query). |
-| **Uncached** | Full recursive resolution using a random hostname. |
-| **DotCom** | Response time for a popular .com domain. |
+|------|------------------|
+| **Cached** | DNS response from cache (repeat query) |
+| **Uncached** | Full recursive resolution with random subdomain |
+| **DotCom** | Response time of popular .com domain |
 
-- Statistics: min / avg / max / σ / reliability with green (fast) / yellow (slow) / red (failed) badges.
-- Compare multiple providers side-by-side:
-
-```python
-DNS_BENCHMARK_SERVERS = ["system", "1.1.1.1", "8.8.8.8"]
-```
+- Statistics: minimum / average / maximum / standard deviation / reliability
+- Color badges: green (fast) / yellow (slow) / red (error)
+- Comparison of multiple DNS resolvers in parallel
 
 ### ⚑ Smart Alerts
-- Audio + visual alerts for latency, jitter, packet loss, and disconnects.
-- Threshold hysteresis stops flicker; cooldown timers prevent alert spam.
-- Alert feed keeps timestamps so you can correlate issues later.
 
-### ✪ Problem Analysis & Prediction
-- Auto-tags outages as ISP / local / DNS / MTU failures using signal patterns.
-- Looks for repeating incidents and forecasts when they may return.
-- Route context plus loss/jitter trends clarify root causes quickly.
+- Audio + visual alerts for latency, jitter, packet loss, and connection drops
+- Hysteresis to prevent flickering — alerts trigger only on state changes
+- Cooldown timers to prevent alert spam
+- Alert feed with timestamps for problem correlation
+
+### ✪ Problem Analysis and Prediction
+
+- Automatic problem classification: ISP / local network / DNS / MTU
+- Detection of recurring incidents and prediction of their return
+- Route context plus loss/jitter trends for quick root cause identification
 
 ### ⌁ Hop Health Monitoring
-- Discovers hops via traceroute, then pings each hop in parallel.
-- Table shows min / avg / last latency and per-hop loss with severity colors.
-- Great for spotting where congestion or shaping occurs along the path.
+
+- Hop discovery via traceroute, then parallel ping of each hop
+- Table with minimum / average / last latency and loss for each hop
+- Color coding: green (good) / yellow (slow) / red (unreachable)
+- Perfect for identifying congestion or shaping on specific path segments
 
 ### ☲ Route Analysis
-- Detects route changes with configurable sensitivity + cooldowns.
-- Auto-saves traceroute snapshots into `traceroutes/` when trouble hits.
-- Helps prove upstream routing shifts when filing ISP tickets.
+
+- Route change detection with configurable sensitivity and cooldown timers
+- Automatic traceroute snapshot saving to `traceroutes/` directory on problems
+- Helps prove routing changes when contacting ISP support
 
 ### ⌂ Network Metrics
-- **Public IP** change detection with geo/IP-AS lookups.
-- **MTU / Path MTU** discovery plus fragmentation detection.
-- **TTL** monitoring for hop-count estimation and anomaly detection.
+
+- **Public IP** — change tracking with geolocation and AS information
+- **MTU / Path MTU** — detection and packet fragmentation
+- **TTL** — hop count estimation and anomaly detection
 
 ### ▤ Observability
-- `/metrics` Prometheus endpoint on port `8000` for scraping.
-- `/health` + `/ready` endpoints on port `8001` for probes.
-- Docker + Helm manifests cover local labs through full clusters.
+
+- **`/metrics`** — Prometheus endpoint on port 8000 for metrics collection
+- **`/health`** and **`/ready`** — health probes on port 8001 for Kubernetes/Docker
+- Docker + Helm manifests for container deployment
 
 ### ☷ Localization
-- Auto-detects system locale with **Russian** and **English** packs ready.
-- Override anytime in `config.py`:
+
+- Automatic system locale detection with **Russian** and **English** language support
+- Language override in `config.py`:
 
 ```python
 # config.py
@@ -163,55 +176,74 @@ CURRENT_LANGUAGE = "en"  # or "ru"
 
 ---
 
-## Interface Tour
+## Interface
 
 > [!NOTE]
-> Every panel refreshes live; pair the screenshot above with this map to orient yourself quickly.
+> Each panel updates in real-time. Match the screenshot above with this map for quick orientation.
 
-1. **Header & Status Bar** — Target IP, version badge + updater, connection lamp (● Connected / ▲ Degraded / ✕ Disconnected), and session uptime.
-2. **Latency Panel** — Current / best / avg / peak / median latency, jitter, p95, and dual sparklines tracking the last minutes of activity.
-3. **Statistics Panel** — Packet counters (sent / ok / lost), Unicode success bars, and a mini-trends strip (loss 30 m, jitter trend, hop count).
-4. **Analysis Panel** — Problem classifier result, prediction badge, and route stability indicator with change counters.
-5. **Monitoring Panel** — DNS record health, benchmark tiles, TTL / MTU / fragmentation state, and live alert feed.
-6. **Hop Health Panel** — Per-hop min / avg / last latency + loss, color-coded (green / yellow / red) for instant hotspot spotting.
+### 1. Header and Status Bar
 
-| Panel | Signals you watch |
-|---|---|
-| **Status bar** | Connection state, target, uptime, current KPIs |
-| **Latency** | Distribution metrics, jitter, sparklines |
-| **Statistics** | Packet counts, success %, trends |
-| **Analysis** | Root-cause classification, prediction, route state |
-| **Monitoring** | DNS, benchmark, network stats, notifications |
-| **Hop Health** | Hop-by-hop latency & loss matrix |
+- Target IP, version with update indicator, connection lamp (● Connected / ▲ Degraded / ✕ Disconnected), and uptime
+- Current ping, 30-minute loss, uptime, and public IP
+
+### 2. Latency Panel
+
+- Current / best / average / peak / median / jitter / p95 metric
+- Dual sparkline charts for latency and jitter with last value tracking
+
+### 3. Statistics Panel
+
+- Packet counters: sent / successful / lost
+- Success percentage and 30-minute loss
+- Progress bars and mini trends panel (30m loss, jitter trend, hop count)
+
+### 4. Analysis Panel
+
+- Problem classifier (ISP / local network / DNS / MTU / unknown)
+- Forecast (stable / risk of problems)
+- Problem pattern
+- Route stability (changed / stable) and last change time
+
+### 5. Monitoring Panel
+
+- DNS record health (A, AAAA, CNAME, MX, TXT, NS)
+- Benchmarking tiles (Cached / Uncached / DotCom) with statistics
+- MTU / Path MTU / TTL status and fragmentation
+- Active alerts feed
+
+### 6. Hop Health Panel
+
+- Per-hop table with minimum / average / last latency and loss
+- Color coding for instant quality assessment of each hop
 
 ---
 
 ## Configuration
 
-All knobs live in [`config.py`](config.py)—versioned defaults with inline comments.
+All settings are in [`config.py`](config.py) with default values and comments.
 
 > [!TIP]
-> Copy `config.py` next to your binary or set env vars to keep custom tweaks under version control.
+> Copy `config.py` next to the binary file or use environment variables to keep custom settings under version control.
 
-### ⚙︎ Core
+### ⚙︎ Basic Settings
 
 ```python
-TARGET_IP = "8.8.8.8"          # Ping target
+TARGET_IP = "8.8.8.8"          # Target IP for ping
 INTERVAL = 1                    # Ping interval (seconds)
-WINDOW_SIZE = 1800              # Stats window (30 min)
+WINDOW_SIZE = 1800              # Statistics window (30 min)
 LATENCY_WINDOW = 600            # Latency history (10 min)
 ```
 
-### ⚑ Thresholds & Alerts
+### ⚑ Thresholds and Alerts
 
 ```python
-PACKET_LOSS_THRESHOLD = 5.0     # Packet loss warning (%)
-AVG_LATENCY_THRESHOLD = 100     # Average latency warning (ms)
-JITTER_THRESHOLD = 30           # Jitter warning (ms)
-CONSECUTIVE_LOSS_THRESHOLD = 5   # Consecutive lost packets
+PACKET_LOSS_THRESHOLD = 5.0     # Packet loss threshold (%)
+AVG_LATENCY_THRESHOLD = 100     # Average latency threshold (ms)
+JITTER_THRESHOLD = 30           # Jitter threshold (ms)
+CONSECUTIVE_LOSS_THRESHOLD = 5   # Consecutive loss threshold
 
 ENABLE_SOUND_ALERTS = True
-ALERT_COOLDOWN = 5              # Min interval between sounds (seconds)
+ALERT_COOLDOWN = 5              # Minimum interval between sounds (seconds)
 ```
 
 ### ✧ DNS Monitoring
@@ -220,7 +252,7 @@ ALERT_COOLDOWN = 5              # Min interval between sounds (seconds)
 ENABLE_DNS_MONITORING = True
 DNS_TEST_DOMAIN = "cloudflare.com"
 DNS_CHECK_INTERVAL = 10
-DNS_SLOW_THRESHOLD = 100        # "Slow" threshold (ms)
+DNS_SLOW_THRESHOLD = 100        # "Slow" response threshold (ms)
 DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"]
 
 ENABLE_DNS_BENCHMARK = True
@@ -237,10 +269,10 @@ ENABLE_MTU_MONITORING = True
 MTU_CHECK_INTERVAL = 30
 ```
 
-### ⌁ Traceroute & Hop Monitoring
+### ⌁ Traceroute and Hop Monitoring
 
 ```python
-ENABLE_AUTO_TRACEROUTE = False   # Manual trigger or on route change
+ENABLE_AUTO_TRACEROUTE = False   # Manual launch or on route change
 TRACEROUTE_TRIGGER_LOSSES = 3
 TRACEROUTE_COOLDOWN = 300
 TRACEROUTE_MAX_HOPS = 15
@@ -263,70 +295,6 @@ ROUTE_ANALYSIS_INTERVAL = 1800
 ROUTE_CHANGE_CONSECUTIVE = 2
 ```
 
-## Health HTTP Server
-
-### Configuration
-
-```python
-# Security: Defaults to localhost-only (127.0.0.1)
-HEALTH_ADDR = "127.0.0.1"         # Bind address (127.0.0.1 = localhost-only)
-HEALTH_PORT = 8001                  # Health endpoint port
-
-# Authentication (REQUIRED if HEALTH_ADDR != 127.0.0.1):
-# Method 1: Basic Auth
-HEALTH_AUTH_USER = ""               # Username
-HEALTH_AUTH_PASS = ""               # Password
-# Method 2: Token Auth (simpler for load balancers/Prometheus)
-HEALTH_TOKEN = ""                   # API token
-HEALTH_TOKEN_HEADER = "X-Health-Token"  # Custom header name
-```
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `HEALTH_ADDR` | `127.0.0.1` | Bind to localhost only (secure by default) |
-| `HEALTH_PORT` | `8001` | Health check port |
-| `HEALTH_AUTH_USER` | - | Basic Auth username (with `HEALTH_AUTH_PASS`) |
-| `HEALTH_AUTH_PASS` | - | Basic Auth password (with `HEALTH_AUTH_USER`) |
-| `HEALTH_TOKEN` | - | Token for `X-Health-Token` header |
-| `HEALTH_TOKEN_HEADER` | `X-Health-Token` | Custom header name for token |
-
-> [!IMPORTANT]
-> **Security Requirement:** If you set `HEALTH_ADDR=0.0.0.0` (pod network), you MUST configure at least one authentication method (Basic Auth or Token). Without authentication, the server will refuse to start.
-
-### Token Auth (Recommended)
-
-Token Auth is simpler for load balancers and Prometheus:
-
-```bash
-export HEALTH_TOKEN=your-secret-token
-```
-
-Prometheus configuration:
-
-```yaml
-scrape_configs:
-  - job_name: pinger-health
-    metrics_path: /health
-    static_configs:
-      - targets: [pinger:8001]
-    scheme: http
-    http_headers:
-      X-Health-Token: ${HEALTH_TOKEN}
-```
-
----
-
-## Logging & Metrics
-
-```python
-LOG_FILE = "~/.pinger/ping_monitor.log"
-LOG_LEVEL = "INFO"
-LOG_TRUNCATE_ON_START = True
-
-ENABLE_METRICS = True           # Prometheus on :8000
-ENABLE_HEALTH_ENDPOINT = True   # Health on :8001
-```
-
 ---
 
 ## Deployment
@@ -338,8 +306,8 @@ ENABLE_HEALTH_ENDPOINT = True   # Health on :8001
     <td><strong>♘ Kubernetes (Helm)</strong></td>
   </tr>
   <tr>
-    <td>Local lab setup with baked-in Prometheus + health ports.</td>
-    <td>Cluster-ready chart with values overrides for prod.</td>
+    <td>Local lab with Prometheus and health ports.</td>
+    <td>Cluster readiness with values overrides for production.</td>
   </tr>
 </table>
 </div>
@@ -351,7 +319,7 @@ docker compose up -d
 ```
 
 | Service | Port | Description |
-|---|---|---|
+|---------|------|-------------|
 | `pinger` | `8000` | Prometheus metrics (`/metrics`). |
 | `pinger` | `8001` | Health probes (`/health`, `/ready`). |
 | `prometheus` | `9090` | Prometheus UI. |
@@ -362,7 +330,112 @@ docker compose up -d
 helm install pinger ./charts/pinger -f charts/pinger/values.yaml
 ```
 
-Need tweaks? See [`charts/pinger/README.md`](charts/pinger/README.md) for image tags, secrets, and upgrade notes.
+Need customization? See [`charts/pinger/README.md`](charts/pinger/README.md) for image tags, secrets, and upgrade notes.
+
+---
+
+## FAQ
+
+### ❓ How to diagnose connection problems?
+
+Pinger automatically classifies problems in the analysis panel:
+
+| Problem Type | Signs | What to do |
+|--------------|-------|------------|
+| **ISP** | High latency on hops 2-5, packet loss on route | Contact your ISP, show traceroute snapshots |
+| **Local network** | Loss on first hop, router problems | Check cable, reboot router |
+| **DNS** | Slow DNS queries but normal ping by IP | Change DNS server (1.1.1.1, 8.8.8.8) |
+| **MTU** | Packet fragmentation, VPN problems | Reduce MTU on interface |
+
+### ❓ Why does ping show packet loss but internet works?
+
+This is normal for some ISPs:
+- ICMP packets may have low priority
+- Some routers limit ICMP traffic
+- Check loss on hops — if only on one, this may be normal
+
+### ❓ How to configure alerts?
+
+```python
+# config.py
+ENABLE_SOUND_ALERTS = True
+ALERT_COOLDOWN = 5              # Minimum interval between sounds (seconds)
+PACKET_LOSS_THRESHOLD = 5.0     # Packet loss threshold (%)
+AVG_LATENCY_THRESHOLD = 100     # Average latency threshold (ms)
+JITTER_THRESHOLD = 30           # Jitter threshold (ms)
+```
+
+### ❓ How to integrate with Prometheus?
+
+Pinger provides metrics on port 8000:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'pinger'
+    static_configs:
+      - targets: ['localhost:8000']
+```
+
+### ❓ How to use in Kubernetes?
+
+```bash
+helm install pinger ./charts/pinger -f charts/pinger/values.yaml
+```
+
+Health endpoints are available on port 8001:
+- `/health` — health check
+- `/ready` — readiness check
+
+### ❓ How to change interface language?
+
+```python
+# config.py
+CURRENT_LANGUAGE = "en"  # or "ru"
+```
+
+Language is detected automatically based on system locale.
+
+### ❓ How to save monitoring results?
+
+Pinger automatically saves traceroute snapshots on problems to `traceroutes/` directory. For persistent logging, use Prometheus.
+
+### ❓ How to run in background?
+
+```bash
+# Linux/macOS
+nohup pinger > pinger.log 2>&1 &
+
+# Windows
+start /B pinger > pinger.log 2>&1
+```
+
+### ❓ How to check health endpoints?
+
+```bash
+# Health check
+curl http://localhost:8001/health
+
+# Readiness check
+curl http://localhost:8001/ready
+
+# Prometheus metrics
+curl http://localhost:8000/metrics
+```
+
+### ❓ How to configure authentication for health endpoints?
+
+```bash
+# Basic Auth
+export HEALTH_AUTH_USER=admin
+export HEALTH_AUTH_PASS=secret
+
+# Token Auth
+export HEALTH_TOKEN=your-secret-token
+export HEALTH_TOKEN_HEADER=X-Health-Token
+```
+
+See [`SECURITY.md`](SECURITY.md) for more details.
 
 ---
 
@@ -376,15 +449,15 @@ poetry install
 poetry run pinger
 ```
 
-1. Use Poetry for isolated envs and locked deps.
+1. Use Poetry for isolated environments and pinned dependencies.
 2. Run `poetry run pytest` before opening a PR.
-3. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for release + tagging (remember to push git tags for update notifications).
+3. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for releases and tagging (remember git tags for update notifications).
 
 ---
 
 <div align="center">
 
 **[MIT License](LICENSE)** · 2026 © meshlg  
-✉︎ [Join the Discord](https://discordapp.com/users/268440099828662274) · ⚑ [Report an issue](https://github.com/meshlg/_pinger/issues/new/choose) · ☆ [Star the repo](https://github.com/meshlg/_pinger/stargazers)
+✉︎ [Join Discord](https://discordapp.com/users/268440099828662274) · ⚑ [Report an issue](https://github.com/meshlg/_pinger/issues/new/choose) · ☆ [Star the repo](https://github.com/meshlg/_pinger/stargazers)
 
 </div>
