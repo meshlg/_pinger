@@ -4,14 +4,17 @@
 
 **Real-time network monitoring in your terminal**
 
-[![PyPI](https://img.shields.io/pypi/v/network-pinger?color=blue&label=PyPI)](https://pypi.org/project/network-pinger/)
-[![Python](https://img.shields.io/pypi/pyversions/network-pinger)](https://python.org)
-[![License](https://img.shields.io/github/license/meshlg/_pinger)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
-[![GitHub Stars](https://img.shields.io/github/stars/meshlg/_pinger?style=social)](https://github.com/meshlg/_pinger/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/meshlg/_pinger?style=social)](https://github.com/meshlg/_pinger/network)
-[![GitHub Issues](https://img.shields.io/github/issues/meshlg/_pinger)](https://github.com/meshlg/_pinger/issues)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/network-pinger)](https://pypi.org/project/network-pinger/)
+<p align="center">
+  <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/v/network-pinger?color=blue&label=PyPI" alt="PyPI"></a>
+  <a href="https://python.org"><img src="https://img.shields.io/pypi/pyversions/network-pinger" alt="Python Versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/meshlg/_pinger" alt="License"></a>
+  <a href=""><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platforms"></a>
+  <br>
+  <a href="https://github.com/meshlg/_pinger/stargazers"><img src="https://img.shields.io/github/stars/meshlg/_pinger?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/meshlg/_pinger/network"><img src="https://img.shields.io/github/forks/meshlg/_pinger?style=social" alt="GitHub Forks"></a>
+  <a href="https://github.com/meshlg/_pinger/issues"><img src="https://img.shields.io/github/issues/meshlg/_pinger" alt="GitHub Issues"></a>
+  <a href="https://pypi.org/project/network-pinger/"><img src="https://img.shields.io/pypi/dm/network-pinger" alt="PyPI Downloads"></a>
+</p>
 
 Async network monitoring tool with Rich-based terminal dashboard, smart alerts, DNS benchmarks, hop-by-hop health tracking, and automatic problem diagnosis.
 
