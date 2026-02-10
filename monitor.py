@@ -27,6 +27,8 @@ from config import (
     ENABLE_ROUTE_ANALYSIS,
     ENABLE_THRESHOLD_ALERTS,
     ENABLE_HOP_MONITORING,
+    ENABLE_VERSION_CHECK,
+    VERSION_CHECK_INTERVAL,
     HIGH_LATENCY_THRESHOLD,
     HOP_PING_INTERVAL,
     HOP_REDISCOVER_INTERVAL,
@@ -717,6 +719,40 @@ class Monitor:
                 logging.error(f"Route analysis failed: {exc}")
             
             await asyncio.sleep(ROUTE_ANALYSIS_INTERVAL)
+
+    async def background_version_checker(self) -> None:
+        """Check for updates periodically."""
+        if not ENABLE_VERSION_CHECK:
+            return
+        
+        while not self.stop_event.is_set():
+            try:
+                from services.version_service import check_update_available
+                update_available, current, latest = check_update_available()
+                
+                if latest:
+                    if update_available:
+                        # Update version info only if new version available
+                        self.stats_repo.set_latest_version(latest, False)
+                        logging.info(f"Update available: {current} → {latest}")
+                        # Add visual alert for new version
+                        add_visual_alert(
+                            self.stats_repo.lock,
+                            self.stats_repo.get_stats(),
+                            f"[i] {t('update_available').format(current=current, latest=latest)}",
+                            "info"
+                        )
+                    else:
+                        # Version is current - clear any previous version info
+                        self.stats_repo.set_latest_version(None, True)
+                        logging.debug(f"Version check: current version {current} is up to date")
+                else:
+                    logging.debug("Version check: unable to fetch latest version")
+                    
+            except Exception as exc:
+                logging.error(f"Version check failed: {exc}")
+            
+            await asyncio.sleep(VERSION_CHECK_INTERVAL)
 
     # ==================== Threshold Checking ====================
 

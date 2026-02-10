@@ -295,6 +295,31 @@ ROUTE_ANALYSIS_INTERVAL = 1800
 ROUTE_CHANGE_CONSECUTIVE = 2
 ```
 
+### 🔄 Version Check
+
+```python
+ENABLE_VERSION_CHECK = True
+VERSION_CHECK_INTERVAL = 3600  # Check every hour (seconds)
+```
+
+The application automatically checks for updates every hour (configurable). When a new version is available, you'll see an indicator in the header:
+
+- `v2.3.1 → v2.4.0` — Update available (yellow arrow)
+- `v2.3.1 ✓` — Up to date (green checkmark)
+- `v2.3.1` — No check performed yet
+
+To disable version checking:
+
+```bash
+export ENABLE_VERSION_CHECK=false
+```
+
+To change the check interval (e.g., every 30 minutes):
+
+```bash
+export VERSION_CHECK_INTERVAL=1800
+```
+
 ---
 
 ## Deployment

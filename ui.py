@@ -54,29 +54,6 @@ class MonitorUI:
         self._cached_jitter: float = 0.0
         self._last_jitter_update: float = 0.0
         self._jitter_cache_interval: float = 5.0
-        self._latest_version: str | None = None
-        self._version_checked: bool = False
-        self._version_up_to_date: bool = False
-        self._version_check_thread: threading.Thread | None = None
-        self._start_version_check()
-
-    def _start_version_check(self) -> None:
-        """Start background version check."""
-        def check_version():
-            try:
-                from services.version_service import check_update_available
-                update_available, current, latest = check_update_available()
-                if update_available and latest:
-                    self._latest_version = latest
-                elif latest:
-                    # Version is current - mark as up to date
-                    self._version_up_to_date = True
-            except Exception:
-                pass
-            self._version_checked = True
-        
-        self._version_check_thread = threading.Thread(target=check_version, daemon=True)
-        self._version_check_thread.start()
 
     # ══════════════════ helpers ══════════════════
 
@@ -186,10 +163,15 @@ class MonitorUI:
     def render_header(self, width: int) -> Panel:
         now = datetime.now().strftime("%H:%M:%S")
         
+        # Get version info from stats snapshot
+        snap = self.monitor.get_stats_snapshot()
+        latest_version = snap.get("latest_version")
+        version_up_to_date = snap.get("version_up_to_date", False)
+        
         # Build version string
-        if self._latest_version:
-            version_txt = f"[dim]v{VERSION}[/dim] [yellow]→ v{self._latest_version}[/yellow]"
-        elif self._version_up_to_date:
+        if latest_version:
+            version_txt = f"[dim]v{VERSION}[/dim] [yellow]→ v{latest_version}[/yellow]"
+        elif version_up_to_date:
             version_txt = f"[dim]v{VERSION}[/dim] [green]✓[/green]"
         else:
             version_txt = f"[dim]v{VERSION}[/dim]"
@@ -230,9 +212,9 @@ class MonitorUI:
 
         parts = (
             f"   [bold {color}]{icon} {label}[/bold {color}]"
-            f"     [dim]│[/dim]  Ping: {ping_txt}"
-            f"     [dim]│[/dim]  Loss: {loss_txt}"
-            f"     [dim]│[/dim]  Uptime: [white]{uptime_txt}[/white]"
+            f"     [dim]│[/dim]  {t('ping')}: {ping_txt}"
+            f"     [dim]│[/dim]  {t('loss')}: {loss_txt}"
+            f"     [dim]│[/dim]  {t('uptime')}: [white]{uptime_txt}[/white]"
             f"     [dim]│[/dim]  IP: [white]{ip_val}[/white][dim]{cc}[/dim]"
         )
         return Panel(
@@ -281,7 +263,7 @@ class MonitorUI:
             Text(""),
             Text.from_markup(f"  [dim]{t('latency_chart')}[/dim]"),
             Text.from_markup(f"  {lat_spark}"),
-            Text.from_markup(f"  [dim]Jitter[/dim]"),
+            Text.from_markup(f"  [dim]{t('jitter')}[/dim]"),
             Text.from_markup(f"  {jit_spark}"),
         )
         return Panel(
@@ -743,7 +725,7 @@ class MonitorUI:
         net_tbl = self._dual_kv_table(width)
         net_tbl.add_row(f"{t('ttl')}:", ttl_txt, f"{t('mtu')}:", mtu_val_txt)
         net_tbl.add_row(f"{t('mtu_status_label')}:", mtu_s_txt, f"{t('alerts_label')}:", alert_txt)
-        net_tbl.add_row("Traceroute:", tr_txt, "", "")
+        net_tbl.add_row(f"{t('traceroute')}:", tr_txt, "", "")
 
         # MTU details (only if issues)
         mtu_issues = snap.get("mtu_consecutive_issues", 0)
@@ -771,12 +753,12 @@ class MonitorUI:
 
         # ═══════════════ ASSEMBLE ═══════════════
         items: list = [
-            self._section_header("DNS", inner_w),
+            self._section_header(t("dns"), inner_w),
             Text.from_markup(dns_types_txt),
         ]
         if bench_txt:
             items.append(Text.from_markup(bench_txt))
-        items.append(self._section_header("Network", inner_w))
+        items.append(self._section_header(t("network"), inner_w))
         items.append(net_tbl)
         for line in mtu_extra:
             items.append(line)
@@ -799,8 +781,10 @@ class MonitorUI:
         log_path = LOG_FILE.replace(os.path.expanduser("~"), "~")
         txt = f"[dim]{t('footer').format(log_file=log_path)}[/dim]"
         # Show update notification
-        if self._latest_version:
-            txt += f"    [yellow]▲ {t('update_available').format(current=VERSION, latest=self._latest_version)}[/yellow]"
+        snap = self.monitor.get_stats_snapshot()
+        latest_version = snap.get("latest_version")
+        if latest_version:
+            txt += f"    [yellow]▲ {t('update_available').format(current=VERSION, latest=latest_version)}[/yellow]"
         return Panel(txt, border_style="dim", box=box.SIMPLE, width=width)
 
     # ══════════════════ layout ══════════════════

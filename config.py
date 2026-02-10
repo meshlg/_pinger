@@ -4,7 +4,7 @@ from collections import deque
 from typing import Deque, Dict, Any, TypedDict
 from datetime import datetime
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 
 # Supported languages
 SUPPORTED_LANGUAGES = ["en", "ru"]
@@ -144,6 +144,11 @@ ENABLE_SINGLE_INSTANCE = os.environ.get("ENABLE_SINGLE_INSTANCE", "true").lower(
 ENABLE_STALE_LOCK_CHECK = os.environ.get("ENABLE_STALE_LOCK_CHECK", "true").lower() in ("true", "1", "yes")
 
 ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1", "yes")
+
+# Version check settings
+ENABLE_VERSION_CHECK = os.environ.get("ENABLE_VERSION_CHECK", "true").lower() in ("true", "1", "yes")
+VERSION_CHECK_INTERVAL = int(os.environ.get("VERSION_CHECK_INTERVAL", "3600"))  # Check every hour (3600 seconds)
+
 # Metrics server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
 # For Kubernetes/Docker: use internal network (e.g., "0.0.0.0" for pod network)
 # Authentication via METRICS_AUTH_USER and METRICS_AUTH_PASS (Basic Auth)
@@ -219,7 +224,10 @@ LANG: Dict[str, Dict[str, str]] = {
         "jitter": "Джиттер",
         "jitter_trend": "Тренд джиттера",
         "jitter_now": "Текущий джиттер",
-        "p95": "p95",
+        "p95": "95-й %",
+        "ping": "Пинг",
+        "loss": "Потери",
+        "uptime": "Время работы",
         "trends": "Тренды",
         "spread": "Разброс",
         "latency_chart": "Задержка (последние значения):",
@@ -280,7 +288,7 @@ LANG: Dict[str, Dict[str, str]] = {
         "hop_none": "Нет данных",
         "hop_good": "OK",
         "hop_slow": "Медл.",
-        "hop_down": "Недост.",
+        "hop_down": "Недоступен",
         "hop_worst": "Худший",
         "hop_loss_label": "Потери",
         "hop_col_num": "#",
@@ -297,6 +305,10 @@ LANG: Dict[str, Dict[str, str]] = {
         # ── Footer ──
         "footer": "Ctrl+C — остановка  │  Логи: {log_file}",
         "update_available": "Обновление доступно: {current} → {latest} — pipx upgrade network-pinger",
+        # ── Version check ──
+        "version_checking": "Проверка версии...",
+        "version_check_failed": "Ошибка проверки версии",
+        "version_up_to_date": "Актуальная версия",
         # ── Alert messages (monitor.py) ──
         "alert_ip_changed": "IP изменен: {old} -> {new}",
         "alert_high_loss": "Высокие потери (30м): {val:.1f}%",
@@ -328,6 +340,10 @@ LANG: Dict[str, Dict[str, str]] = {
         "traceroute_starting": "Traceroute: запуск...",
         "traceroute_saved": "Traceroute сохранен: {file}",
         "traceroute_save_failed": "Не удалось сохранить traceroute",
+        "traceroute": "Трассировка",
+        "dns": "DNS",
+        "network": "Сеть",
+        "ok_label": "OK",
     },
     "en": {
         # ── General ──
@@ -375,7 +391,10 @@ LANG: Dict[str, Dict[str, str]] = {
         "jitter": "Jitter",
         "jitter_trend": "Jitter trend",
         "jitter_now": "Jitter now",
-        "p95": "p95",
+        "p95": "95th %",
+        "ping": "Ping",
+        "loss": "Loss",
+        "uptime": "Uptime",
         "trends": "Trends",
         "spread": "Spread",
         "latency_chart": "Latency (recent values):",
@@ -454,6 +473,10 @@ LANG: Dict[str, Dict[str, str]] = {
         # ── Footer ──
         "footer": "Ctrl+C — stop  |  Logs: {log_file}",
         "update_available": "Update available: {current} → {latest} — pipx upgrade network-pinger",
+        # ── Version check ──
+        "version_checking": "Checking version...",
+        "version_check_failed": "Version check failed",
+        "version_up_to_date": "Up to date",
         # ── Alert messages (monitor.py) ──
         "alert_ip_changed": "IP changed: {old} -> {new}",
         "alert_high_loss": "High packet loss (30m): {val:.1f}%",
@@ -464,6 +487,9 @@ LANG: Dict[str, Dict[str, str]] = {
         "alert_connection_restored": "Connection restored",
         "alert_high_jitter": "High jitter: {val:.1f}ms",
         "alert_jitter_normalized": "Jitter normalized",
+        "traceroute": "Traceroute",
+        "dns": "DNS",
+        "network": "Network",
         # ── Memory alerts ──
         "alert_memory_exceeded_shutdown": "Memory limit exceeded ({current}MB > {limit}MB), shutting down",
         # ── Main app ──

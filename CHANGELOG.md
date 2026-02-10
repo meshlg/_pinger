@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [U2.3.2] - 2026-02-10
+### Added
+- **Automatic version checking** — Background task checks for updates every hour (configurable via `VERSION_CHECK_INTERVAL`)
+- **Version check configuration** — Added `ENABLE_VERSION_CHECK` and `VERSION_CHECK_INTERVAL` environment variables
+- **Version info in stats repository** — Added `latest_version`, `version_check_time`, and `version_up_to_date` fields to `StatsSnapshot`
+- **Version display in UI** — Header shows current version with update indicator when new version is available
+- **Version check methods** — Added `set_latest_version()` and `get_latest_version_info()` to `StatsRepository`
+
+### Changed
+- **Version check implementation** — Moved from one-time check at startup to periodic background checks
+- **UI version display** — Now reads version info from `StatsRepository` instead of local variables
+
 ## [2.3.1] - 2026-02-09
 ### Security
 - **Metrics server security hardening** — Default binding changed from `0.0.0.0` to `127.0.0.1` (localhost-only)

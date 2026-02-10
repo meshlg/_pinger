@@ -66,6 +66,9 @@ class StatsSnapshot(TypedDict):
     recent_results: list[bool]  # copy of recent results for UI
     hop_monitor_hops: list[dict[str, Any]]
     hop_monitor_discovering: bool
+    latest_version: str | None
+    version_check_time: datetime | None
+    version_up_to_date: bool
 
 
 class StatsRepository:
@@ -79,6 +82,9 @@ class StatsRepository:
         self._recent_results: deque[bool] = deque(maxlen=WINDOW_SIZE)
         self._stats["latencies"] = deque(maxlen=LATENCY_WINDOW)
         self._stats["jitter_history"] = deque(maxlen=LATENCY_WINDOW)
+        self._stats["latest_version"] = None
+        self._stats["version_check_time"] = None
+        self._stats["version_up_to_date"] = False
         self._lock = threading.RLock()
 
     @property
@@ -147,6 +153,9 @@ class StatsRepository:
                 "recent_results": list(self._recent_results),
                 "hop_monitor_hops": list(self._stats.get("hop_monitor_hops", [])),
                 "hop_monitor_discovering": self._stats.get("hop_monitor_discovering", False),
+                "latest_version": self._stats.get("latest_version"),
+                "version_check_time": self._stats.get("version_check_time"),
+                "version_up_to_date": self._stats.get("version_up_to_date", False),
             }
 
     def update_after_ping(
@@ -438,6 +447,22 @@ class StatsRepository:
         with self._lock:
             self._stats["hop_monitor_hops"] = hops
             self._stats["hop_monitor_discovering"] = discovering
+
+    def set_latest_version(self, version: str | None, up_to_date: bool) -> None:
+        """Set the latest version info from version check."""
+        with self._lock:
+            self._stats["latest_version"] = version
+            self._stats["version_up_to_date"] = up_to_date
+            self._stats["version_check_time"] = datetime.now()
+
+    def get_latest_version_info(self) -> tuple[str | None, bool, datetime | None]:
+        """Get latest version info. Returns (latest_version, up_to_date, check_time)."""
+        with self._lock:
+            return (
+                self._stats.get("latest_version"),
+                self._stats.get("version_up_to_date", False),
+                self._stats.get("version_check_time"),
+            )
 
     def get_memory_usage_mb(self) -> float | None:
         """Get current memory usage in MB. Returns None if monitoring disabled."""
