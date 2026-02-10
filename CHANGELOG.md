@@ -5,7 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [U2.3.2] - 2026-02-10
+## [2.3.3] - 2026-02-10
+### Changed
+- **Major architecture refactoring** — Improved code organization following SOLID principles
+  - `config.py` (645 lines) split into `config/` package with separate modules:
+    - `config/settings.py` — configuration variables only
+    - `config/i18n.py` — translations (LANG, t())
+    - `config/types.py` — TypedDict classes and factory functions
+  - `ping_once()` method refactored following Single Responsibility Principle (SRP):
+    - `core/ping_handler.py` — PingHandler class for ping execution
+    - `core/alert_handler.py` — AlertHandler class for alert processing
+    - `core/metrics_handler.py` — MetricsHandler class for Prometheus metrics
+  - UI decoupled from Monitor class following Dependency Inversion Principle (DIP):
+    - `ui_protocols/protocols.py` — StatsDataProvider Protocol interface
+    - UI now depends on abstraction, enabling easier testing with mocks
+
+### Added
+- `config/` package with modular configuration
+- `core/` package with SRP-compliant handlers
+- `ui_protocols/` package with Protocol definitions
+- Backward compatibility wrapper in legacy `config.py` (re-exports from new package)
+
+### Developer Experience
+- Code is now more testable — UI can work with any StatsDataProvider implementation
+- Clear separation of concerns — each module has a single responsibility
+- Easier to extend — new features can be added without modifying existing code
+
+## [2.3.2] - 2026-02-10
 ### Added
 - **Automatic version checking** — Background task checks for updates every hour (configurable via `VERSION_CHECK_INTERVAL`)
 - **Version check configuration** — Added `ENABLE_VERSION_CHECK` and `VERSION_CHECK_INTERVAL` environment variables

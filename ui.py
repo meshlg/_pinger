@@ -3,7 +3,7 @@ from __future__ import annotations
 import statistics
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import time
 import threading
 
@@ -14,8 +14,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+# Import Protocol for DIP-compliant design
+from ui_protocols.protocols import StatsDataProvider
+
 if TYPE_CHECKING:
-    from .monitor import Monitor
+    from monitor import Monitor
 
 try:
     from config import (
@@ -27,7 +30,6 @@ try:
         VERSION,
         t,
     )
-    from monitor import Monitor  # type: ignore
 except ImportError:
     from .config import (
         ALERT_PANEL_LINES,
@@ -38,7 +40,6 @@ except ImportError:
         VERSION,
         t,
     )
-    from .monitor import Monitor  # type: ignore
 
 
 # ── Unicode characters for visual elements ──
@@ -48,12 +49,37 @@ _BAR_EMPTY = "░"
 
 
 class MonitorUI:
-    def __init__(self, console: Console, monitor: Monitor) -> None:
+    """
+    Rich-based UI for network monitoring.
+    
+    Follows Dependency Inversion Principle (DIP):
+    - Depends on StatsDataProvider protocol, not concrete Monitor class
+    - Can work with any implementation of StatsDataProvider
+    - Easier to test with mock implementations
+    """
+    
+    def __init__(self, console: Console, data_provider: StatsDataProvider) -> None:
+        """
+        Initialize UI with a data provider.
+        
+        Args:
+            console: Rich console for output
+            data_provider: Any object implementing StatsDataProvider protocol
+                          (e.g., Monitor, MockMonitor for testing)
+        """
         self.console = console
-        self.monitor = monitor
+        # Use generic name for DIP compliance
+        self._data_provider = data_provider
+        # Backward compat alias
+        self.monitor = data_provider
         self._cached_jitter: float = 0.0
         self._last_jitter_update: float = 0.0
         self._jitter_cache_interval: float = 5.0
+    
+    @property
+    def data_provider(self) -> StatsDataProvider:
+        """Get the data provider (DIP-compliant access)."""
+        return self._data_provider
 
     # ══════════════════ helpers ══════════════════
 

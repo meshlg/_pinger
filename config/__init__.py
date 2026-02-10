@@ -1,0 +1,155 @@
+"""
+Configuration package for pinger.
+
+This package provides:
+- settings: Application configuration variables
+- i18n: Internationalization (translations)
+- types: TypedDict classes and factory functions
+
+Usage:
+    from config import VERSION, TARGET_IP, t, create_stats
+"""
+
+# Import all settings (configuration variables)
+from .settings import *
+
+# Import i18n (translations)
+from .i18n import LANG, t, CURRENT_LANGUAGE, SUPPORTED_LANGUAGES
+
+# Import types (TypedDict classes and factory functions)
+from .types import (
+    ThresholdStates,
+    StatsDict,
+    create_stats,
+    create_recent_results,
+)
+
+# Build __all__ for clean exports
+__all__ = [
+    # Version
+    "VERSION",
+    # Language
+    "CURRENT_LANGUAGE",
+    "SUPPORTED_LANGUAGES",
+    "LANG",
+    "t",
+    # Core settings
+    "TARGET_IP",
+    "INTERVAL",
+    "WINDOW_SIZE",
+    "LATENCY_WINDOW",
+    # Alert settings
+    "ENABLE_SOUND_ALERTS",
+    "ALERT_COOLDOWN",
+    "ALERT_ON_PACKET_LOSS",
+    "ALERT_ON_HIGH_LATENCY",
+    "HIGH_LATENCY_THRESHOLD",
+    # Threshold settings
+    "ENABLE_THRESHOLD_ALERTS",
+    "PACKET_LOSS_THRESHOLD",
+    "AVG_LATENCY_THRESHOLD",
+    "CONSECUTIVE_LOSS_THRESHOLD",
+    "JITTER_THRESHOLD",
+    # IP change detection
+    "ENABLE_IP_CHANGE_ALERT",
+    "IP_CHECK_INTERVAL",
+    "IP_CHANGE_SOUND",
+    "LOG_IP_CHANGES",
+    # DNS monitoring
+    "ENABLE_DNS_MONITORING",
+    "DNS_TEST_DOMAIN",
+    "DNS_CHECK_INTERVAL",
+    "DNS_SLOW_THRESHOLD",
+    "DNS_RECORD_TYPES",
+    "ENABLE_DNS_BENCHMARK",
+    "DNS_BENCHMARK_DOTCOM_DOMAIN",
+    "DNS_BENCHMARK_SERVERS",
+    "DNS_BENCHMARK_HISTORY_SIZE",
+    # Traceroute
+    "ENABLE_AUTO_TRACEROUTE",
+    "TRACEROUTE_TRIGGER_LOSSES",
+    "TRACEROUTE_COOLDOWN",
+    "TRACEROUTE_MAX_HOPS",
+    # MTU monitoring
+    "ENABLE_MTU_MONITORING",
+    "MTU_CHECK_INTERVAL",
+    "ENABLE_PATH_MTU_DISCOVERY",
+    "PATH_MTU_CHECK_INTERVAL",
+    "DEFAULT_MTU",
+    "MTU_ISSUE_CONSECUTIVE",
+    "MTU_CLEAR_CONSECUTIVE",
+    "MTU_DIFF_THRESHOLD",
+    # TTL monitoring
+    "ENABLE_TTL_MONITORING",
+    "TTL_CHECK_INTERVAL",
+    # Hop monitoring
+    "ENABLE_HOP_MONITORING",
+    "HOP_PING_INTERVAL",
+    "HOP_PING_TIMEOUT",
+    "HOP_REDISCOVER_INTERVAL",
+    "HOP_LATENCY_GOOD",
+    "HOP_LATENCY_WARN",
+    # Problem analysis
+    "ENABLE_PROBLEM_ANALYSIS",
+    "PROBLEM_ANALYSIS_INTERVAL",
+    "PROBLEM_HISTORY_SIZE",
+    "PREDICTION_WINDOW",
+    "PROBLEM_LOG_SUPPRESSION_SECONDS",
+    "ROUTE_LOG_SUPPRESSION_SECONDS",
+    # Route analysis
+    "ENABLE_ROUTE_ANALYSIS",
+    "ROUTE_ANALYSIS_INTERVAL",
+    "ROUTE_HISTORY_SIZE",
+    "HOP_TIMEOUT_THRESHOLD",
+    "ROUTE_CHANGE_CONSECUTIVE",
+    "ROUTE_CHANGE_HOP_DIFF",
+    "ROUTE_IGNORE_FIRST_HOPS",
+    "ROUTE_SAVE_ON_CHANGE_CONSECUTIVE",
+    # Visual alerts
+    "SHOW_VISUAL_ALERTS",
+    "ALERT_DISPLAY_TIME",
+    "ALERT_PANEL_LINES",
+    "MAX_ACTIVE_ALERTS",
+    # Resource limits
+    "MAX_WORKER_THREADS",
+    "MAX_EXECUTOR_QUEUE_SIZE",
+    "MAX_MEMORY_MB",
+    "ENABLE_MEMORY_MONITORING",
+    "MAX_ALERTS_HISTORY",
+    "MAX_TRACEROUTE_FILES",
+    "MAX_PROBLEM_HISTORY",
+    "MAX_ROUTE_HISTORY",
+    "MAX_DNS_BENCHMARK_HISTORY",
+    "PING_BURST_LIMIT",
+    "DNS_CHECK_COOLDOWN",
+    "TRACEROUTE_MIN_INTERVAL",
+    "SHUTDOWN_TIMEOUT_SECONDS",
+    "FORCE_KILL_TIMEOUT",
+    # Single instance
+    "ENABLE_SINGLE_INSTANCE",
+    "ENABLE_STALE_LOCK_CHECK",
+    # Metrics
+    "ENABLE_METRICS",
+    "ENABLE_VERSION_CHECK",
+    "VERSION_CHECK_INTERVAL",
+    "METRICS_ADDR",
+    "METRICS_PORT",
+    # Health endpoint
+    "ENABLE_HEALTH_ENDPOINT",
+    "HEALTH_ADDR",
+    "HEALTH_PORT",
+    "HEALTH_AUTH_USER",
+    "HEALTH_AUTH_PASS",
+    "HEALTH_TOKEN",
+    "HEALTH_TOKEN_HEADER",
+    # Logging
+    "LOG_DIR",
+    "LOG_FILE",
+    "LOG_LEVEL",
+    "LOG_TRUNCATE_ON_START",
+    # Types
+    "ThresholdStates",
+    "StatsDict",
+    "create_stats",
+    "create_recent_results",
+]

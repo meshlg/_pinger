@@ -55,6 +55,9 @@ from config import (
     SHUTDOWN_TIMEOUT_SECONDS,
     t,
 )
+
+# Core handlers (refactored from ping_once)
+from core import PingHandler, AlertHandler, MetricsHandler
 from stats_repository import StatsRepository
 from services import (
     PingService,
@@ -89,6 +92,7 @@ class Monitor:
     Main monitoring orchestrator.
     
     Uses service layer for operations and StatsRepository for data.
+    Uses core handlers for ping cycle operations (SRP-compliant).
     """
 
     def __init__(self) -> None:
@@ -124,6 +128,11 @@ class Monitor:
         # Analyzers
         self.problem_analyzer = ProblemAnalyzer(stats_repo=self.stats_repo)
         self.route_analyzer = RouteAnalyzer()
+        
+        # Core handlers (SRP-compliant)
+        self._ping_handler = PingHandler(self.ping_service, TARGET_IP)
+        self._alert_handler = AlertHandler(self.stats_repo, self.traceroute_service)
+        self._metrics_handler = MetricsHandler(self.stats_repo)
         
         # Infrastructure
         self.metrics_server = None
@@ -225,55 +234,41 @@ class Monitor:
     # ==================== Main Loop ====================
 
     async def ping_once(self) -> tuple[bool, float | None]:
-        """Single ping cycle."""
-        ok, latency = await self.run_blocking(
-            self.ping_service.ping_host,
-            TARGET_IP
-        )
+        """
+        Single ping cycle using SRP-compliant handlers.
         
-        # Update stats
+        Delegates to:
+        - PingHandler: Execute ping
+        - StatsRepository: Update statistics
+        - AlertHandler: Process alerts
+        - MetricsHandler: Update Prometheus metrics
+        """
+        # 1. Execute ping (PingHandler - SRP)
+        result = await self._ping_handler.execute_async(self.executor)
+        
+        # 2. Update statistics (StatsRepository)
         high_lat, loss = self.stats_repo.update_after_ping(
-            ok,
-            latency,
+            result.success,
+            result.latency,
             alert_on_high_latency=ALERT_ON_HIGH_LATENCY,
             high_latency_threshold=HIGH_LATENCY_THRESHOLD,
             alert_on_packet_loss=ALERT_ON_PACKET_LOSS,
         )
         
-        # Handle alerts
-        if high_lat:
-            trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "high_latency")
-        if loss:
-            trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "loss")
-            self._check_auto_traceroute()
+        # 3. Handle alerts (AlertHandler - SRP)
+        self._alert_handler.process_alerts(result, high_lat, loss)
         
-        # Update Prometheus metrics
-        if METRICS_AVAILABLE:
-            try:
-                PING_TOTAL.inc()
-                if ok:
-                    PING_SUCCESS.inc()
-                    if latency is not None:
-                        PING_LATENCY_MS.observe(latency)
-                else:
-                    PING_FAILURE.inc()
-                
-                snap = self.get_stats_snapshot()
-                if snap["recent_results"]:
-                    loss_pct = snap["recent_results"].count(False) / len(snap["recent_results"]) * 100
-                    PACKET_LOSS_GAUGE.set(loss_pct)
-            except Exception:
-                pass
+        # 4. Update metrics (MetricsHandler - SRP)
+        self._metrics_handler.update_metrics(result)
         
-        # Periodic memory check and cleanup (every N pings)
+        # 5. Periodic maintenance (every N pings)
         self._ping_counter += 1
         if self._ping_counter >= self._memory_check_interval:
             self._ping_counter = 0
             self._check_memory_and_cleanup()
-            # Also check for instance notifications periodically
             self._check_instance_notifications()
         
-        return ok, latency
+        return result.success, result.latency
 
     def _check_memory_and_cleanup(self) -> None:
         """Check memory usage, cleanup old data, and shutdown if limit exceeded."""
@@ -323,17 +318,6 @@ class Monitor:
                 logging.info(f"Instance notification: {notification}")
         except Exception:
             pass  # Silently ignore if notification system fails
-
-    def _check_auto_traceroute(self) -> None:
-        """Trigger traceroute if conditions met."""
-        if not ENABLE_AUTO_TRACEROUTE:
-            return
-        
-        with self.stats_repo.lock:
-            cons_losses = self.stats_repo.get_stats()["consecutive_losses"]
-        
-        if cons_losses >= TRACEROUTE_TRIGGER_LOSSES:
-            self.traceroute_service.trigger_traceroute(TARGET_IP)
 
     def cleanup_alerts(self) -> None:
         """Clean old visual alerts."""
