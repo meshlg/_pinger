@@ -74,6 +74,8 @@ class PingService:
     def _ping_with_pythonping(self, host: str) -> Tuple[bool, Optional[float]]:
         """Fallback ping using pythonping library."""
         try:
+            if pythonping_ping is None:
+                return False, None
             resp = pythonping_ping(host, count=1, timeout=1)
             
             # Try to extract latency from response

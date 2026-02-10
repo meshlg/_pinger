@@ -11,7 +11,7 @@ import os
 # Version
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION = "2.3.3"
+VERSION = "2.3.4"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Language Detection
@@ -245,6 +245,13 @@ HEALTH_AUTH_PASS = os.environ.get("HEALTH_AUTH_PASS", "")
 # 2. Token Auth: Set this variable (simpler for load balancers/Prometheus)
 HEALTH_TOKEN = os.environ.get("HEALTH_TOKEN", "")
 HEALTH_TOKEN_HEADER = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UI Layout
+# ─────────────────────────────────────────────────────────────────────────────
+
+UI_COMPACT_THRESHOLD = int(os.environ.get("UI_COMPACT_THRESHOLD", "100"))
+UI_WIDE_THRESHOLD = int(os.environ.get("UI_WIDE_THRESHOLD", "150"))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging

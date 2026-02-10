@@ -55,6 +55,7 @@ class StatsDict(TypedDict):
     traceroute_running: bool
     ping_missing_warned: bool
     jitter: float
+    jitter_history: Deque[float]
     local_mtu: int | None
     path_mtu: int | None
     mtu_status: str
@@ -76,6 +77,11 @@ class StatsDict(TypedDict):
     route_last_change_time: datetime | None
     route_last_diff_count: int
     route_history: list[Dict[str, Any]]
+    hop_monitor_hops: list[Dict[str, Any]]
+    hop_monitor_discovering: bool
+    latest_version: str | None
+    version_check_time: datetime | None
+    version_up_to_date: bool
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -141,6 +147,11 @@ def create_stats() -> StatsDict:
         "route_last_change_time": None,
         "route_last_diff_count": 0,
         "route_history": [],
+        "hop_monitor_hops": [],
+        "hop_monitor_discovering": False,
+        "latest_version": None,
+        "version_check_time": None,
+        "version_up_to_date": False,
     }
 
 

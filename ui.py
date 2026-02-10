@@ -3,7 +3,7 @@ from __future__ import annotations
 import statistics
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 import time
 import threading
 
@@ -19,6 +19,7 @@ from ui_protocols.protocols import StatsDataProvider
 
 if TYPE_CHECKING:
     from monitor import Monitor
+    from stats_repository import StatsSnapshot
 
 try:
     from config import (
@@ -28,60 +29,91 @@ try:
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
         VERSION,
+        UI_COMPACT_THRESHOLD,
+        UI_WIDE_THRESHOLD,
         t,
     )
 except ImportError:
-    from .config import (
+    from .config import (  # type: ignore[no-redef]
         ALERT_PANEL_LINES,
         SHOW_VISUAL_ALERTS,
         TARGET_IP,
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
         VERSION,
+        UI_COMPACT_THRESHOLD,
+        UI_WIDE_THRESHOLD,
         t,
     )
 
 
-# ── Unicode characters for visual elements ──
+# ═══════════════════════════════════════════════════════════════════════════════
+# Style constants
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Color palette – black theme with orange accent
+_BG = "#000000"          # True black background
+_BG_PANEL = "#0a0a0a"    # Near-black panel background
+_ACCENT = "#ff8c00"      # Warm orange accent for borders & titles
+_ACCENT_DIM = "#3d2800"  # Dim amber for section dividers
+_TEXT = "#d4d4d4"        # Primary text
+_TEXT_DIM = "#707070"    # Secondary / label text
+_GREEN = "#4ec94e"       # Semantic: good
+_YELLOW = "#ffb347"      # Semantic: warning (soft orange)
+_RED = "#ff4444"         # Semantic: critical
+_WHITE = "#f0f0f0"       # High-contrast values
+
+# Unicode elements
 _SPARK_CHARS = "▁▂▃▄▅▆▇█"
-_BAR_FULL = "█"
-_BAR_EMPTY = "░"
+_BAR_FULL = "━"
+_BAR_EMPTY = "╌"
+_DOT_OK = "●"
+_DOT_WARN = "▲"
+_DOT_ERR = "✖"
+_DOT_WAIT = "○"
+_ICON_INFO = "◆"
+
+# Layout tier type
+LayoutTier = Literal["compact", "standard", "wide"]
 
 
 class MonitorUI:
     """
-    Rich-based UI for network monitoring.
-    
-    Follows Dependency Inversion Principle (DIP):
-    - Depends on StatsDataProvider protocol, not concrete Monitor class
-    - Can work with any implementation of StatsDataProvider
-    - Easier to test with mock implementations
+    Adaptive Rich-based UI for network monitoring.
+
+    Renders in 3 tiers based on terminal width:
+    - compact  (<100 cols): single column, essential info only
+    - standard (100–149):   2-column grid, full detail
+    - wide     (≥150):      3-column grid, maximum detail
     """
-    
+
     def __init__(self, console: Console, data_provider: StatsDataProvider) -> None:
-        """
-        Initialize UI with a data provider.
-        
-        Args:
-            console: Rich console for output
-            data_provider: Any object implementing StatsDataProvider protocol
-                          (e.g., Monitor, MockMonitor for testing)
-        """
         self.console = console
-        # Use generic name for DIP compliance
         self._data_provider = data_provider
-        # Backward compat alias
         self.monitor = data_provider
         self._cached_jitter: float = 0.0
         self._last_jitter_update: float = 0.0
         self._jitter_cache_interval: float = 5.0
-    
+
     @property
     def data_provider(self) -> StatsDataProvider:
-        """Get the data provider (DIP-compliant access)."""
         return self._data_provider
 
-    # ══════════════════ helpers ══════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Layout tier detection
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _get_tier(self) -> LayoutTier:
+        w = self.console.size.width
+        if w < UI_COMPACT_THRESHOLD:
+            return "compact"
+        if w >= UI_WIDE_THRESHOLD:
+            return "wide"
+        return "standard"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Helpers
+    # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _fmt_uptime(start_time: datetime | None) -> str:
@@ -118,140 +150,155 @@ class MonitorUI:
         return f"{sec // 86400}{t('time_d')} {(sec % 86400) // 3600}{t('time_h')} {t('ago')}"
 
     @staticmethod
-    def _progress_bar(pct: float, width: int = 20, color: str = "green") -> str:
-        """Unicode progress bar: ████████░░░░"""
+    def _progress_bar(pct: float, width: int = 20, color: str = _GREEN) -> str:
         pct = max(0.0, min(pct, 100.0))
         filled = int(round(pct / 100.0 * width))
         empty = width - filled
-        return f"[{color}]{_BAR_FULL * filled}[/{color}][dim]{_BAR_EMPTY * empty}[/dim]"
+        return f"[{color}]{_BAR_FULL * filled}[/{color}][{_ACCENT_DIM}]{_BAR_EMPTY * empty}[/{_ACCENT_DIM}]"
 
     @staticmethod
     def _sparkline(values: list[float], width: int = 40) -> str:
-        """Generate sparkline from values using Unicode block chars."""
         if not values:
-            return f"[dim]{t('no_data')}[/dim]"
-        # Take last `width` values
+            return f"[{_TEXT_DIM}]{t('no_data')}[/{_TEXT_DIM}]"
         data = values[-width:]
         if len(data) < 2:
-            return f"[dim]{t('waiting')}[/dim]"
+            return f"[{_TEXT_DIM}]{t('waiting')}[/{_TEXT_DIM}]"
         mn, mx = min(data), max(data)
         rng = mx - mn if mx != mn else 1.0
         chars = []
         for v in data:
             idx = int((v - mn) / rng * (len(_SPARK_CHARS) - 1))
             idx = max(0, min(idx, len(_SPARK_CHARS) - 1))
-            # Color based on relative value
             rel = (v - mn) / rng
             if rel < 0.4:
-                color = "green"
+                color = _GREEN
             elif rel < 0.7:
-                color = "yellow"
+                color = _YELLOW
             else:
-                color = "red"
+                color = _RED
             chars.append(f"[{color}]{_SPARK_CHARS[idx]}[/{color}]")
         return "".join(chars)
 
     @staticmethod
-    def _kv_table(width: int, key_width: int = 16) -> Table:
+    def _kv_table(width: int, key_width: int = 14) -> Table:
         tbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
-        tbl.add_column("k", style="white dim", width=key_width, no_wrap=True)
+        tbl.add_column("k", style=_TEXT_DIM, width=key_width, no_wrap=True)
         tbl.add_column("v", width=max(10, width - key_width - 3), no_wrap=True)
         return tbl
 
     @staticmethod
     def _dual_kv_table(width: int) -> Table:
-        """Two-column key-value layout for compact display."""
         tbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
         col_w = max(8, (width - 6) // 4)
-        tbl.add_column("k1", style="white dim", width=col_w, no_wrap=True)
+        tbl.add_column("k1", style=_TEXT_DIM, width=col_w, no_wrap=True)
         tbl.add_column("v1", width=col_w, no_wrap=True)
-        tbl.add_column("k2", style="white dim", width=col_w, no_wrap=True)
+        tbl.add_column("k2", style=_TEXT_DIM, width=col_w, no_wrap=True)
         tbl.add_column("v2", width=col_w, no_wrap=True)
         return tbl
 
-    def _get_connection_state(self, snap: dict) -> tuple[str, str, str]:
-        """Determine overall connection state -> (label, color, icon)."""
+    def _section_header(self, label: str, width: int) -> Text:
+        line_len = max(0, width - len(label) - 7)
+        return Text.from_markup(f"  [{_ACCENT_DIM}]── {label} {'─' * line_len}[/{_ACCENT_DIM}]")
+
+    def _get_connection_state(self, snap: StatsSnapshot) -> tuple[str, str, str]:
         if snap["threshold_states"]["connection_lost"]:
-            return t("status_disconnected"), "red", "✖"
+            return t("status_disconnected"), _RED, _DOT_ERR
         recent = snap["recent_results"]
         if recent:
             loss30 = recent.count(False) / len(recent) * 100
             if loss30 > 5:
-                return t("status_degraded"), "yellow", "▲"
+                return t("status_degraded"), _YELLOW, _DOT_WARN
         if snap["last_status"] == t("status_timeout"):
-            return t("status_timeout_bar"), "red", "✖"
+            return t("status_timeout_bar"), _RED, _DOT_ERR
         if snap["last_status"] == t("status_ok"):
-            return t("status_connected"), "green", "●"
-        return t("status_waiting"), "white", "○"
+            return t("status_connected"), _GREEN, _DOT_OK
+        return t("status_waiting"), _TEXT_DIM, _DOT_WAIT
 
-    # ══════════════════ sections ══════════════════
+    # Helper for semantic coloring of latency values
+    @staticmethod
+    def _lat_color(val: float | None) -> str:
+        if val is None:
+            return _RED
+        if val > HOP_LATENCY_WARN:
+            return _RED
+        if val > HOP_LATENCY_GOOD:
+            return _YELLOW
+        return _GREEN
 
-    def render_header(self, width: int) -> Panel:
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Panels
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def render_header(self, width: int, tier: LayoutTier) -> Panel:
         now = datetime.now().strftime("%H:%M:%S")
-        
-        # Get version info from stats snapshot
         snap = self.monitor.get_stats_snapshot()
         latest_version = snap.get("latest_version")
         version_up_to_date = snap.get("version_up_to_date", False)
-        
-        # Build version string
+
         if latest_version:
-            version_txt = f"[dim]v{VERSION}[/dim] [yellow]→ v{latest_version}[/yellow]"
+            ver = f"[{_TEXT_DIM}]v{VERSION}[/{_TEXT_DIM}] [{_YELLOW}]→ v{latest_version}[/{_YELLOW}]"
         elif version_up_to_date:
-            version_txt = f"[dim]v{VERSION}[/dim] [green]✓[/green]"
+            ver = f"[{_TEXT_DIM}]v{VERSION}[/{_TEXT_DIM}] [{_GREEN}]✓[/{_GREEN}]"
         else:
-            version_txt = f"[dim]v{VERSION}[/dim]"
-        
-        txt = (
-            f"[bold white]{t('title')}[/bold white]  [dim]→[/dim]  "
-            f"[bold cyan]{TARGET_IP}[/bold cyan]    [dim]│[/dim]    "
-            f"{version_txt}    [dim]│[/dim]    [dim]{now}[/dim]"
-        )
+            ver = f"[{_TEXT_DIM}]v{VERSION}[/{_TEXT_DIM}]"
+
+        if tier == "compact":
+            txt = (
+                f"[bold {_WHITE}]{t('title')}[/bold {_WHITE}]  "
+                f"[{_ACCENT}]{TARGET_IP}[/{_ACCENT}]  "
+                f"[{_TEXT_DIM}]{now}[/{_TEXT_DIM}]"
+            )
+        else:
+            txt = (
+                f"[bold {_WHITE}]{t('title')}[/bold {_WHITE}]  [{_TEXT_DIM}]›[/{_TEXT_DIM}]  "
+                f"[bold {_ACCENT}]{TARGET_IP}[/bold {_ACCENT}]    "
+                f"[{_TEXT_DIM}]│[/{_TEXT_DIM}]    {ver}    "
+                f"[{_TEXT_DIM}]│[/{_TEXT_DIM}]    [{_TEXT_DIM}]{now}[/{_TEXT_DIM}]"
+            )
         return Panel(
-            txt, border_style="cyan", box=box.HEAVY, width=width, style="on #1a1a2e"
+            txt, border_style=_ACCENT, box=box.HORIZONTALS, width=width,
+            style=f"on {_BG}",
         )
 
-    def render_status_bar(self, width: int) -> Panel:
-        """Hero status bar — instant connection overview."""
+    def render_status_bar(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         label, color, icon = self._get_connection_state(snap)
 
-        # Current ping
         current = snap["last_latency_ms"]
-        if current != t("na"):
-            ping_txt = f"[bold]{current}[/bold] {t('ms')}"
-        else:
-            ping_txt = "[dim]—[/dim]"
+        ping_txt = f"[bold {_WHITE}]{current}[/bold {_WHITE}] {t('ms')}" if current != t("na") else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
-        # Loss 30 min
         recent = snap["recent_results"]
         loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
-        l_color = "green" if loss30 < 1 else ("yellow" if loss30 < 5 else "red")
+        l_color = _GREEN if loss30 < 1 else (_YELLOW if loss30 < 5 else _RED)
         loss_txt = f"[{l_color}]{loss30:.1f}%[/{l_color}]"
 
-        # Uptime
         uptime_txt = self._fmt_uptime(snap["start_time"])
 
-        # IP
         ip_val = snap["public_ip"]
         cc = f" [{snap['country_code']}]" if snap["country_code"] else ""
 
-        parts = (
-            f"   [bold {color}]{icon} {label}[/bold {color}]"
-            f"     [dim]│[/dim]  {t('ping')}: {ping_txt}"
-            f"     [dim]│[/dim]  {t('loss')}: {loss_txt}"
-            f"     [dim]│[/dim]  {t('uptime')}: [white]{uptime_txt}[/white]"
-            f"     [dim]│[/dim]  IP: [white]{ip_val}[/white][dim]{cc}[/dim]"
-        )
+        sep = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
+
+        if tier == "compact":
+            parts = (
+                f"  [bold {color}]{icon} {label}[/bold {color}]"
+                f"{sep}{t('ping')}: {ping_txt}"
+                f"{sep}{t('loss')}: {loss_txt}"
+            )
+        else:
+            parts = (
+                f"   [bold {color}]{icon} {label}[/bold {color}]"
+                f"   {sep}{t('ping')}: {ping_txt}"
+                f"{sep}{t('loss')}: {loss_txt}"
+                f"{sep}{t('uptime')}: [{_WHITE}]{uptime_txt}[/{_WHITE}]"
+                f"{sep}IP: [{_WHITE}]{ip_val}[/{_WHITE}][{_TEXT_DIM}]{cc}[/{_TEXT_DIM}]"
+            )
         return Panel(
-            parts,
-            border_style=color,
-            box=box.DOUBLE,
-            width=width,
+            parts, border_style=color, box=box.HEAVY, width=width,
+            style=f"on {_BG}",
         )
 
-    def render_latency_panel(self, width: int) -> Panel:
-        """Latency and jitter analytics with dual sparklines."""
+    def render_latency_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         latencies = snap["latencies"]
         jitter_hist = snap.get("jitter_history", [])
@@ -261,214 +308,221 @@ class MonitorUI:
         p95 = statistics.quantiles(latencies, n=20)[18] if len(latencies) >= 20 else (max(latencies) if latencies else 0.0)
 
         current = snap["last_latency_ms"]
-        current_txt = f"[bold white]{current}[/bold white] {t('ms')}" if current != t("na") else "[dim]—[/dim]"
-        best = f"[green]{snap['min_latency']:.1f}[/green]" if snap["min_latency"] != float("inf") else "[dim]—[/dim]"
-        peak = f"[red]{snap['max_latency']:.1f}[/red]" if snap["max_latency"] > 0 else "[dim]—[/dim]"
-        med_txt = f"[white]{med:.1f}[/white]" if latencies else "[dim]—[/dim]"
-        avg_txt = f"[yellow]{avg:.1f}[/yellow]" if snap["success"] > 0 else "[dim]—[/dim]"
-        p95_txt = f"[white]{p95:.1f}[/white]" if latencies else "[dim]—[/dim]"
-        if snap["threshold_states"].get("high_avg_latency") and snap["success"]:
-            avg_txt = f"[bold red]{avg:.1f} (!)[/bold red]"
+        cur_txt = f"[bold {_WHITE}]{current}[/bold {_WHITE}] {t('ms')}" if current != t("na") else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        best = f"[{_GREEN}]{snap['min_latency']:.1f}[/{_GREEN}]" if snap["min_latency"] != float("inf") else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        peak = f"[{_RED}]{snap['max_latency']:.1f}[/{_RED}]" if snap["max_latency"] > 0 else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        med_txt = f"[{_WHITE}]{med:.1f}[/{_WHITE}]" if latencies else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        avg_txt = f"[{_YELLOW}]{avg:.1f}[/{_YELLOW}]" if snap["success"] > 0 else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        p95_txt = f"[{_WHITE}]{p95:.1f}[/{_WHITE}]" if latencies else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
-        jit_txt = f"[white]{jit:.1f}[/white]" if jit > 0 else "[dim]—[/dim]"
+        if snap["threshold_states"].get("high_avg_latency") and snap["success"]:
+            avg_txt = f"[bold {_RED}]{avg:.1f} (!)[/bold {_RED}]"
+
+        jit_txt = f"[{_WHITE}]{jit:.1f}[/{_WHITE}]" if jit > 0 else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
         if snap["threshold_states"].get("high_jitter"):
-            jit_txt = f"[bold red]{jit:.1f} (!)[/bold red]"
+            jit_txt = f"[bold {_RED}]{jit:.1f} (!)[/bold {_RED}]"
 
         tbl = self._dual_kv_table(width)
-        tbl.add_row(f"{t('current')}:", current_txt, f"{t('best')}:", f"{best} {t('ms')}")
+        tbl.add_row(f"{t('current')}:", cur_txt, f"{t('best')}:", f"{best} {t('ms')}")
         tbl.add_row(f"{t('average')}:", f"{avg_txt} {t('ms')}", f"{t('p95')}:", f"{p95_txt} {t('ms')}")
         tbl.add_row(f"{t('median')}:", f"{med_txt} {t('ms')}", f"{t('jitter')}:", f"{jit_txt} {t('ms')}")
 
-        # Sparklines
-        spark_width = max(20, width - 6)
-        lat_spark = self._sparkline(list(latencies), width=spark_width)
-        jit_spark = self._sparkline(list(jitter_hist) or [jit], width=spark_width)
+        items: list[Table | Text] = [tbl]
 
-        grp = Group(
-            tbl,
-            Text(""),
-            Text.from_markup(f"  [dim]{t('latency_chart')}[/dim]"),
-            Text.from_markup(f"  {lat_spark}"),
-            Text.from_markup(f"  [dim]{t('jitter')}[/dim]"),
-            Text.from_markup(f"  {jit_spark}"),
-        )
-        return Panel(
-            grp,
-            title=f"[bold]{t('lat')}[/bold]",
-            title_align="left",
-            border_style="cyan",
-            box=box.ROUNDED,
-            width=width,
-        )
-
-    def render_trend_panel(self, width: int) -> Panel:
-        """Compact trends: packet loss, jitter, hop changes."""
-        snap = self.monitor.get_stats_snapshot()
-        recent = snap["recent_results"]
-        loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
-        jitter_hist = snap.get("jitter_history", [])
-        hops = snap.get("route_hops", [])
-
-        trend_tbl = self._kv_table(width, key_width=18)
-        loss_color = "green" if loss30 < 1 else ("yellow" if loss30 < 5 else "red")
-        trend_tbl.add_row(f"{t('loss_30m')}:", f"[{loss_color}]{loss30:.1f}%[/{loss_color}]")
-
-        if jitter_hist:
-            jit_now = jitter_hist[-1]
-            trend_tbl.add_row(f"{t('jitter_trend')}:", self._sparkline(jitter_hist, width=max(10, width - 24)))
-            trend_tbl.add_row(f"{t('jitter_now')}:", f"[white]{jit_now:.1f} {t('ms')}[/white]")
-        else:
-            trend_tbl.add_row(f"{t('jitter_trend')}:", "[dim]—[/dim]")
-
-        hop_count = len(hops)
-        trend_tbl.add_row(f"{t('hops_count')}:", f"[white]{hop_count}[/white]")
+        # Sparklines: show in standard/wide, hide in compact
+        if tier != "compact":
+            spark_w = max(20, width - 6)
+            items.append(Text(""))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')}[/{_TEXT_DIM}]"))
+            items.append(Text.from_markup(f"  {self._sparkline(list(latencies), width=spark_w)}"))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')}[/{_TEXT_DIM}]"))
+            items.append(Text.from_markup(f"  {self._sparkline(list(jitter_hist) or [jit], width=spark_w)}"))
 
         return Panel(
-            trend_tbl,
-            title=f"[bold]{t('trends')}[/bold]",
+            Group(*items),
+            title=f"[bold {_ACCENT}]{t('lat')}[/bold {_ACCENT}]",
             title_align="left",
-            border_style="cyan",
+            border_style=_ACCENT_DIM,
             box=box.ROUNDED,
             width=width,
+            style=f"on {_BG_PANEL}",
         )
 
-    def render_stats_panel(self, width: int) -> Panel:
-        """Top-right: packet statistics with progress bars."""
+    def render_stats_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         success_rate = (snap["success"] / snap["total"] * 100) if snap["total"] else 0.0
         loss_total = (snap["failure"] / snap["total"] * 100) if snap["total"] else 0.0
         recent = snap["recent_results"]
         loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
 
-        # Counters in dual-column
+        # Counters
         tbl = self._dual_kv_table(width)
         tbl.add_row(
-            f"{t('sent')}:", f"[white]{snap['total']}[/white]",
-            f"{t('ok_count')}:", f"[green]{snap['success']}[/green]",
+            f"{t('sent')}:", f"[{_WHITE}]{snap['total']}[/{_WHITE}]",
+            f"{t('ok_count')}:", f"[{_GREEN}]{snap['success']}[/{_GREEN}]",
         )
         tbl.add_row(
-            f"{t('lost')}:", f"[red]{snap['failure']}[/red]",
-            f"{t('losses')}:", f"[dim]{loss_total:.1f}%[/dim]",
+            f"{t('lost')}:", f"[{_RED}]{snap['failure']}[/{_RED}]",
+            f"{t('losses')}:", f"[{_TEXT_DIM}]{loss_total:.1f}%[/{_TEXT_DIM}]",
         )
 
-        # Progress bars
-        bar_w = max(10, width - 24)
-        sr_color = "green" if success_rate > 95 else ("yellow" if success_rate > 80 else "red")
-        sr_bar = self._progress_bar(success_rate, width=bar_w, color=sr_color)
+        items: list[Table | Text] = [tbl]
 
-        l30_color = "green" if loss30 < 1 else ("yellow" if loss30 < 5 else "red")
-        l30_bar = self._progress_bar(loss30, width=bar_w, color=l30_color)
-        loss30_txt = f"[{l30_color}]{loss30:.1f}%[/{l30_color}]"
-        if snap["threshold_states"]["high_packet_loss"]:
-            loss30_txt += " [red](!)[/red]"
+        # Progress bars: show in standard/wide
+        if tier != "compact":
+            bar_w = max(10, width - 24)
+            sr_color = _GREEN if success_rate > 95 else (_YELLOW if success_rate > 80 else _RED)
+            l30_color = _GREEN if loss30 < 1 else (_YELLOW if loss30 < 5 else _RED)
+
+            loss30_txt = f"[{l30_color}]{loss30:.1f}%[/{l30_color}]"
+            if snap["threshold_states"]["high_packet_loss"]:
+                loss30_txt += f" [{_RED}](!)[/{_RED}]"
+
+            items.append(Text(""))
+            items.append(Text.from_markup(
+                f"  [{_TEXT_DIM}]{t('success_rate')}:[/{_TEXT_DIM}]     [{_GREEN}]{success_rate:.1f}%[/{_GREEN}]"
+            ))
+            items.append(Text.from_markup(f"  {self._progress_bar(success_rate, width=bar_w, color=sr_color)}"))
+            items.append(Text(""))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('loss_30m')}:[/{_TEXT_DIM}] {loss30_txt}"))
+            items.append(Text.from_markup(f"  {self._progress_bar(loss30, width=bar_w, color=l30_color)}"))
 
         # Consecutive losses
         cons = snap["consecutive_losses"]
         if snap["threshold_states"]["connection_lost"]:
-            cons_txt = f"[bold red]{cons} (!!!)[/bold red]"
+            cons_txt = f"[bold {_RED}]{cons} (!!!)[/bold {_RED}]"
         elif cons > 0:
-            cons_txt = f"[yellow]{cons}[/yellow]"
+            cons_txt = f"[{_YELLOW}]{cons}[/{_YELLOW}]"
         else:
-            cons_txt = f"[green]{cons}[/green]"
-        max_cons_txt = f"[red]{snap['max_consecutive_losses']}[/red]"
+            cons_txt = f"[{_GREEN}]{cons}[/{_GREEN}]"
+        max_cons_txt = f"[{_RED}]{snap['max_consecutive_losses']}[/{_RED}]"
 
-        grp = Group(
-            tbl,
-            Text(""),
-            Text.from_markup(f"  [dim]{t('success_rate')}:[/dim]     [green]{success_rate:.1f}%[/green]"),
-            Text.from_markup(f"  {sr_bar}"),
-            Text(""),
-            Text.from_markup(f"  [dim]{t('loss_30m')}:[/dim] {loss30_txt}"),
-            Text.from_markup(f"  {l30_bar}"),
-            Text(""),
-            Text.from_markup(f"  [dim]{t('consecutive')}:[/dim] {cons_txt}    [dim]{t('max_label')}:[/dim] {max_cons_txt}"),
-        )
+        items.append(Text(""))
+        items.append(Text.from_markup(
+            f"  [{_TEXT_DIM}]{t('consecutive')}:[/{_TEXT_DIM}] {cons_txt}"
+            f"    [{_TEXT_DIM}]{t('max_label')}:[/{_TEXT_DIM}] {max_cons_txt}"
+        ))
+
         return Panel(
-            grp,
-            title=f"[bold]{t('stats')}[/bold]",
+            Group(*items),
+            title=f"[bold {_ACCENT}]{t('stats')}[/bold {_ACCENT}]",
             title_align="left",
-            border_style="cyan",
+            border_style=_ACCENT_DIM,
             box=box.ROUNDED,
             width=width,
+            style=f"on {_BG_PANEL}",
         )
 
-    def render_analysis_panel(self, width: int) -> Panel:
-        """Bottom-left: problem analysis + route analysis combined."""
+    def render_trend_panel(self, width: int, tier: LayoutTier) -> Panel:
+        snap = self.monitor.get_stats_snapshot()
+        recent = snap["recent_results"]
+        loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
+        jitter_hist = snap.get("jitter_history", [])
+        hops = snap.get("route_hops", [])
+
+        tbl = self._kv_table(width, key_width=16)
+        loss_color = _GREEN if loss30 < 1 else (_YELLOW if loss30 < 5 else _RED)
+        tbl.add_row(f"{t('loss_30m')}:", f"[{loss_color}]{loss30:.1f}%[/{loss_color}]")
+
+        if jitter_hist:
+            jit_now = jitter_hist[-1]
+            if tier != "compact":
+                tbl.add_row(f"{t('jitter_trend')}:", self._sparkline(jitter_hist, width=max(10, width - 24)))
+            tbl.add_row(f"{t('jitter_now')}:", f"[{_WHITE}]{jit_now:.1f} {t('ms')}[/{_WHITE}]")
+        else:
+            tbl.add_row(f"{t('jitter_trend')}:", f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]")
+
+        tbl.add_row(f"{t('hops_count')}:", f"[{_WHITE}]{len(hops)}[/{_WHITE}]")
+
+        return Panel(
+            tbl,
+            title=f"[bold {_ACCENT}]{t('trends')}[/bold {_ACCENT}]",
+            title_align="left",
+            border_style=_ACCENT_DIM,
+            box=box.ROUNDED,
+            width=width,
+            style=f"on {_BG_PANEL}",
+        )
+
+    def render_analysis_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         inner_w = max(20, width - 4)
 
         # ── Problem analysis ──
         problem_type = snap.get("current_problem_type", t("problem_none"))
         if problem_type == t("problem_none"):
-            pt_txt = f"[green]{problem_type}[/green]"
+            pt_txt = f"[{_GREEN}]{problem_type}[/{_GREEN}]"
         elif problem_type in [t("problem_isp"), t("problem_dns")]:
-            pt_txt = f"[red]{problem_type}[/red]"
+            pt_txt = f"[{_RED}]{problem_type}[/{_RED}]"
         elif problem_type in [t("problem_local"), t("problem_mtu")]:
-            pt_txt = f"[yellow]{problem_type}[/yellow]"
+            pt_txt = f"[{_YELLOW}]{problem_type}[/{_YELLOW}]"
         else:
-            pt_txt = f"[white]{problem_type}[/white]"
+            pt_txt = f"[{_WHITE}]{problem_type}[/{_WHITE}]"
 
         prediction = snap.get("problem_prediction", t("prediction_stable"))
         pred_txt = (
-            f"[green]{prediction}[/green]"
+            f"[{_GREEN}]{prediction}[/{_GREEN}]"
             if prediction == t("prediction_stable")
-            else f"[yellow]{prediction}[/yellow]"
+            else f"[{_YELLOW}]{prediction}[/{_YELLOW}]"
         )
         pattern = snap.get("problem_pattern", "...")
-        pat_txt = f"[white]{pattern}[/white]" if pattern != "..." else "[dim]...[/dim]"
+        pat_txt = f"[{_WHITE}]{pattern}[/{_WHITE}]" if pattern != "..." else f"[{_TEXT_DIM}]...[/{_TEXT_DIM}]"
 
         prob_tbl = self._kv_table(width, key_width=14)
         prob_tbl.add_row(f"{t('problem_type')}:", pt_txt)
         prob_tbl.add_row(f"{t('prediction')}:", pred_txt)
-        prob_tbl.add_row(f"{t('pattern')}:", pat_txt)
+        if tier != "compact":
+            prob_tbl.add_row(f"{t('pattern')}:", pat_txt)
 
         # ── Route analysis ──
         hops = snap.get("route_hops", [])
         hop_count = len(hops)
-        hop_count_txt = f"[white]{hop_count}[/white]" if hop_count > 0 else "[dim]—[/dim]"
+        hop_count_txt = f"[{_WHITE}]{hop_count}[/{_WHITE}]" if hop_count > 0 else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
         problematic_hop = snap.get("route_problematic_hop")
-        ph_txt = f"[red]{problematic_hop}[/red]" if problematic_hop else f"[green]{t('none_label')}[/green]"
+        ph_txt = f"[{_RED}]{problematic_hop}[/{_RED}]" if problematic_hop else f"[{_GREEN}]{t('none_label')}[/{_GREEN}]"
 
         route_changed = snap.get("route_changed", False)
         rs_txt = (
-            f"[yellow]{t('route_changed')}[/yellow]"
+            f"[{_YELLOW}]{t('route_changed')}[/{_YELLOW}]"
             if route_changed
-            else f"[green]{t('route_stable')}[/green]"
+            else f"[{_GREEN}]{t('route_stable')}[/{_GREEN}]"
         )
 
         avg_route_latency = None
         if hops:
-            lat_list = [h.get("avg_latency") for h in hops if h.get("avg_latency")]
+            lat_list: list[float] = [h["avg_latency"] for h in hops if h.get("avg_latency") is not None]
             if lat_list:
                 avg_route_latency = statistics.mean(lat_list)
-        avg_rl_txt = f"[white]{avg_route_latency:.1f}[/white] {t('ms')}" if avg_route_latency else "[dim]—[/dim]"
-
-        route_diff = snap.get("route_last_diff_count", 0)
-        route_cons = snap.get("route_consecutive_changes", 0)
-        route_last_change = snap.get("route_last_change_time")
-        diff_txt = f"[dim]{route_diff} {t('hops_unit')}[/dim]" if route_diff else "[dim]—[/dim]"
-        if route_cons:
-            since_str = self._fmt_since(route_last_change) if route_last_change else "..."
-            cons_txt = f"[dim]{route_cons} / {since_str}[/dim]"
-        else:
-            cons_txt = "[dim]—[/dim]"
+        avg_rl_txt = f"[{_WHITE}]{avg_route_latency:.1f}[/{_WHITE}] {t('ms')}" if avg_route_latency else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
         route_tbl = self._kv_table(width, key_width=14)
         route_tbl.add_row(f"{t('route_label')}:", rs_txt)
         route_tbl.add_row(f"{t('hops_count')}:", hop_count_txt)
         route_tbl.add_row(f"{t('problematic_hop_short')}:", ph_txt)
-        route_tbl.add_row(f"{t('avg_latency_short')}:", avg_rl_txt)
-        route_tbl.add_row(f"{t('changed_hops')}:", diff_txt)
-        route_tbl.add_row(f"{t('changes')}:", cons_txt)
 
-        # Last problem time
+        if tier != "compact":
+            route_tbl.add_row(f"{t('avg_latency_short')}:", avg_rl_txt)
+
+            route_diff = snap.get("route_last_diff_count", 0)
+            route_cons = snap.get("route_consecutive_changes", 0)
+            route_last_change = snap.get("route_last_change_time")
+            diff_txt = f"[{_TEXT_DIM}]{route_diff} {t('hops_unit')}[/{_TEXT_DIM}]" if route_diff else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+            if route_cons:
+                since_str = self._fmt_since(route_last_change) if route_last_change else "..."
+                cons_txt = f"[{_TEXT_DIM}]{route_cons} / {since_str}[/{_TEXT_DIM}]"
+            else:
+                cons_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+            route_tbl.add_row(f"{t('changed_hops')}:", diff_txt)
+            route_tbl.add_row(f"{t('changes')}:", cons_txt)
+
+        # Last problem
         if snap["last_problem_time"] is None:
-            last_prob_txt = f"[green]{t('never')}[/green]"
+            last_prob_txt = f"[{_GREEN}]{t('never')}[/{_GREEN}]"
         else:
             age = (datetime.now() - snap["last_problem_time"]).total_seconds()
             since_txt = self._fmt_since(snap["last_problem_time"])
-            last_prob_txt = f"[red]{since_txt}[/red]" if age < 60 else f"[yellow]{since_txt}[/yellow]"
+            last_prob_txt = f"[{_RED}]{since_txt}[/{_RED}]" if age < 60 else f"[{_YELLOW}]{since_txt}[/{_YELLOW}]"
 
         prob_time_tbl = self._kv_table(width, key_width=14)
         prob_time_tbl.add_row(f"{t('last_problem')}:", last_prob_txt)
@@ -482,50 +536,42 @@ class MonitorUI:
         )
         return Panel(
             grp,
-            title=f"[bold]{t('analysis')}[/bold]",
+            title=f"[bold {_ACCENT}]{t('analysis')}[/bold {_ACCENT}]",
             title_align="left",
-            border_style="cyan",
+            border_style=_ACCENT_DIM,
             box=box.ROUNDED,
             width=width,
+            style=f"on {_BG_PANEL}",
         )
 
-    def render_hop_panel(self, width: int) -> Panel:
-        """Full-width panel: traceroute-style hop health table."""
+    def render_hop_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         hops = snap.get("hop_monitor_hops", [])
         discovering = snap.get("hop_monitor_discovering", False)
 
+        panel_style = f"on {_BG_PANEL}"
+        title = f"[bold {_ACCENT}]{t('hop_health')}[/bold {_ACCENT}]"
+        border = _ACCENT_DIM
+
         if discovering and not hops:
-            grp = Group(Text.from_markup(f"  [dim]{t('hop_discovering')}[/dim]"))
             return Panel(
-                grp,
-                title=f"[bold]{t('hop_health')}[/bold]",
-                title_align="left",
-                border_style="cyan",
-                box=box.ROUNDED,
-                width=width,
+                Text.from_markup(f"  [{_TEXT_DIM}]{t('hop_discovering')}[/{_TEXT_DIM}]"),
+                title=title, title_align="left", border_style=border,
+                box=box.ROUNDED, width=width, style=panel_style,
             )
 
         if not hops:
-            grp = Group(Text.from_markup(f"  [dim]{t('hop_none')}[/dim]"))
             return Panel(
-                grp,
-                title=f"[bold]{t('hop_health')}[/bold]",
-                title_align="left",
-                border_style="cyan",
-                box=box.ROUNDED,
-                width=width,
+                Text.from_markup(f"  [{_TEXT_DIM}]{t('hop_none')}[/{_TEXT_DIM}]"),
+                title=title, title_align="left", border_style=border,
+                box=box.ROUNDED, width=width, style=panel_style,
             )
 
-        # Build Rich Table in traceroute style
         tbl = Table(
-            show_header=True,
-            header_style="bold dim",
-            box=None,
-            padding=(0, 1),
-            expand=True,
+            show_header=True, header_style=f"bold {_TEXT_DIM}",
+            box=None, padding=(0, 1), expand=True,
         )
-        tbl.add_column(t("hop_col_num"), style="dim", width=3, justify="right")
+        tbl.add_column(t("hop_col_num"), style=_TEXT_DIM, width=3, justify="right")
         tbl.add_column(t("hop_col_min"), width=9, justify="right")
         tbl.add_column(t("hop_col_avg"), width=9, justify="right")
         tbl.add_column(t("hop_col_last"), width=9, justify="right")
@@ -535,7 +581,10 @@ class MonitorUI:
         worst_hop = None
         worst_lat = 0.0
 
-        for h in hops:
+        # In compact: limit displayed hops
+        display_hops = hops if tier != "compact" else hops[:8]
+
+        for h in display_hops:
             hop_num = h["hop"]
             lat = h.get("last_latency")
             avg = h.get("avg_latency", 0.0)
@@ -545,52 +594,31 @@ class MonitorUI:
             ip = h.get("ip", "?")
             hostname = h.get("hostname", ip)
 
-            # Host display: hostname [ip] or just ip
-            if hostname and hostname != ip:
-                host_txt = f"{hostname} [dim]\\[{ip}][/dim]"
+            if hostname and hostname != ip and tier != "compact":
+                host_txt = f"{hostname} [{_TEXT_DIM}]\\[{ip}][/{_TEXT_DIM}]"
             else:
                 host_txt = ip
 
-            # Color based on latency
-            def _lat_fmt(val):
+            def _lat_fmt(val: Any) -> str:
                 if val is None:
-                    return f"[red]  *[/red]"
-                if val > HOP_LATENCY_WARN:
-                    return f"[red]{val:.0f} {t('ms')}[/red]"
-                if val > HOP_LATENCY_GOOD:
-                    return f"[yellow]{val:.0f} {t('ms')}[/yellow]"
-                return f"[green]{val:.0f} {t('ms')}[/green]"
+                    return f"[{_RED}]  *[/{_RED}]"
+                c = self._lat_color(val)
+                return f"[{c}]{val:.0f} {t('ms')}[/{c}]"
 
-            if not ok or lat is None:
-                last_txt = f"[red]  *[/red]"
-            else:
-                last_txt = _lat_fmt(lat)
-
+            last_txt = f"[{_RED}]  *[/{_RED}]" if (not ok or lat is None) else _lat_fmt(lat)
             min_txt = _lat_fmt(mn)
             avg_txt = _lat_fmt(avg if avg > 0 else None)
 
-            # Loss color
             if loss > 10:
-                loss_txt = f"[red]{loss:.1f}%[/red]"
+                loss_txt = f"[{_RED}]{loss:.1f}%[/{_RED}]"
             elif loss > 0:
-                loss_txt = f"[yellow]{loss:.1f}%[/yellow]"
+                loss_txt = f"[{_YELLOW}]{loss:.1f}%[/{_YELLOW}]"
             else:
-                loss_txt = f"[green]{loss:.1f}%[/green]"
+                loss_txt = f"[{_GREEN}]{loss:.1f}%[/{_GREEN}]"
 
-            # Row style for down hops
-            row_style = "dim" if (not ok and h.get("total_pings", 0) > 2) else ""
+            row_style = _TEXT_DIM if (not ok and h.get("total_pings", 0) > 2) else ""
+            tbl.add_row(str(hop_num), min_txt, avg_txt, last_txt, loss_txt, host_txt, style=row_style)
 
-            tbl.add_row(
-                str(hop_num),
-                min_txt,
-                avg_txt,
-                last_txt,
-                loss_txt,
-                host_txt,
-                style=row_style,
-            )
-
-            # Track worst
             if not ok:
                 worst_hop = h
                 worst_lat = float("inf")
@@ -598,42 +626,37 @@ class MonitorUI:
                 worst_lat = lat
                 worst_hop = h
 
-        items: list = [tbl]
+        items: list[Table | Text] = [tbl]
 
-        # Worst hop summary line
+        if tier == "compact" and len(hops) > 8:
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]+{len(hops) - 8} more...[/{_TEXT_DIM}]"))
+
         if worst_hop and worst_lat > HOP_LATENCY_GOOD:
             w_ip = worst_hop.get("ip", "?")
             w_num = worst_hop.get("hop", "?")
             if worst_lat == float("inf"):
-                w_txt = f"  [red]{t('hop_worst')}: #{w_num} {w_ip} \u2014 {t('hop_down')}[/red]"
+                items.append(Text.from_markup(
+                    f"  [{_RED}]{t('hop_worst')}: #{w_num} {w_ip} — {t('hop_down')}[/{_RED}]"
+                ))
             else:
-                w_txt = f"  [yellow]{t('hop_worst')}: #{w_num} {w_ip} \u2014 {worst_lat:.0f} {t('ms')}[/yellow]"
-            items.append(Text.from_markup(w_txt))
+                items.append(Text.from_markup(
+                    f"  [{_YELLOW}]{t('hop_worst')}: #{w_num} {w_ip} — {worst_lat:.0f} {t('ms')}[/{_YELLOW}]"
+                ))
 
         if discovering:
-            items.append(Text.from_markup(f"  [dim italic]{t('hop_discovering')}[/dim italic]"))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM} italic]{t('hop_discovering')}[/{_TEXT_DIM} italic]"))
 
-        grp = Group(*items)
         return Panel(
-            grp,
-            title=f"[bold]{t('hop_health')}[/bold]",
-            title_align="left",
-            border_style="cyan",
-            box=box.ROUNDED,
-            width=width,
+            Group(*items),
+            title=title, title_align="left", border_style=border,
+            box=box.ROUNDED, width=width, style=panel_style,
         )
 
-    def _section_header(self, label: str, width: int) -> Text:
-        """Render a dim section divider: ─── LABEL ───────────"""
-        line_len = max(0, width - len(label) - 7)
-        return Text.from_markup(f"  [dim]─── {label} {'─' * line_len}[/dim]")
-
-    def render_monitoring_panel(self, width: int) -> Panel:
-        """Bottom-right: DNS, MTU, TTL, Traceroute + Alerts."""
+    def render_monitoring_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         inner_w = max(20, width - 4)
 
-        # ═══════════════ DNS SECTION ═══════════════
+        # ── DNS ──
         dns_results = snap.get("dns_results", {})
         if dns_results:
             type_parts = []
@@ -646,43 +669,43 @@ class MonitorUI:
                     total_time += ms
                     time_count += 1
                 if status == t("ok"):
-                    type_parts.append(f"[green]{rt}✓[/green]")
+                    type_parts.append(f"[{_GREEN}]{rt}✓[/{_GREEN}]")
                 elif status == t("slow"):
-                    type_parts.append(f"[yellow]{rt}~[/yellow]")
+                    type_parts.append(f"[{_YELLOW}]{rt}~[/{_YELLOW}]")
                 else:
-                    type_parts.append(f"[red]{rt}✗[/red]")
+                    type_parts.append(f"[{_RED}]{rt}✗[/{_RED}]")
             avg_time = total_time / time_count if time_count > 0 else 0
-            dns_types_txt = f"  {' '.join(type_parts)}  [dim]{avg_time:.0f}ms[/dim]"
+            dns_types_txt = f"  {' '.join(type_parts)}  [{_TEXT_DIM}]{avg_time:.0f}ms[/{_TEXT_DIM}]"
         elif snap["dns_resolve_time"] is None:
-            dns_types_txt = f"  [red]{t('error')}[/red]" if SHOW_VISUAL_ALERTS else "  [dim]—[/dim]"
+            dns_types_txt = f"  [{_RED}]{t('error')}[/{_RED}]" if SHOW_VISUAL_ALERTS else f"  [{_TEXT_DIM}]—[/{_TEXT_DIM}]"
         else:
             ms = snap["dns_resolve_time"]
             if snap["dns_status"] == t("ok"):
-                dns_types_txt = f"  [green]OK[/green] [dim]({ms:.0f}ms)[/dim]"
+                dns_types_txt = f"  [{_GREEN}]OK[/{_GREEN}] [{_TEXT_DIM}]({ms:.0f}ms)[/{_TEXT_DIM}]"
             elif snap["dns_status"] == t("slow"):
-                dns_types_txt = f"  [yellow]{t('slow')}[/yellow] [dim]({ms:.0f}ms)[/dim]"
+                dns_types_txt = f"  [{_YELLOW}]{t('slow')}[/{_YELLOW}] [{_TEXT_DIM}]({ms:.0f}ms)[/{_TEXT_DIM}]"
             else:
-                dns_types_txt = f"  [red]{t('error')}[/red]"
+                dns_types_txt = f"  [{_RED}]{t('error')}[/{_RED}]"
 
-        # ═══════════════ BENCHMARK ═══════════════
+        # ── Benchmark ──
         dns_benchmark = snap.get("dns_benchmark", {})
         bench_txt = None
-        if dns_benchmark:
+        if dns_benchmark and tier != "compact":
             parts = []
             total_queries = 0
-            all_avg = []
-            all_std = []
+            all_avg: list[float] = []
+            all_std: list[float] = []
             for tt in ["cached", "uncached", "dotcom"]:
                 r = dns_benchmark.get(tt, {})
-                label = tt[0].upper()
+                lbl = tt[0].upper()
                 if not r.get("success"):
-                    parts.append(f"[red]{label}:✗[/red]")
+                    parts.append(f"[{_RED}]{lbl}:✗[/{_RED}]")
                 else:
-                    ms = r.get("response_time_ms")
-                    val = f"{ms:.0f}" if ms else "—"
+                    ms_val = r.get("response_time_ms")
+                    val = f"{ms_val:.0f}" if ms_val else "—"
                     status = r.get("status", "failed")
-                    color = "green" if status == t("ok") else ("yellow" if status == t("slow") else "red")
-                    parts.append(f"[{color}]{label}:{val}[/{color}]")
+                    color = _GREEN if status == t("ok") else (_YELLOW if status == t("slow") else _RED)
+                    parts.append(f"[{color}]{lbl}:{val}[/{color}]")
                 q = r.get("queries", 0)
                 total_queries = max(total_queries, q)
                 if r.get("avg_ms") is not None:
@@ -691,94 +714,91 @@ class MonitorUI:
                     all_std.append(r["std_dev"])
 
             bench_line = "  " + "  ".join(parts)
-            # Append compact aggregate stats
             if total_queries > 1 and all_avg:
-                stats_suffix = f"[dim]│[/dim] [dim]{total_queries}q"
                 avg_all = sum(all_avg) / len(all_avg)
-                stats_suffix += f" avg:{avg_all:.0f}"
+                stats_suffix = f"[{_TEXT_DIM}]│ {total_queries}q avg:{avg_all:.0f}"
                 if all_std:
-                    avg_std = sum(all_std) / len(all_std)
-                    stats_suffix += f" σ:{avg_std:.0f}"
-                stats_suffix += "ms[/dim]"
+                    avg_std_val = sum(all_std) / len(all_std)
+                    stats_suffix += f" σ:{avg_std_val:.0f}"
+                stats_suffix += f"ms[/{_TEXT_DIM}]"
                 bench_txt = f"{bench_line}  {stats_suffix}"
             else:
                 bench_txt = bench_line
 
-        # ═══════════════ NETWORK METRICS ═══════════════
-        # TTL
+        # ── Network metrics ──
         ttl = snap["last_ttl"]
         ttl_hops = snap["ttl_hops"]
         if ttl:
-            ttl_txt = f"[white]{ttl}[/white]"
+            ttl_txt = f"[{_WHITE}]{ttl}[/{_WHITE}]"
             if ttl_hops:
-                ttl_txt += f" [dim]({ttl_hops} {t('hop_unit')})[/dim]"
+                ttl_txt += f" [{_TEXT_DIM}]({ttl_hops} {t('hop_unit')})[/{_TEXT_DIM}]"
         else:
-            ttl_txt = "[dim]—[/dim]"
+            ttl_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
-        # MTU
         local_mtu = snap["local_mtu"]
         path_mtu = snap["path_mtu"]
         local_txt = f"{local_mtu}" if local_mtu else "—"
         path_txt = f"{path_mtu}" if path_mtu else "—"
-        mtu_val_txt = f"[white]{local_txt}[/white]/[white]{path_txt}[/white]"
+        mtu_val_txt = f"[{_WHITE}]{local_txt}[/{_WHITE}]/[{_WHITE}]{path_txt}[/{_WHITE}]"
 
         mtu_status = snap.get("mtu_status", "...")
         if mtu_status == t("mtu_ok"):
-            mtu_s_txt = f"[green]{mtu_status}[/green]"
+            mtu_s_txt = f"[{_GREEN}]{mtu_status}[/{_GREEN}]"
         elif mtu_status == t("mtu_low"):
-            mtu_s_txt = f"[yellow]{mtu_status}[/yellow]"
+            mtu_s_txt = f"[{_YELLOW}]{mtu_status}[/{_YELLOW}]"
         elif mtu_status == t("mtu_fragmented"):
-            mtu_s_txt = f"[red]{mtu_status}[/red]"
+            mtu_s_txt = f"[{_RED}]{mtu_status}[/{_RED}]"
         else:
-            mtu_s_txt = f"[dim]{mtu_status}[/dim]"
+            mtu_s_txt = f"[{_TEXT_DIM}]{mtu_status}[/{_TEXT_DIM}]"
 
         # Traceroute
         if snap["traceroute_running"]:
-            tr_txt = f"[yellow]{t('traceroute_running')}[/yellow]"
+            tr_txt = f"[{_YELLOW}]{t('traceroute_running')}[/{_YELLOW}]"
         elif snap["last_traceroute_time"]:
-            tr_txt = f"[dim]{self._fmt_since(snap['last_traceroute_time'])}[/dim]"
+            tr_txt = f"[{_TEXT_DIM}]{self._fmt_since(snap['last_traceroute_time'])}[/{_TEXT_DIM}]"
         else:
-            tr_txt = f"[dim]{t('never')}[/dim]"
+            tr_txt = f"[{_TEXT_DIM}]{t('never')}[/{_TEXT_DIM}]"
 
         # Alerts count
         if not SHOW_VISUAL_ALERTS:
-            alert_txt = f"[dim]{t('alerts_off')}[/dim]"
+            alert_txt = f"[{_TEXT_DIM}]{t('alerts_off')}[/{_TEXT_DIM}]"
         else:
             alert_cnt = len(snap["active_alerts"])
-            alert_txt = f"[green]{t('none_label')}[/green]" if alert_cnt == 0 else f"[yellow]{alert_cnt}[/yellow]"
+            alert_txt = f"[{_GREEN}]{t('none_label')}[/{_GREEN}]" if alert_cnt == 0 else f"[{_YELLOW}]{alert_cnt}[/{_YELLOW}]"
 
-        # Network metrics table
         net_tbl = self._dual_kv_table(width)
         net_tbl.add_row(f"{t('ttl')}:", ttl_txt, f"{t('mtu')}:", mtu_val_txt)
         net_tbl.add_row(f"{t('mtu_status_label')}:", mtu_s_txt, f"{t('alerts_label')}:", alert_txt)
         net_tbl.add_row(f"{t('traceroute')}:", tr_txt, "", "")
 
-        # MTU details (only if issues)
+        # MTU details
         mtu_issues = snap.get("mtu_consecutive_issues", 0)
         mtu_extra: list[Text] = []
-        if mtu_issues and mtu_status != t("mtu_ok"):
+        if mtu_issues and mtu_status != t("mtu_ok") and tier != "compact":
             mtu_last_change = snap.get("mtu_last_status_change")
             since_txt = self._fmt_since(mtu_last_change) if mtu_last_change else "..."
-            mtu_extra.append(
-                Text.from_markup(f"  [dim]{t('mtu_issues_label')}: {mtu_issues} {t('checks_unit')} / {since_txt}[/dim]")
-            )
+            mtu_extra.append(Text.from_markup(
+                f"  [{_TEXT_DIM}]{t('mtu_issues_label')}: {mtu_issues} {t('checks_unit')} / {since_txt}[/{_TEXT_DIM}]"
+            ))
 
-        # ═══════════════ ALERTS ═══════════════
+        # ── Alerts ──
         self.monitor.cleanup_alerts()
         alert_lines: list[str] = []
         if SHOW_VISUAL_ALERTS and snap["active_alerts"]:
             for alert in snap["active_alerts"]:
-                icon = {"warning": "▲", "critical": "✖", "info": "●", "success": "✔"}.get(alert["type"], "●")
-                color = {"warning": "yellow", "critical": "red", "info": "white", "success": "green"}.get(alert["type"], "white")
+                icon = {"warning": _DOT_WARN, "critical": _DOT_ERR, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
+                color = {"warning": _YELLOW, "critical": _RED, "info": _WHITE, "success": _GREEN}.get(alert["type"], _WHITE)
                 alert_lines.append(f"  [{color}]{icon} {alert['message']}[/{color}]")
         else:
-            alert_lines.append(f"  [dim]{t('no_alerts')}[/dim]")
-        while len(alert_lines) < ALERT_PANEL_LINES:
-            alert_lines.append(" ")
-        alert_lines = alert_lines[:ALERT_PANEL_LINES]
+            alert_lines.append(f"  [{_TEXT_DIM}]{t('no_alerts')}[/{_TEXT_DIM}]")
 
-        # ═══════════════ ASSEMBLE ═══════════════
-        items: list = [
+        max_alerts = 2 if tier == "compact" else ALERT_PANEL_LINES
+        while len(alert_lines) < max_alerts:
+            alert_lines.append(" ")
+        alert_lines = alert_lines[:max_alerts]
+
+        # ── Assemble ──
+        items: list[Text | Table] = [
             self._section_header(t("dns"), inner_w),
             Text.from_markup(dns_types_txt),
         ]
@@ -792,60 +812,158 @@ class MonitorUI:
         for line in alert_lines:
             items.append(Text.from_markup(line))
 
-        grp = Group(*items)
         return Panel(
-            grp,
-            title=f"[bold]{t('mon')}[/bold]",
+            Group(*items),
+            title=f"[bold {_ACCENT}]{t('mon')}[/bold {_ACCENT}]",
             title_align="left",
-            border_style="cyan",
+            border_style=_ACCENT_DIM,
             box=box.ROUNDED,
             width=width,
+            style=f"on {_BG_PANEL}",
         )
 
-    def render_footer(self, width: int) -> Panel:
+    def render_footer(self, width: int, tier: LayoutTier) -> Panel:
         from config import LOG_FILE, VERSION
         log_path = LOG_FILE.replace(os.path.expanduser("~"), "~")
-        txt = f"[dim]{t('footer').format(log_file=log_path)}[/dim]"
-        # Show update notification
+        txt = f"[{_TEXT_DIM}]{t('footer').format(log_file=log_path)}[/{_TEXT_DIM}]"
         snap = self.monitor.get_stats_snapshot()
         latest_version = snap.get("latest_version")
         if latest_version:
-            txt += f"    [yellow]▲ {t('update_available').format(current=VERSION, latest=latest_version)}[/yellow]"
-        return Panel(txt, border_style="dim", box=box.SIMPLE, width=width)
+            txt += f"    [{_YELLOW}]{_DOT_WARN} {t('update_available').format(current=VERSION, latest=latest_version)}[/{_YELLOW}]"
+        return Panel(txt, border_style=_ACCENT_DIM, box=box.SIMPLE, width=width, style=f"on {_BG}")
 
-    # ══════════════════ layout ══════════════════
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Compact summary (single-panel condensed view)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def render_compact_summary(self, width: int) -> Panel:
+        """Combined summary for compact mode: latency + stats + analysis in one dense panel."""
+        snap = self.monitor.get_stats_snapshot()
+        success_rate = (snap["success"] / snap["total"] * 100) if snap["total"] else 0.0
+        recent = snap["recent_results"]
+        loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
+        jit = snap.get("jitter", 0.0)
+
+        problem_type = snap.get("current_problem_type", t("problem_none"))
+        if problem_type == t("problem_none"):
+            pt_txt = f"[{_GREEN}]{problem_type}[/{_GREEN}]"
+        elif problem_type in [t("problem_isp"), t("problem_dns")]:
+            pt_txt = f"[{_RED}]{problem_type}[/{_RED}]"
+        else:
+            pt_txt = f"[{_YELLOW}]{problem_type}[/{_YELLOW}]"
+
+        tbl = self._dual_kv_table(width)
+        sr_color = _GREEN if success_rate > 95 else (_YELLOW if success_rate > 80 else _RED)
+        l30_color = _GREEN if loss30 < 1 else (_YELLOW if loss30 < 5 else _RED)
+
+        tbl.add_row(
+            f"{t('success_rate')}:", f"[{sr_color}]{success_rate:.1f}%[/{sr_color}]",
+            f"{t('loss_30m')}:", f"[{l30_color}]{loss30:.1f}%[/{l30_color}]",
+        )
+        tbl.add_row(
+            f"{t('jitter')}:", f"[{_WHITE}]{jit:.1f} {t('ms')}[/{_WHITE}]",
+            f"{t('problem_type')}:", pt_txt,
+        )
+
+        return Panel(
+            tbl,
+            title=f"[bold {_ACCENT}]{t('analysis')}[/bold {_ACCENT}]",
+            title_align="left",
+            border_style=_ACCENT_DIM,
+            box=box.ROUNDED,
+            width=width,
+            style=f"on {_BG_PANEL}",
+        )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Layout generation
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def generate_layout(self) -> Layout:
-        w = max(100, self.console.size.width)
+        w = max(60, self.console.size.width)
+        tier = self._get_tier()
         inner = w - 2
+
+        layout = Layout(name="root")
+
+        if tier == "compact":
+            return self._layout_compact(layout, w, inner)
+        elif tier == "wide":
+            return self._layout_wide(layout, w, inner)
+        else:
+            return self._layout_standard(layout, w, inner)
+
+    def _layout_compact(self, layout: Layout, w: int, inner: int) -> Layout:
+        """Single-column layout for narrow terminals."""
+        layout.split_column(
+            Layout(self.render_header(w, "compact"), size=3, name="header"),
+            Layout(self.render_status_bar(w, "compact"), size=3, name="status"),
+            Layout(self.render_latency_panel(w, "compact"), name="latency", ratio=1),
+            Layout(self.render_compact_summary(w), name="summary", size=6),
+            Layout(self.render_monitoring_panel(w, "compact"), name="mon", ratio=1),
+            Layout(self.render_footer(w, "compact"), size=3, name="footer"),
+        )
+        return layout
+
+    def _layout_standard(self, layout: Layout, w: int, inner: int) -> Layout:
+        """Two-column layout for normal terminals."""
         left_w = (inner // 2) - 1
         right_w = inner - left_w - 1
 
-        layout = Layout(name="root")
         layout.split_column(
-            Layout(self.render_header(w), size=3, name="header"),
-            Layout(self.render_status_bar(w), size=3, name="status"),
+            Layout(self.render_header(w, "standard"), size=3, name="header"),
+            Layout(self.render_status_bar(w, "standard"), size=3, name="status"),
             Layout(name="body", ratio=1),
-            Layout(self.render_footer(w), size=3, name="footer"),
+            Layout(self.render_footer(w, "standard"), size=3, name="footer"),
         )
 
         body = Layout(name="body_inner")
         body.split_column(
             Layout(name="upper", ratio=1),
             Layout(name="lower", ratio=1),
-            Layout(self.render_hop_panel(w), name="hops", ratio=1),
+            Layout(self.render_hop_panel(w, "standard"), name="hops", ratio=1),
         )
         body["upper"].split_row(
-            Layout(self.render_latency_panel(left_w), name="latency"),
+            Layout(self.render_latency_panel(left_w, "standard"), name="latency"),
             Layout(name="stats_trends", ratio=1),
         )
         body["upper"]["stats_trends"].split_column(
-            Layout(self.render_stats_panel(right_w), name="stats"),
-            Layout(self.render_trend_panel(right_w), name="trends"),
+            Layout(self.render_stats_panel(right_w, "standard"), name="stats"),
+            Layout(self.render_trend_panel(right_w, "standard"), name="trends"),
         )
         body["lower"].split_row(
-            Layout(self.render_analysis_panel(left_w), name="analysis"),
-            Layout(self.render_monitoring_panel(right_w), name="mon"),
+            Layout(self.render_analysis_panel(left_w, "standard"), name="analysis"),
+            Layout(self.render_monitoring_panel(right_w, "standard"), name="mon"),
+        )
+        layout["body"].update(body)
+        return layout
+
+    def _layout_wide(self, layout: Layout, w: int, inner: int) -> Layout:
+        """Three-column layout for wide terminals."""
+        col_w = (inner - 2) // 3
+
+        layout.split_column(
+            Layout(self.render_header(w, "wide"), size=3, name="header"),
+            Layout(self.render_status_bar(w, "wide"), size=3, name="status"),
+            Layout(name="body", ratio=1),
+            Layout(self.render_hop_panel(w, "wide"), name="hops", ratio=1),
+            Layout(self.render_footer(w, "wide"), size=3, name="footer"),
+        )
+
+        body = Layout(name="body_inner")
+        body.split_row(
+            Layout(name="col1", ratio=1),
+            Layout(name="col2", ratio=1),
+            Layout(name="col3", ratio=1),
+        )
+        body["col1"].update(self.render_latency_panel(col_w, "wide"))
+        body["col2"].split_column(
+            Layout(self.render_stats_panel(col_w, "wide"), name="stats", ratio=1),
+            Layout(self.render_trend_panel(col_w, "wide"), name="trends", ratio=1),
+        )
+        body["col3"].split_column(
+            Layout(self.render_analysis_panel(col_w, "wide"), name="analysis", ratio=1),
+            Layout(self.render_monitoring_panel(col_w, "wide"), name="mon", ratio=1),
         )
         layout["body"].update(body)
         return layout

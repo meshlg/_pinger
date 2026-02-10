@@ -125,6 +125,7 @@ class HopMonitorService:
         hops: List[HopStatus] = []
         seen_ips: set = set()
 
+        proc: subprocess.Popen[str] | None = None
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -134,6 +135,9 @@ class HopMonitorService:
                 errors="replace",
             )
             deadline = time.time() + 60
+
+            if proc.stdout is None:
+                return hops
 
             for raw_line in iter(proc.stdout.readline, ""):
                 if time.time() > deadline:
@@ -157,13 +161,15 @@ class HopMonitorService:
                             pass
                     logging.debug(f"Hop {hop.hop_number}: {hop.ip} ({hop.hostname})")
 
-            proc.stdout.close()
+            if proc.stdout is not None:
+                proc.stdout.close()
             proc.wait(timeout=5)
         except Exception as exc:
             logging.error(f"Traceroute exec failed: {exc}")
         finally:
             try:
-                proc.kill()
+                if proc is not None:
+                    proc.kill()
             except Exception:
                 pass
 

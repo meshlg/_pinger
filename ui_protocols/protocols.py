@@ -8,7 +8,10 @@ UI should depend on abstractions, not concrete implementations.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TYPE_CHECKING, runtime_checkable
+
+if TYPE_CHECKING:
+    from stats_repository import StatsSnapshot
 
 
 @runtime_checkable
@@ -25,12 +28,12 @@ class StatsDataProvider(Protocol):
     - RemoteMonitor (for distributed scenarios)
     """
     
-    def get_stats_snapshot(self) -> dict[str, Any]:
+    def get_stats_snapshot(self) -> StatsSnapshot:
         """
         Get an immutable snapshot of current statistics.
         
         Returns:
-            Dictionary containing all current statistics data including:
+            StatsSnapshot containing all current statistics data including:
             - total, success, failure counts
             - latency statistics (min, max, current)
             - connection status

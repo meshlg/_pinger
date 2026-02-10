@@ -46,7 +46,7 @@ class PingerApp:
         if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, handler)
         if hasattr(signal, "SIGHUP"):
-            signal.signal(signal.SIGHUP, handler)  # Terminal closed (x button)
+            signal.signal(signal.SIGHUP, handler)  # Terminal closed (x button)  # type: ignore[attr-defined]
 
     async def run(self) -> None:
         self._install_signal_handlers()

@@ -8,9 +8,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Any, TypeVar
-
-T = TypeVar('T')
+from typing import Any
 
 from config import (
     ALERT_ON_HIGH_LATENCY,
@@ -58,7 +56,7 @@ from config import (
 
 # Core handlers (refactored from ping_once)
 from core import PingHandler, AlertHandler, MetricsHandler
-from stats_repository import StatsRepository
+from stats_repository import StatsRepository, StatsSnapshot
 from services import (
     PingService,
     DNSService,
@@ -157,7 +155,7 @@ class Monitor:
         """Backward compat - use stats_repo.get_recent_results() instead."""
         return self.stats_repo.get_recent_results()
 
-    def get_stats_snapshot(self) -> dict[str, Any]:
+    def get_stats_snapshot(self) -> StatsSnapshot:
         """Get immutable snapshot for UI."""
         return self.stats_repo.get_snapshot()
 
@@ -223,7 +221,7 @@ class Monitor:
         self._shutdown_complete.set()
         logging.info("Monitor shutdown complete")
 
-    async def run_blocking(self, func, *args, **kwargs) -> T:
+    async def run_blocking(self, func, *args, **kwargs) -> Any:
         """Run blocking function in executor."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
@@ -759,7 +757,7 @@ class Monitor:
         self._check_connection_lost_threshold(snap)
         self._check_jitter_threshold(snap)
 
-    def _check_packet_loss_threshold(self, loss30: float, snap: dict) -> None:
+    def _check_packet_loss_threshold(self, loss30: float, snap: StatsSnapshot) -> None:
         """Check packet loss threshold."""
         was_high = self.stats_repo.get_threshold_state("high_packet_loss")
         
@@ -784,7 +782,7 @@ class Monitor:
                     "info"
                 )
 
-    def _check_avg_latency_threshold(self, snap: dict) -> None:
+    def _check_avg_latency_threshold(self, snap: StatsSnapshot) -> None:
         """Check average latency threshold."""
         success = snap["success"]
         avg = (snap["total_latency_sum"] / success) if success else 0.0
@@ -810,7 +808,7 @@ class Monitor:
                     "info"
                 )
 
-    def _check_connection_lost_threshold(self, snap: dict) -> None:
+    def _check_connection_lost_threshold(self, snap: StatsSnapshot) -> None:
         """Check consecutive losses threshold."""
         cons_losses = snap["consecutive_losses"]
         was_lost = self.stats_repo.get_threshold_state("connection_lost")
@@ -837,7 +835,7 @@ class Monitor:
                 )
                 logging.info("Connection restored")
 
-    def _check_jitter_threshold(self, snap: dict) -> None:
+    def _check_jitter_threshold(self, snap: StatsSnapshot) -> None:
         """Check jitter threshold."""
         jitter = snap["jitter"]
         was_high = self.stats_repo.get_threshold_state("high_jitter")

@@ -38,8 +38,8 @@ def check_update_available() -> tuple[bool, str, Optional[str]]:
     
     # Simple version comparison (assumes semver format X.Y.Z, tolerates suffixes like -rc1)
     try:
-        current_parts = [int(re.match(r"\d+", x).group()) for x in VERSION.split(".") if re.match(r"\d+", x)]
-        latest_parts = [int(re.match(r"\d+", x).group()) for x in latest.split(".") if re.match(r"\d+", x)]
+        current_parts = [int(m.group()) for x in VERSION.split(".") if (m := re.match(r"\d+", x)) is not None]
+        latest_parts = [int(m.group()) for x in latest.split(".") if (m := re.match(r"\d+", x)) is not None]
     except (AttributeError, ValueError):
         logging.debug(f"Cannot parse version strings: current={VERSION}, latest={latest}")
         return False, VERSION, latest

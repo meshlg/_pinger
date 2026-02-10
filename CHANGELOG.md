@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-02-11
+### Added
+- **Adaptive UI Redesign** — Redesigned terminal UI to be responsive with 3 size tiers (compact, standard, wide).
+- **Black & Orange Theme** — New high-contrast visual style with true black background and warm orange accents.
+- **Adaptive Information Density** — Dynamic adjustment of charts, stats, and tables based on terminal window size.
+
+### Fixed
+- **Type Checking Errors** — Resolved all 24+ Pyright type-checking errors across the entire project.
+- **Optional Member Safety** — Added None guards and proper type checks for system interactions and regex matches.
+
+### Changed
+- **Type Annotation Consistency** — Improved TypedDict definitions and function signatures for better IDE support.
+- **Revised Visual Hierarchy** — Status bar and primary data panels now have increased prominence.
+
 ## [2.3.3] - 2026-02-10
 ### Changed
 - **Major architecture refactoring** — Improved code organization following SOLID principles

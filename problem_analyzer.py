@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
-    from stats_repository import StatsRepository
+    from stats_repository import StatsRepository, StatsSnapshot
 
 from config import (
     PREDICTION_WINDOW,
@@ -119,7 +119,7 @@ class ProblemAnalyzer:
         if not type_counts:
             return "..."
 
-        dominant_type = max(type_counts, key=type_counts.get)
+        dominant_type = max(type_counts, key=lambda k: type_counts[k])
         dominant_count = type_counts[dominant_type]
 
         if dominant_count >= len(self.problem_history) * 0.5:
@@ -135,16 +135,18 @@ class ProblemAnalyzer:
 
         return "..."
 
-    def _record_problem(self, problem_type: str, snap: dict[str, Any]) -> None:
+    def _record_problem(self, problem_type: str, snap: StatsSnapshot) -> None:
         """Record problem occurrence in history."""
         now = datetime.now()
         last_record = self.problem_history[-1] if self.problem_history else None
 
         # Suppress duplicate problems within cooldown window
         if last_record and last_record.get("type") == problem_type:
-            delta = (now - last_record.get("timestamp")).total_seconds()
-            if delta < PROBLEM_LOG_SUPPRESSION_SECONDS:
-                return
+            last_ts = last_record.get("timestamp")
+            if last_ts is not None:
+                delta = (now - last_ts).total_seconds()
+                if delta < PROBLEM_LOG_SUPPRESSION_SECONDS:
+                    return
 
         problem_record = {
             "type": problem_type,

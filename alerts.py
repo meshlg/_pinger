@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from config import (
+    StatsDict,
     ENABLE_SOUND_ALERTS,
     ALERT_COOLDOWN,
     MAX_ACTIVE_ALERTS,
@@ -27,7 +28,7 @@ def play_alert_sound() -> None:
         pass
 
 
-def should_play_alert(stats_lock: threading.RLock, stats: Dict[str, Any]) -> bool:
+def should_play_alert(stats_lock: threading.RLock, stats: StatsDict) -> bool:
     if not ENABLE_SOUND_ALERTS:
         return False
     with stats_lock:
@@ -37,7 +38,7 @@ def should_play_alert(stats_lock: threading.RLock, stats: Dict[str, Any]) -> boo
     return (datetime.now() - last).total_seconds() >= ALERT_COOLDOWN
 
 
-def trigger_alert(stats_lock: threading.RLock, stats: Dict[str, Any], _kind: str) -> None:
+def trigger_alert(stats_lock: threading.RLock, stats: StatsDict, _kind: str) -> None:
     if should_play_alert(stats_lock, stats):
         play_alert_sound()
         with stats_lock:
@@ -46,7 +47,7 @@ def trigger_alert(stats_lock: threading.RLock, stats: Dict[str, Any], _kind: str
 
 def add_visual_alert(
     stats_lock: threading.RLock,
-    stats: Dict[str, Any],
+    stats: StatsDict,
     message: str,
     alert_type: str = "warning",
 ) -> None:
@@ -58,7 +59,7 @@ def add_visual_alert(
             stats["active_alerts"].pop(0)
 
 
-def clean_old_alerts(stats_lock: threading.RLock, stats: Dict[str, Any]) -> None:
+def clean_old_alerts(stats_lock: threading.RLock, stats: StatsDict) -> None:
     now = datetime.now()
     with stats_lock:
         stats["active_alerts"] = [

@@ -10,6 +10,7 @@ from typing import Any, TypedDict, Optional
 from config import (
     create_stats,
     t,
+    StatsDict,
     ThresholdStates,
     WINDOW_SIZE,
     LATENCY_WINDOW,
@@ -41,6 +42,7 @@ class StatsSnapshot(TypedDict):
     dns_resolve_time: float | None
     dns_status: str
     dns_results: dict[str, Any] | None  # Per-record-type DNS results
+    dns_benchmark: dict[str, Any]
     last_traceroute_time: datetime | None
     traceroute_running: bool
     jitter: float
@@ -78,7 +80,7 @@ class StatsRepository:
     """
 
     def __init__(self) -> None:
-        self._stats: dict[str, Any] = create_stats()
+        self._stats: StatsDict = create_stats()
         self._recent_results: deque[bool] = deque(maxlen=WINDOW_SIZE)
         self._stats["latencies"] = deque(maxlen=LATENCY_WINDOW)
         self._stats["jitter_history"] = deque(maxlen=LATENCY_WINDOW)
@@ -92,7 +94,7 @@ class StatsRepository:
         """Get the stats lock for atomic operations."""
         return self._lock
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> StatsDict:
         """Get direct stats dict (for service updates). Use with lock!"""
         return self._stats
 
@@ -123,7 +125,12 @@ class StatsRepository:
                 "last_problem_time": self._stats["last_problem_time"],
                 "previous_ip": self._stats["previous_ip"],
                 "ip_change_time": self._stats["ip_change_time"],
-                "threshold_states": dict(self._stats["threshold_states"]),
+                "threshold_states": ThresholdStates(
+                    high_packet_loss=self._stats["threshold_states"]["high_packet_loss"],
+                    high_avg_latency=self._stats["threshold_states"]["high_avg_latency"],
+                    connection_lost=self._stats["threshold_states"]["connection_lost"],
+                    high_jitter=self._stats["threshold_states"]["high_jitter"],
+                ),
                 "dns_resolve_time": self._stats["dns_resolve_time"],
                 "dns_status": self._stats["dns_status"],
                 "dns_results": dict(self._stats.get("dns_results", {})),

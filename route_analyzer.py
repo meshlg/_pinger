@@ -125,7 +125,7 @@ class RouteAnalyzer:
         changed, diff_count, diff_indices = self.compare_routes(hops)
 
         # Calculate average latency across all hops
-        latencies = [h.get("avg_latency") for h in hops if h.get("avg_latency")]
+        latencies: list[float] = [h["avg_latency"] for h in hops if h.get("avg_latency") is not None]
         avg_route_latency = statistics.mean(latencies) if latencies else None
 
         # Save route to history
