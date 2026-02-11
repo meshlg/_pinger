@@ -304,6 +304,8 @@ ENABLE_VERSION_CHECK = True
 VERSION_CHECK_INTERVAL = 3600  # Check every hour (seconds)
 ```
 
+![Version Check](assets/update.jpg)
+
 The application automatically checks for updates every hour (configurable). When a new version is available, you'll see an indicator in the header:
 
 - `v2.3.1 → v2.4.0` — Update available (yellow arrow)
