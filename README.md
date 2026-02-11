@@ -127,6 +127,8 @@ Six real-time panels track your connection status — from edge latency to route
 - Comparison of multiple DNS resolvers in parallel
 
 ### ⚑ Smart Alerts
+ 
+![Smart Alerts](assets/notifications.jpg)
 
 - Audio + visual alerts for latency, jitter, packet loss, and connection drops
 - Hysteresis to prevent flickering — alerts trigger only on state changes
