@@ -70,6 +70,11 @@ class TracerouteService:
                 ]
                 encoding = "utf-8"
             
+            # Use creationflags on Windows to prevent orphan processes
+            kwargs = {}
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -77,6 +82,7 @@ class TracerouteService:
                 timeout=30,
                 encoding=encoding,
                 errors="replace",
+                **kwargs,
             )
             return result.stdout
         except subprocess.TimeoutExpired:

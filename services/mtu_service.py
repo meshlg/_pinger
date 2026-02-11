@@ -40,6 +40,7 @@ class MTUService:
             timeout=5,
             encoding="oem",
             errors="replace",
+            creationflags=subprocess.CREATE_NO_WINDOW,  # type: ignore[attr-defined]
         )
         for line in result.stdout.split("\n"):
             line = line.strip()
@@ -100,6 +101,11 @@ class MTUService:
                     encoding = "utf-8"
 
                 try:
+                    # Use creationflags on Windows to prevent orphan processes
+                    kwargs = {}
+                    if sys.platform == "win32":
+                        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+                    
                     result = subprocess.run(
                         cmd,
                         capture_output=True,
@@ -107,6 +113,7 @@ class MTUService:
                         timeout=5,
                         encoding=encoding,
                         errors="replace",
+                        **kwargs,
                     )
                 except subprocess.TimeoutExpired:
                     # Timeout means packet was too large

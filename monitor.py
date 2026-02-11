@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -113,6 +114,8 @@ class Monitor:
         self._executor_tasks: set[asyncio.Task] = set()
         self.stop_event = asyncio.Event()
         self._shutdown_complete = asyncio.Event()
+        self._active_subprocesses: set[subprocess.Popen] = set()
+        self._subprocess_lock = __import__('threading').Lock()
         
         # Memory monitoring counter (check every N pings)
         self._ping_counter = 0
@@ -191,12 +194,42 @@ class Monitor:
         """Get immutable snapshot for UI."""
         return self.stats_repo.get_snapshot()
 
+    def register_subprocess(self, proc: subprocess.Popen) -> None:
+        """Register a child subprocess for tracking."""
+        with self._subprocess_lock:
+            self._active_subprocesses.add(proc)
+
+    def unregister_subprocess(self, proc: subprocess.Popen) -> None:
+        """Unregister a completed subprocess."""
+        with self._subprocess_lock:
+            self._active_subprocesses.discard(proc)
+
+    def _kill_all_subprocesses(self) -> None:
+        """Kill all tracked child subprocesses."""
+        with self._subprocess_lock:
+            procs = list(self._active_subprocesses)
+            self._active_subprocesses.clear()
+        for proc in procs:
+            try:
+                proc.kill()
+                logging.debug(f"Killed subprocess pid={proc.pid}")
+            except Exception:
+                pass
+        # Also ask services to kill their tracked processes
+        try:
+            self.hop_monitor_service.kill_active_processes()
+        except Exception:
+            pass
+
     def shutdown(self) -> None:
         """Shutdown the monitor gracefully with timeout and force kill fallback."""
         logging.info("Monitor shutdown initiated...")
         
         # Signal all background tasks to stop
         self.stop_event.set()
+        
+        # Kill all tracked child subprocesses FIRST
+        self._kill_all_subprocesses()
         
         # Cancel any pending executor tasks
         for task in list(self._executor_tasks):
@@ -252,6 +285,14 @@ class Monitor:
         
         self._shutdown_complete.set()
         logging.info("Monitor shutdown complete")
+        
+        # Force exit if threads are still hanging
+        import threading as _threading
+        alive = [t for t in _threading.enumerate()
+                 if t.is_alive() and not t.daemon and t != _threading.main_thread()]
+        if alive:
+            logging.warning(f"Force exiting: {len(alive)} non-daemon threads still alive")
+            os._exit(0)
 
     async def run_blocking(self, func, *args, **kwargs) -> Any:
         """Run blocking function in executor."""
@@ -550,6 +591,11 @@ class Monitor:
                     cmd = [ping_cmd, "-c", "1", host]
                 encoding = "utf-8"
             
+            # Use creationflags on Windows to prevent orphan processes
+            kwargs: dict[str, Any] = {}
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -557,6 +603,7 @@ class Monitor:
                 timeout=2,
                 encoding=encoding,
                 errors="replace",
+                **kwargs,
             )
             
             ttl_match = re.search(r"TTL[=:\s]+(\d+)", result.stdout, re.IGNORECASE)

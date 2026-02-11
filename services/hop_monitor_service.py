@@ -68,6 +68,7 @@ class HopMonitorService:
         self._last_discovery: float = 0.0
         self._rediscovery_requested = threading.Event()
         self._on_hop_callback = None  # called when a new hop is discovered
+        self._active_proc: subprocess.Popen | None = None  # tracked for shutdown kill
 
     # ── Discovery ──
 
@@ -127,13 +128,20 @@ class HopMonitorService:
 
         proc: subprocess.Popen[str] | None = None
         try:
+            # Use creationflags on Windows to prevent orphan processes
+            popen_kwargs = {}
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 encoding=encoding,
                 errors="replace",
+                **popen_kwargs,
             )
+            self._active_proc = proc
             deadline = time.time() + 60
 
             if proc.stdout is None:
@@ -167,6 +175,7 @@ class HopMonitorService:
         except Exception as exc:
             logging.error(f"Traceroute exec failed: {exc}")
         finally:
+            self._active_proc = None
             try:
                 if proc is not None:
                     proc.kill()
@@ -208,6 +217,16 @@ class HopMonitorService:
 
     # ── Ping hops ──
 
+    def kill_active_processes(self) -> None:
+        """Kill any running subprocess (called during shutdown)."""
+        proc = self._active_proc
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            self._active_proc = None
+
     def ping_all_hops(self) -> None:
         """Ping each discovered hop in parallel and update status."""
         with self._lock:
@@ -243,6 +262,11 @@ class HopMonitorService:
                 cmd = ["ping", "-c", "1", "-W", str(HOP_PING_TIMEOUT), ip]
                 encoding = "utf-8"
 
+            # Use creationflags on Windows to prevent orphan processes
+            run_kwargs = {}
+            if sys.platform == "win32":
+                run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -250,6 +274,7 @@ class HopMonitorService:
                 timeout=HOP_PING_TIMEOUT + 0.5,  # subprocess timeout slightly higher
                 encoding=encoding,
                 errors="replace",
+                **run_kwargs,
             )
             stdout = result.stdout or ""
 

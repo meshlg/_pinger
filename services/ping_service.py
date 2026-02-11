@@ -136,6 +136,11 @@ class PingService:
                     cmd = [ping_cmd, "-c", "1", host]
                 encoding = "utf-8"
             
+            # Use creationflags on Windows to prevent orphan processes
+            kwargs: dict[str, Any] = {}
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -143,6 +148,7 @@ class PingService:
                 timeout=2,
                 encoding=encoding,
                 errors="replace",
+                **kwargs,
             )
             stdout = result.stdout or ""
             

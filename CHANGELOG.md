@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-02-11
+### Fixed
+- **Critical: Background process zombies** — Fixed issue where background processes (ping, traceroute) would persist after application exit on Windows.
+  - Implemented robust signal handling in `main.py` catching `SIGINT`, `SIGTERM`, and Windows Console Close events.
+  - Added `creationflags=subprocess.CREATE_NO_WINDOW` to all subprocess calls to prevent orphaned console windows.
+  - Added `monitor.shutdown()` logic to explicitly track and kill all child subprocesses.
+  - Added `atexit` safety net and `os._exit(0)` fallback to guarantee process termination even if threads hang.
+
 ## [2.3.5] - 2026-02-11
 ### Added
 - **Smart Alert Management System** — Intelligent alert processing to reduce alert fatigue
