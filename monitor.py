@@ -51,6 +51,17 @@ from config import (
     HEALTH_PORT,
     MAX_WORKER_THREADS,
     SHUTDOWN_TIMEOUT_SECONDS,
+    # Smart alert settings
+    ENABLE_SMART_ALERTS,
+    ALERT_DEDUP_WINDOW_SECONDS,
+    ALERT_GROUP_WINDOW_SECONDS,
+    ALERT_RATE_LIMIT_PER_MINUTE,
+    ALERT_BURST_LIMIT,
+    ALERT_ESCALATION_TIME_MINUTES,
+    ENABLE_ALERT_DEDUPLICATION,
+    ENABLE_ALERT_GROUPING,
+    ENABLE_DYNAMIC_PRIORITY,
+    ENABLE_ADAPTIVE_THRESHOLDS,
     t,
 )
 
@@ -127,9 +138,30 @@ class Monitor:
         self.problem_analyzer = ProblemAnalyzer(stats_repo=self.stats_repo)
         self.route_analyzer = RouteAnalyzer()
         
+        # Smart Alert Manager (if enabled)
+        self.smart_alert_manager = None
+        if ENABLE_SMART_ALERTS:
+            from core import SmartAlertManager
+            self.smart_alert_manager = SmartAlertManager(
+                stats_repo=self.stats_repo,
+                dedup_window_seconds=ALERT_DEDUP_WINDOW_SECONDS,
+                group_window_seconds=ALERT_GROUP_WINDOW_SECONDS,
+                rate_limit_per_minute=ALERT_RATE_LIMIT_PER_MINUTE,
+                rate_limit_burst=ALERT_BURST_LIMIT,
+                escalation_threshold_minutes=ALERT_ESCALATION_TIME_MINUTES,
+                enable_deduplication=ENABLE_ALERT_DEDUPLICATION,
+                enable_grouping=ENABLE_ALERT_GROUPING,
+                enable_dynamic_priority=ENABLE_DYNAMIC_PRIORITY,
+                enable_adaptive_thresholds=ENABLE_ADAPTIVE_THRESHOLDS,
+            )
+        
         # Core handlers (SRP-compliant)
         self._ping_handler = PingHandler(self.ping_service, TARGET_IP)
-        self._alert_handler = AlertHandler(self.stats_repo, self.traceroute_service)
+        self._alert_handler = AlertHandler(
+            self.stats_repo,
+            self.traceroute_service,
+            smart_alert_manager=self.smart_alert_manager,
+        )
         self._metrics_handler = MetricsHandler(self.stats_repo)
         
         # Infrastructure

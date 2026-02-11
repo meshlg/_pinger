@@ -35,6 +35,14 @@ try:
     ROUTE_CHANGES_TOTAL = Counter("pinger_route_changes_total", "Total significant route changes")
     ROUTE_CHANGED_GAUGE = Gauge("pinger_route_changed", "Is route currently changed (0/1)")
     
+    # Smart Alert System metrics
+    ALERTS_TOTAL = Counter("pinger_alerts_total", "Total alerts generated")
+    ALERTS_DEDUPLICATED_TOTAL = Counter("pinger_alerts_deduplicated_total", "Alerts deduplicated")
+    ALERTS_SUPPRESSED_TOTAL = Counter("pinger_alerts_suppressed_total", "Alerts suppressed")
+    ALERTS_RATE_LIMITED_TOTAL = Counter("pinger_alerts_rate_limited_total", "Alerts rate limited")
+    ALERT_GROUPS_ACTIVE = Gauge("pinger_alert_groups_active", "Active alert groups")
+    ALERT_PRIORITY_GAUGE = Gauge("pinger_alert_priority", "Alerts by priority", ["priority"])
+    
 except ImportError:
     METRICS_AVAILABLE = False
     # Create dummy classes for when prometheus is not available
@@ -55,6 +63,12 @@ except ImportError:
     MTU_STATUS_GAUGE = _DummyGauge()
     ROUTE_CHANGES_TOTAL = _DummyCounter()
     ROUTE_CHANGED_GAUGE = _DummyGauge()
+    ALERTS_TOTAL = _DummyCounter()
+    ALERTS_DEDUPLICATED_TOTAL = _DummyCounter()
+    ALERTS_SUPPRESSED_TOTAL = _DummyCounter()
+    ALERTS_RATE_LIMITED_TOTAL = _DummyCounter()
+    ALERT_GROUPS_ACTIVE = _DummyGauge()
+    ALERT_PRIORITY_GAUGE = _DummyGauge()
     
     def start_http_server(*args, **kwargs):  # type: ignore
         pass

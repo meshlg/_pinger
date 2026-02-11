@@ -154,6 +154,9 @@ LANG: Dict[str, Dict[str, str]] = {
         "alert_connection_restored": "Соединение восстановлено",
         "alert_high_jitter": "Высокий джиттер: {val:.1f}мс",
         "alert_jitter_normalized": "Джиттер нормализовался",
+        # ── Smart alert messages ──
+        "alert_high_latency": "Высокая задержка: {val:.1f}мс",
+        "alert_packet_loss": "Потери пакетов: {val:.1f}%",
         # ── Memory alerts ──
         "alert_memory_exceeded_shutdown": "Лимит памяти превышен ({current}MB > {limit}MB), завершение работы",
         # ── Main app ──
@@ -322,6 +325,9 @@ LANG: Dict[str, Dict[str, str]] = {
         "alert_connection_restored": "Connection restored",
         "alert_high_jitter": "High jitter: {val:.1f}ms",
         "alert_jitter_normalized": "Jitter normalized",
+        # ── Smart alert messages ──
+        "alert_high_latency": "High latency: {val:.1f}ms",
+        "alert_packet_loss": "Packet loss: {val:.1f}%",
         "traceroute": "Traceroute",
         "dns": "DNS",
         "network": "Network",

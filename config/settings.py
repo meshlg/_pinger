@@ -11,7 +11,7 @@ import os
 # Version
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Language Detection
@@ -69,6 +69,46 @@ PACKET_LOSS_THRESHOLD = 5.0
 AVG_LATENCY_THRESHOLD = 100
 CONSECUTIVE_LOSS_THRESHOLD = 5
 JITTER_THRESHOLD = 30
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Smart Alert System
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Enable smart alert features (deduplication, grouping, prioritization, adaptive thresholds)
+ENABLE_SMART_ALERTS = os.environ.get("ENABLE_SMART_ALERTS", "true").lower() in ("true", "1", "yes")
+
+# Alert Deduplication
+ENABLE_ALERT_DEDUPLICATION = os.environ.get("ENABLE_ALERT_DEDUPLICATION", "true").lower() in ("true", "1", "yes")
+ALERT_DEDUP_WINDOW_SECONDS = int(os.environ.get("ALERT_DEDUP_WINDOW_SECONDS", "300"))  # 5 minutes
+ALERT_SIMILARITY_THRESHOLD = float(os.environ.get("ALERT_SIMILARITY_THRESHOLD", "0.85"))  # 0-1, higher = more strict
+
+# Alert Grouping
+ENABLE_ALERT_GROUPING = os.environ.get("ENABLE_ALERT_GROUPING", "true").lower() in ("true", "1", "yes")
+ALERT_GROUP_WINDOW_SECONDS = int(os.environ.get("ALERT_GROUP_WINDOW_SECONDS", "600"))  # 10 minutes
+ALERT_GROUP_MAX_SIZE = int(os.environ.get("ALERT_GROUP_MAX_SIZE", "20"))  # Max alerts in one group
+
+# Dynamic Prioritization
+ENABLE_DYNAMIC_PRIORITY = os.environ.get("ENABLE_DYNAMIC_PRIORITY", "true").lower() in ("true", "1", "yes")
+PRIORITY_BUSINESS_IMPACT_WEIGHT = float(os.environ.get("PRIORITY_BUSINESS_IMPACT_WEIGHT", "0.4"))
+PRIORITY_USER_IMPACT_WEIGHT = float(os.environ.get("PRIORITY_USER_IMPACT_WEIGHT", "0.3"))
+PRIORITY_SERVICE_CRITICALITY_WEIGHT = float(os.environ.get("PRIORITY_SERVICE_CRITICALITY_WEIGHT", "0.2"))
+PRIORITY_TIME_WEIGHT = float(os.environ.get("PRIORITY_TIME_WEIGHT", "0.1"))
+ALERT_ESCALATION_TIME_MINUTES = int(os.environ.get("ALERT_ESCALATION_TIME_MINUTES", "30"))  # Escalate after 30 min
+
+# Adaptive Thresholds
+ENABLE_ADAPTIVE_THRESHOLDS = os.environ.get("ENABLE_ADAPTIVE_THRESHOLDS", "true").lower() in ("true", "1", "yes")
+ADAPTIVE_BASELINE_WINDOW_HOURS = int(os.environ.get("ADAPTIVE_BASELINE_WINDOW_HOURS", "24"))  # Calculate baseline from 24h
+ADAPTIVE_UPDATE_INTERVAL_MINUTES = int(os.environ.get("ADAPTIVE_UPDATE_INTERVAL_MINUTES", "60"))  # Recalculate every hour
+ADAPTIVE_ANOMALY_SIGMA = float(os.environ.get("ADAPTIVE_ANOMALY_SIGMA", "2.0"))  # Std deviations for anomaly detection
+
+# Noise Reduction
+ENABLE_NOISE_REDUCTION = os.environ.get("ENABLE_NOISE_REDUCTION", "true").lower() in ("true", "1", "yes")
+ALERT_RATE_LIMIT_PER_MINUTE = int(os.environ.get("ALERT_RATE_LIMIT_PER_MINUTE", "10"))  # Max alerts per minute
+ALERT_BURST_LIMIT = int(os.environ.get("ALERT_BURST_LIMIT", "5"))  # Max alerts in 10 seconds
+
+# Alert History
+ALERT_HISTORY_SIZE = int(os.environ.get("ALERT_HISTORY_SIZE", "500"))  # Keep last N alerts
+ALERT_HISTORY_RETENTION_HOURS = int(os.environ.get("ALERT_HISTORY_RETENTION_HOURS", "48"))  # Clean old alerts
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IP Change Detection
