@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Callable, Optional, TypeVar
 
 from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, t
-from alerts import add_visual_alert
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -96,7 +95,7 @@ class TracerouteService:
         
         self._stats_repo.set_traceroute_running(True)
         
-        add_visual_alert(self._stats_repo.lock, self._stats_repo.get_stats(), f"[i] {t('traceroute_starting')}", "info")
+        self._stats_repo.add_alert(f"[i] {t('traceroute_starting')}", "info")
         logging.info(f"Starting traceroute to {target}")
         
         try:
@@ -117,24 +116,14 @@ class TracerouteService:
                 handle.write("=" * 70 + "\n")
                 handle.write(data)
             
-            add_visual_alert(
-                self._stats_repo.lock,
-                self._stats_repo.get_stats(),
-                f"[+] {t('traceroute_saved').format(file=filename)}",
-                "success"
-            )
+            self._stats_repo.add_alert(f"[+] {t('traceroute_saved').format(file=filename)}", "success")
             logging.info(f"Traceroute saved: {filename}")
             
             if METRICS_AVAILABLE:
                 TRACEROUTES_SAVED.inc()
                 
         except Exception as exc:
-            add_visual_alert(
-                self._stats_repo.lock,
-                self._stats_repo.get_stats(),
-                f"[!] {t('traceroute_save_failed')}",
-                "warning"
-            )
+            self._stats_repo.add_alert(f"[!] {t('traceroute_save_failed')}", "warning")
             logging.error(f"Failed save traceroute: {exc}")
         finally:
             self._stats_repo.set_traceroute_running(False)

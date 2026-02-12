@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 from config import ENABLE_VERSION_CHECK, VERSION_CHECK_INTERVAL, t
-from alerts import add_visual_alert
 from core.background_task import BackgroundTask
 
 
@@ -31,9 +30,7 @@ class VersionCheckerTask(BackgroundTask):
                 self.stats_repo.set_latest_version(latest, False)
                 logging.info(f"Update available: {current} → {latest}")
                 # Add visual alert for new version
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
+                self.stats_repo.add_alert(
                     f"[i] {t('update_available').format(current=current, latest=latest)}",
                     "info",
                 )

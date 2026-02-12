@@ -6,25 +6,31 @@ from typing import Any
 import requests
 
 
-# HTTPS providers with response field mappings (tried in order)
+# HTTP providers (more reliable, IP-only or with geo info)
 _IP_PROVIDERS: list[dict[str, Any]] = [
     {
-        "url": "https://ipinfo.io/json",
-        "ip": "ip",
-        "country": "country",
-        "country_code": "country",  # ipinfo returns 2-letter code in "country"
-    },
-    {
-        "url": "https://ipapi.co/json/",
-        "ip": "ip",
-        "country": "country_name",
-        "country_code": "country_code",
-    },
-    {
-        "url": "https://ip-api.com/json/",  # has HTTPS on paid plan; free still works via https
+        "url": "http://ip-api.com/json/",
         "ip": "query",
         "country": "country",
         "country_code": "countryCode",
+    },
+    {
+        "url": "http://ifconfig.me/ip",
+        "ip": None,  # returns plain text IP
+        "country": None,
+        "country_code": None,
+    },
+    {
+        "url": "http://icanhazip.com/",
+        "ip": None,  # returns plain text IP
+        "country": None,
+        "country_code": None,
+    },
+    {
+        "url": "http://ipecho.net/plain",
+        "ip": None,  # returns plain text IP
+        "country": None,
+        "country_code": None,
     },
 ]
 
@@ -36,7 +42,7 @@ class IPService:
         self._previous_ip: str | None = None
 
     def get_public_ip_info(self) -> tuple[str, str, str | None]:
-        """Get public IP, country, and country code via HTTPS APIs.
+        """Get public IP, country, and country code via HTTP APIs.
 
         Tries multiple providers in order for resilience.
         """
@@ -45,15 +51,21 @@ class IPService:
                 response = requests.get(
                     provider["url"],
                     timeout=5,
-                    headers={"Accept": "application/json"},
+                    headers={"Accept": "application/json, text/plain"},
                 )
                 if response.status_code == 200:
-                    data = response.json()
-                    ip = data.get(provider["ip"], "")
-                    country = data.get(provider["country"], "N/A")
-                    country_code = data.get(provider["country_code"])
-                    if ip:
-                        return ip, country, country_code
+                    # Handle plain text responses
+                    if provider["ip"] is None:
+                        ip = response.text.strip()
+                        if ip:
+                            return ip, "N/A", None
+                    else:
+                        data = response.json()
+                        ip = data.get(provider["ip"], "")
+                        country = data.get(provider["country"], "N/A") if provider["country"] else "N/A"
+                        country_code = data.get(provider["country_code"]) if provider["country_code"] else None
+                        if ip:
+                            return ip, country, country_code
             except Exception as exc:
                 logging.debug(f"IP provider {provider['url']} failed: {exc}")
                 continue

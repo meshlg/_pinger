@@ -122,9 +122,27 @@ class PingService:
             logging.error(f"pythonping failed: {exc}")
             return False, None
 
-    def _ping_with_system(self, host: str, is_ipv6: bool) -> Tuple[bool, Optional[float]]:
-        """System ping command."""
+    def _run_ping_command(self, host: str, is_ipv6: bool | None = None) -> str | None:
+        """
+        Execute system ping command and return stdout.
+        
+        This is a shared method to avoid code duplication between
+        ping_host() and extract_ttl().
+        
+        Args:
+            host: Target host to ping
+            is_ipv6: Whether host is IPv6 (auto-detected if None)
+            
+        Returns:
+            stdout string or None on error
+        """
         ping_cmd = shutil.which("ping")
+        if not ping_cmd:
+            return None
+            
+        if is_ipv6 is None:
+            is_ipv6 = self._detect_ipv6(host)
+        
         try:
             if sys.platform == "win32":
                 cmd = [ping_cmd, "-n", "1", "-w", "1000", host]
@@ -150,37 +168,69 @@ class PingService:
                 errors="replace",
                 **kwargs,
             )
-            stdout = result.stdout or ""
-            
-            # Parse latency
-            match_time = re.search(
-                r"(?:time|время)\s*[=<>]*\s*([0-9]+[.,]?[0-9]*)",
-                stdout,
-                re.IGNORECASE,
-            )
-            if match_time:
-                return True, float(match_time.group(1).replace(",", "."))
-            
-            if re.search(r"time\s*<\s*1\s*(?:ms|мс)?", stdout, re.IGNORECASE):
-                return True, 0.5
-            
-            match_avg = re.search(
-                r"(?:Average|Среднее)\s*[=:]?\s*([0-9]+)[.,]?[0-9]*\s*(?:ms|мс)?",
-                stdout,
-                re.IGNORECASE,
-            )
-            if match_avg:
-                return True, float(match_avg.group(1))
-            
-            if result.returncode == 0:
-                return True, 0.0
-            return False, None
-            
+            return result.stdout or ""
         except subprocess.TimeoutExpired:
-            return False, None
+            return None
         except Exception as exc:
-            logging.error(f"ping_host exception: {exc}")
+            logging.error(f"ping command failed: {exc}")
+            return None
+
+    def _ping_with_system(self, host: str, is_ipv6: bool) -> Tuple[bool, Optional[float]]:
+        """System ping command."""
+        stdout = self._run_ping_command(host, is_ipv6)
+        if stdout is None:
             return False, None
+        
+        # Parse latency
+        match_time = re.search(
+            r"(?:time|время)\s*[=<>]*\s*([0-9]+[.,]?[0-9]*)",
+            stdout,
+            re.IGNORECASE,
+        )
+        if match_time:
+            return True, float(match_time.group(1).replace(",", "."))
+        
+        if re.search(r"time\s*<\s*1\s*(?:ms|мс)?", stdout, re.IGNORECASE):
+            return True, 0.5
+        
+        match_avg = re.search(
+            r"(?:Average|Среднее)\s*[=:]?\s*([0-9]+)[.,]?[0-9]*\s*(?:ms|мс)?",
+            stdout,
+            re.IGNORECASE,
+        )
+        if match_avg:
+            return True, float(match_avg.group(1))
+        
+        # If we got output but couldn't parse latency, assume success
+        if stdout.strip():
+            return True, 0.0
+        return False, None
+
+    def extract_ttl(self, host: str) -> tuple[int | None, int | None]:
+        """
+        Extract TTL from ping response and estimate hop count.
+        
+        Args:
+            host: Target host to ping
+            
+        Returns:
+            Tuple of (ttl, estimated_hops) or (None, None) on error
+        """
+        stdout = self._run_ping_command(host)
+        if stdout is None:
+            return None, None
+        
+        ttl_match = re.search(r"TTL[=:\s]+(\d+)", stdout, re.IGNORECASE)
+        if ttl_match:
+            ttl = int(ttl_match.group(1))
+            common_initial_ttl_values = [64, 128, 255]
+            estimated_hops = None
+            for initial_ttl in common_initial_ttl_values:
+                if ttl <= initial_ttl:
+                    estimated_hops = initial_ttl - ttl
+                    break
+            return ttl, estimated_hops
+        return None, None
 
     def is_available(self) -> bool:
         """Check if ping functionality is available."""

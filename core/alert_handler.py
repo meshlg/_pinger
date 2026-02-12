@@ -20,8 +20,6 @@ from config import (
     t,
 )
 
-from alerts import trigger_alert, add_visual_alert
-
 if TYPE_CHECKING:
     from stats_repository import StatsRepository
     from services import TracerouteService
@@ -78,19 +76,11 @@ class AlertHandler:
         """Legacy alert processing without smart features."""
         # Handle high latency alert
         if high_latency_triggered:
-            trigger_alert(
-                self.stats_repo.lock,
-                self.stats_repo.get_stats(),
-                "high_latency"
-            )
+            self.stats_repo.trigger_alert_sound("high_latency")
         
         # Handle packet loss alert
         if packet_loss_triggered:
-            trigger_alert(
-                self.stats_repo.lock,
-                self.stats_repo.get_stats(),
-                "loss"
-            )
+            self.stats_repo.trigger_alert_sound("loss")
             self._check_auto_traceroute()
     
     def _process_smart_alerts(
@@ -126,22 +116,12 @@ class AlertHandler:
                 
                 # Only trigger sound/visual for non-suppressed alerts
                 if action == AlertAction.NOTIFY:
-                    trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "high_latency")
+                    self.stats_repo.trigger_alert_sound("high_latency")
                     if group:
-                        add_visual_alert(
-                            self.stats_repo.lock,
-                            self.stats_repo.get_stats(),
-                            f"[!] {group.get_summary()}",
-                            "warning"
-                        )
+                        self.stats_repo.add_alert(f"[!] {group.get_summary()}", "warning")
                 elif action == AlertAction.GROUP and group and group.count == 1:
                     # First alert in group - show it
-                    add_visual_alert(
-                        self.stats_repo.lock,
-                        self.stats_repo.get_stats(),
-                        f"[!] {alert.message}",
-                        "warning"
-                    )
+                    self.stats_repo.add_alert(f"[!] {alert.message}", "warning")
         
         # Process packet loss alert
         if packet_loss_triggered:
@@ -172,14 +152,9 @@ class AlertHandler:
                 action, group = self.smart_alert_manager.process_alert(alert)
                 
                 if action == AlertAction.NOTIFY or (action == AlertAction.GROUP and group and group.priority.value >= AlertPriority.HIGH.value):
-                    trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "loss")
+                    self.stats_repo.trigger_alert_sound("loss")
                     if group:
-                        add_visual_alert(
-                            self.stats_repo.lock,
-                            self.stats_repo.get_stats(),
-                            f"[!] {group.get_summary()}",
-                            "warning"
-                        )
+                        self.stats_repo.add_alert(f"[!] {group.get_summary()}", "warning")
                     self._check_auto_traceroute()
     
     def _check_auto_traceroute(self) -> None:

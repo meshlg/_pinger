@@ -529,3 +529,61 @@ class StatsRepository:
                 cleaned["routes"] = removed
         
         return cleaned
+
+    # ==================== Alert Methods ====================
+
+    def add_alert(self, message: str, alert_type: str = "warning") -> None:
+        """
+        Add a visual alert to active_alerts.
+        
+        Args:
+            message: Alert message to display
+            alert_type: Alert severity (warning, info, success, critical)
+        """
+        from config import MAX_ACTIVE_ALERTS
+        
+        with self._lock:
+            self._stats.setdefault("active_alerts", []).append(
+                {"message": message, "type": alert_type, "time": datetime.now()}
+            )
+            if len(self._stats["active_alerts"]) > MAX_ACTIVE_ALERTS:
+                self._stats["active_alerts"].pop(0)
+
+    def trigger_alert_sound(self, _kind: str = "") -> None:
+        """
+        Trigger alert sound with cooldown.
+        
+        Args:
+            _kind: Alert kind (unused, for compatibility)
+        """
+        from config import ENABLE_SOUND_ALERTS, ALERT_COOLDOWN
+        
+        if not ENABLE_SOUND_ALERTS:
+            return
+            
+        with self._lock:
+            last = self._stats.get("last_alert_time")
+            if last is None or (datetime.now() - last).total_seconds() >= ALERT_COOLDOWN:
+                # Play sound
+                import sys
+                try:
+                    if sys.platform == "win32":
+                        import winsound  # type: ignore
+                        winsound.Beep(1000, 200)
+                    else:
+                        print("\a", end="", flush=True)
+                except Exception:
+                    pass
+                self._stats["last_alert_time"] = datetime.now()
+
+    def clean_old_alerts(self) -> None:
+        """Remove alerts older than ALERT_DISPLAY_TIME."""
+        from config import ALERT_DISPLAY_TIME
+        
+        now = datetime.now()
+        with self._lock:
+            self._stats["active_alerts"] = [
+                a
+                for a in self._stats.get("active_alerts", [])
+                if (now - a["time"]).total_seconds() < ALERT_DISPLAY_TIME
+            ]

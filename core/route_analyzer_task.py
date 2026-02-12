@@ -14,7 +14,6 @@ from config import (
     TARGET_IP,
     t,
 )
-from alerts import add_visual_alert
 from core.background_task import BackgroundTask
 from infrastructure import METRICS_AVAILABLE, ROUTE_CHANGES_TOTAL, ROUTE_CHANGED_GAUGE
 from route_analyzer import RouteAnalyzer
@@ -62,12 +61,7 @@ class RouteAnalyzerTask(BackgroundTask):
         if cons_changes >= ROUTE_CHANGE_CONSECUTIVE:
             if not self.stats_repo.is_route_changed():
                 self.stats_repo.set_route_changed(True)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[i] {t('route_changed')}",
-                    "info",
-                )
+                self.stats_repo.add_alert(f"[i] {t('route_changed')}", "info")
                 if METRICS_AVAILABLE:
                     try:
                         ROUTE_CHANGES_TOTAL.inc()
@@ -82,12 +76,7 @@ class RouteAnalyzerTask(BackgroundTask):
         elif cons_ok >= ROUTE_CHANGE_CONSECUTIVE:
             if self.stats_repo.is_route_changed():
                 self.stats_repo.set_route_changed(False)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[i] {t('route_stable')}",
-                    "info",
-                )
+                self.stats_repo.add_alert(f"[i] {t('route_stable')}", "info")
                 if METRICS_AVAILABLE:
                     try:
                         ROUTE_CHANGED_GAUGE.set(0)
@@ -104,9 +93,4 @@ class RouteAnalyzerTask(BackgroundTask):
 
         # Alert on problematic hop
         if analysis["problematic_hop"]:
-            add_visual_alert(
-                self.stats_repo.lock,
-                self.stats_repo.get_stats(),
-                f"[!] {t('problematic_hop')}: {analysis['problematic_hop']}",
-                "warning",
-            )
+            self.stats_repo.add_alert(f"[!] {t('problematic_hop')}: {analysis['problematic_hop']}", "warning")

@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.9.0042] - 2026-02-12
+### Refactoring
+- **Ping Service Code Deduplication** — Eliminated duplicate ping command execution logic between `TTLMonitorTask._extract_ttl()` and `PingService._ping_with_system()`.
+  - Added shared method `_run_ping_command()` in `PingService` for centralized ping subprocess execution.
+  - Added public method `extract_ttl()` in `PingService` for TTL extraction with hop count estimation.
+  - Refactored `TTLMonitorTask` to delegate TTL extraction to `PingService` (reduced from 79 to 24 lines).
+  - Removed ~50 lines of duplicated code (subprocess setup, platform-specific paths, creationflags).
+
+- **Alert Methods Encapsulation** — Fixed inconsistent thread safety pattern where `add_visual_alert(lock, stats, ...)` required callers to pass lock and stats separately.
+  - Moved `add_visual_alert()`, `trigger_alert()`, and `clean_old_alerts()` into `StatsRepository` as encapsulated methods.
+  - New API: `stats_repo.add_alert(msg, type)`, `stats_repo.trigger_alert_sound(kind)`, `stats_repo.clean_old_alerts()`.
+  - Updated 20+ call sites across `monitor.py`, `core/alert_handler.py`, `core/ip_updater_task.py`, `core/route_analyzer_task.py`, `core/version_checker_task.py`, `services/traceroute_service.py`.
+  - Removed fragile anti-pattern where caller was responsible for correct lock+dict pairing.
+
+### Fixed
+- **IP Detection Failure** — Replaced HTTPS IP providers (rate-limited) with HTTP providers for reliable IP detection.
+  - `ipinfo.io`, `ipapi.co`, `ip-api.com` (HTTPS) were returning 429/403 errors.
+  - Switched to `ip-api.com` (HTTP) as primary provider with fallbacks: `ifconfig.me`, `icanhazip.com`, `ipecho.net`.
+
+- **Requirements.txt Pinned Versions** — Replaced open-ended version specifiers (`>=`) with pinned versions from `poetry.lock`.
+  - Ensures reproducible installs via `pip install -r requirements.txt`.
+  - rich==14.2.0, requests==2.32.5, pythonping==1.1.4, prometheus_client==0.24.1, dnspython==2.8.0, psutil==7.2.2.
+
 ## [2.3.8] - 2026-02-12
 ### Refactoring
 - **Monitor Class Decomposition** — Addressed God Object anti-pattern in `monitor.py` (reduced from 941 to ~520 lines).

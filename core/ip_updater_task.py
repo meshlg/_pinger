@@ -10,7 +10,6 @@ from config import (
     IP_CHECK_INTERVAL,
     t,
 )
-from alerts import add_visual_alert, trigger_alert
 from core.background_task import BackgroundTask
 from services import IPService, HopMonitorService
 
@@ -36,13 +35,11 @@ class IPUpdaterTask(BackgroundTask):
         # Check for IP change
         change_info = self.ip_service.check_ip_change(ip, country, code)
         if change_info:
-            add_visual_alert(
-                self.stats_repo.lock,
-                self.stats_repo.get_stats(),
+            self.stats_repo.add_alert(
                 f"[i] {t('alert_ip_changed').format(old=change_info['old_ip'], new=change_info['new_ip'])}",
                 "info",
             )
-            trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "ip")
+            self.stats_repo.trigger_alert_sound("ip")
             # Trigger immediate hop re-discovery on IP change
             if ENABLE_HOP_MONITORING:
                 self.hop_monitor_service.request_rediscovery()

@@ -67,7 +67,6 @@ from services import (
 )
 from problem_analyzer import ProblemAnalyzer
 from route_analyzer import RouteAnalyzer
-from alerts import add_visual_alert, clean_old_alerts, trigger_alert
 from infrastructure import (
     METRICS_AVAILABLE,
     start_metrics_server,
@@ -376,12 +375,7 @@ class Monitor:
             if exceeded and current_mb is not None:
                 # Memory limit exceeded - trigger graceful shutdown
                 msg = t('alert_memory_exceeded_shutdown').format(current=f"{current_mb:.0f}", limit=MAX_MEMORY_MB)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[X] {msg}",
-                    "critical"
-                )
+                self.stats_repo.add_alert(f"[X] {msg}", "critical")
                 logging.critical(
                     f"Memory limit exceeded: {current_mb:.0f}MB > {MAX_MEMORY_MB}MB. Initiating shutdown."
                 )
@@ -397,19 +391,14 @@ class Monitor:
             
             notification = check_instance_notification()
             if notification:
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    notification,
-                    "warning"
-                )
+                self.stats_repo.add_alert(notification, "warning")
                 logging.info(f"Instance notification: {notification}")
         except Exception:
             pass  # Silently ignore if notification system fails
 
     def cleanup_alerts(self) -> None:
         """Clean old visual alerts."""
-        clean_old_alerts(self.stats_repo.lock, self.stats_repo.get_stats())
+        self.stats_repo.clean_old_alerts()
 
     # ==================== Threshold Checking ====================
 
@@ -439,23 +428,13 @@ class Monitor:
         if loss30 > PACKET_LOSS_THRESHOLD:
             if not was_high:
                 self.stats_repo.update_threshold_state("high_packet_loss", True)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[!] {t('alert_high_loss').format(val=loss30)}",
-                    "warning",
-                )
+                self.stats_repo.add_alert(f"[!] {t('alert_high_loss').format(val=loss30)}", "warning")
                 logging.warning(f"Loss30 exceeded: {loss30:.1f}%")
-                trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "loss")
+                self.stats_repo.trigger_alert_sound("loss")
         else:
             if was_high:
                 self.stats_repo.update_threshold_state("high_packet_loss", False)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[+] {t('alert_loss_normalized')}",
-                    "info"
-                )
+                self.stats_repo.add_alert(f"[+] {t('alert_loss_normalized')}", "info")
 
     def _check_avg_latency_threshold(self, snap: StatsSnapshot) -> None:
         """Check average latency threshold."""
@@ -466,22 +445,12 @@ class Monitor:
         if avg > AVG_LATENCY_THRESHOLD:
             if not was_high:
                 self.stats_repo.update_threshold_state("high_avg_latency", True)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[!] {t('alert_high_avg_latency').format(val=avg)}",
-                    "warning",
-                )
+                self.stats_repo.add_alert(f"[!] {t('alert_high_avg_latency').format(val=avg)}", "warning")
                 logging.warning(f"Avg latency exceeded: {avg:.1f}ms")
         else:
             if was_high:
                 self.stats_repo.update_threshold_state("high_avg_latency", False)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[+] {t('alert_latency_normalized')}",
-                    "info"
-                )
+                self.stats_repo.add_alert(f"[+] {t('alert_latency_normalized')}", "info")
 
     def _check_connection_lost_threshold(self, snap: StatsSnapshot) -> None:
         """Check consecutive losses threshold."""
@@ -491,23 +460,13 @@ class Monitor:
         if cons_losses >= CONSECUTIVE_LOSS_THRESHOLD:
             if not was_lost:
                 self.stats_repo.update_threshold_state("connection_lost", True)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[X] {t('alert_connection_lost').format(n=cons_losses)}",
-                    "critical",
-                )
+                self.stats_repo.add_alert(f"[X] {t('alert_connection_lost').format(n=cons_losses)}", "critical")
                 logging.critical(f"Connection lost: {cons_losses} consecutive")
-                trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "lost")
+                self.stats_repo.trigger_alert_sound("lost")
         else:
             if was_lost:
                 self.stats_repo.update_threshold_state("connection_lost", False)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[+] {t('alert_connection_restored')}",
-                    "success"
-                )
+                self.stats_repo.add_alert(f"[+] {t('alert_connection_restored')}", "success")
                 logging.info("Connection restored")
 
     def _check_jitter_threshold(self, snap: StatsSnapshot) -> None:
@@ -518,19 +477,9 @@ class Monitor:
         if jitter > JITTER_THRESHOLD:
             if not was_high:
                 self.stats_repo.update_threshold_state("high_jitter", True)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[!] {t('alert_high_jitter').format(val=jitter)}",
-                    "warning",
-                )
+                self.stats_repo.add_alert(f"[!] {t('alert_high_jitter').format(val=jitter)}", "warning")
                 logging.warning(f"Jitter exceeded: {jitter:.1f}ms")
         else:
             if was_high:
                 self.stats_repo.update_threshold_state("high_jitter", False)
-                add_visual_alert(
-                    self.stats_repo.lock,
-                    self.stats_repo.get_stats(),
-                    f"[+] {t('alert_jitter_normalized')}",
-                    "info"
-                )
+                self.stats_repo.add_alert(f"[+] {t('alert_jitter_normalized')}", "info")
