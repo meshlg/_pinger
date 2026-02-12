@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
-import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -16,42 +14,22 @@ from config import (
     ALERT_ON_PACKET_LOSS,
     AVG_LATENCY_THRESHOLD,
     CONSECUTIVE_LOSS_THRESHOLD,
-    DNS_CHECK_INTERVAL,
-    DNS_RECORD_TYPES,
     ENABLE_AUTO_TRACEROUTE,
-    ENABLE_DNS_MONITORING,
-    ENABLE_IP_CHANGE_ALERT,
-    ENABLE_MTU_MONITORING,
-    ENABLE_PROBLEM_ANALYSIS,
-    ENABLE_ROUTE_ANALYSIS,
-    ENABLE_THRESHOLD_ALERTS,
-    ENABLE_HOP_MONITORING,
-    ENABLE_VERSION_CHECK,
-    VERSION_CHECK_INTERVAL,
-    HIGH_LATENCY_THRESHOLD,
-    HOP_PING_INTERVAL,
-    HOP_REDISCOVER_INTERVAL,
-    JITTER_THRESHOLD,
-    MTU_CHECK_INTERVAL,
-    MTU_DIFF_THRESHOLD,
-    MTU_ISSUE_CONSECUTIVE,
-    MTU_CLEAR_CONSECUTIVE,
-    ENABLE_TTL_MONITORING,
-    PACKET_LOSS_THRESHOLD,
-    PROBLEM_ANALYSIS_INTERVAL,
-    ROUTE_ANALYSIS_INTERVAL,
-    TARGET_IP,
-    TRACEROUTE_TRIGGER_LOSSES,
-    TTL_CHECK_INTERVAL,
-    IP_CHECK_INTERVAL,
-    ENABLE_METRICS,
-    METRICS_ADDR,
-    METRICS_PORT,
     ENABLE_HEALTH_ENDPOINT,
+    ENABLE_IP_CHANGE_ALERT,
+    ENABLE_METRICS,
+    ENABLE_THRESHOLD_ALERTS,
     HEALTH_ADDR,
     HEALTH_PORT,
+    HIGH_LATENCY_THRESHOLD,
+    JITTER_THRESHOLD,
     MAX_WORKER_THREADS,
+    METRICS_ADDR,
+    METRICS_PORT,
+    PACKET_LOSS_THRESHOLD,
     SHUTDOWN_TIMEOUT_SECONDS,
+    TARGET_IP,
+    TRACEROUTE_TRIGGER_LOSSES,
     # Smart alert settings
     ENABLE_SMART_ALERTS,
     ALERT_DEDUP_WINDOW_SECONDS,
@@ -68,6 +46,16 @@ from config import (
 
 # Core handlers (refactored from ping_once)
 from core import PingHandler, AlertHandler, MetricsHandler
+from core.task_orchestrator import TaskOrchestrator
+from core.ip_updater_task import IPUpdaterTask
+from core.dns_monitor_task import DNSMonitorTask
+from core.mtu_monitor_task import MTUMonitorTask
+from core.ttl_monitor_task import TTLMonitorTask
+from core.problem_analyzer_task import ProblemAnalyzerTask
+from core.hop_monitor_task import HopMonitorTask
+from core.route_analyzer_task import RouteAnalyzerTask
+from core.version_checker_task import VersionCheckerTask
+
 from stats_repository import StatsRepository, StatsSnapshot
 from services import (
     PingService,
@@ -82,15 +70,6 @@ from route_analyzer import RouteAnalyzer
 from alerts import add_visual_alert, clean_old_alerts, trigger_alert
 from infrastructure import (
     METRICS_AVAILABLE,
-    PING_TOTAL,
-    PING_SUCCESS,
-    PING_FAILURE,
-    PING_LATENCY_MS,
-    PACKET_LOSS_GAUGE,
-    MTU_PROBLEMS_TOTAL,
-    MTU_STATUS_GAUGE,
-    ROUTE_CHANGES_TOTAL,
-    ROUTE_CHANGED_GAUGE,
     start_metrics_server,
     HealthServer,
     start_health_server,
@@ -103,6 +82,8 @@ class Monitor:
     
     Uses service layer for operations and StatsRepository for data.
     Uses core handlers for ping cycle operations (SRP-compliant).
+    Background monitoring is delegated to BackgroundTask subclasses
+    managed by a TaskOrchestrator.
     """
 
     def __init__(self) -> None:
@@ -174,6 +155,32 @@ class Monitor:
         self.health_server = None
         if ENABLE_HEALTH_ENDPOINT:
             self.health_server = start_health_server(addr=HEALTH_ADDR, port=HEALTH_PORT, stats_repo=self.stats_repo)
+        
+        # ── Background Task Orchestrator ────────────────────────────────
+        self._orchestrator = TaskOrchestrator()
+        common = dict(
+            stats_repo=self.stats_repo,
+            stop_event=self.stop_event,
+            executor=self.executor,
+        )
+        self._orchestrator.register_all([
+            IPUpdaterTask(
+                ip_service=self.ip_service,
+                hop_monitor_service=self.hop_monitor_service,
+                **common,
+            ),
+            DNSMonitorTask(dns_service=self.dns_service, **common),
+            MTUMonitorTask(mtu_service=self.mtu_service, **common),
+            TTLMonitorTask(ping_service=self.ping_service, **common),
+            ProblemAnalyzerTask(problem_analyzer=self.problem_analyzer, **common),
+            HopMonitorTask(hop_monitor_service=self.hop_monitor_service, **common),
+            RouteAnalyzerTask(
+                route_analyzer=self.route_analyzer,
+                traceroute_service=self.traceroute_service,
+                **common,
+            ),
+            VersionCheckerTask(**common),
+        ])
 
     @property
     def stats_lock(self):
@@ -302,6 +309,16 @@ class Monitor:
             lambda: func(*args, **kwargs)
         )
 
+    # ==================== Task Orchestrator ====================
+
+    def start_tasks(self) -> list[asyncio.Task]:
+        """Start all registered background tasks via the orchestrator."""
+        return self._orchestrator.start_all()
+
+    async def stop_tasks(self, timeout: float | None = None) -> None:
+        """Stop all background tasks."""
+        await self._orchestrator.stop_all(timeout or SHUTDOWN_TIMEOUT_SECONDS)
+
     # ==================== Main Loop ====================
 
     async def ping_once(self) -> tuple[bool, float | None]:
@@ -393,427 +410,6 @@ class Monitor:
     def cleanup_alerts(self) -> None:
         """Clean old visual alerts."""
         clean_old_alerts(self.stats_repo.lock, self.stats_repo.get_stats())
-
-    # ==================== Background Tasks ====================
-
-    async def background_ip_updater(self) -> None:
-        """Update public IP info periodically."""
-        if not ENABLE_IP_CHANGE_ALERT:
-            return
-            
-        while not self.stop_event.is_set():
-            try:
-                ip, country, code = await self.run_blocking(
-                    self.ip_service.get_public_ip_info
-                )
-                
-                # Check for IP change
-                change_info = self.ip_service.check_ip_change(ip, country, code)
-                if change_info:
-                    add_visual_alert(
-                        self.stats_repo.lock,
-                        self.stats_repo.get_stats(),
-                        f"[i] {t('alert_ip_changed').format(old=change_info['old_ip'], new=change_info['new_ip'])}",
-                        "info"
-                    )
-                    trigger_alert(self.stats_repo.lock, self.stats_repo.get_stats(), "ip")
-                    # Trigger immediate hop re-discovery on IP change
-                    if ENABLE_HOP_MONITORING:
-                        self.hop_monitor_service.request_rediscovery()
-                
-                # Update stats
-                self.stats_repo.update_public_ip(ip, country, code)
-                
-            except Exception as exc:
-                logging.error(f"IP update failed: {exc}")
-            
-            await asyncio.sleep(IP_CHECK_INTERVAL)
-
-    async def background_dns_monitor(self) -> None:
-        """Monitor DNS resolution with multiple record types and benchmark tests."""
-        if not ENABLE_DNS_MONITORING:
-            return
-
-        while not self.stop_event.is_set():
-            try:
-                # Run detailed DNS check with configured record types
-                results = await self.run_blocking(
-                    self.dns_service.check_dns_resolve,
-                    None,  # Use default domain
-                    DNS_RECORD_TYPES
-                )
-
-                # Convert results to dict format for storage
-                results_dict = [
-                    {
-                        "record_type": r.record_type,
-                        "success": r.success,
-                        "response_time_ms": r.response_time_ms,
-                        "status": r.status,
-                        "ttl": r.ttl,
-                        "records": r.records,
-                        "error": r.error,
-                    }
-                    for r in results
-                ]
-
-                self.stats_repo.update_dns_detailed(results_dict)
-
-                # Run benchmark tests (Cached/Uncached/DotCom)
-                from config import ENABLE_DNS_BENCHMARK, DNS_BENCHMARK_DOTCOM_DOMAIN, DNS_BENCHMARK_SERVERS
-                if ENABLE_DNS_BENCHMARK:
-                    benchmark_results = await self.run_blocking(
-                        self.dns_service.run_benchmark_tests,
-                        DNS_BENCHMARK_DOTCOM_DOMAIN,
-                        DNS_BENCHMARK_SERVERS
-                    )
-                    
-                    # Convert benchmark results to dict format
-                    benchmark_dict = [
-                        {
-                            "server": r.server,
-                            "test_type": r.test_type,
-                            "domain": r.domain,
-                            "queries": r.queries,
-                            "min_ms": r.min_ms,
-                            "avg_ms": r.avg_ms,
-                            "max_ms": r.max_ms,
-                            "std_dev": r.std_dev,
-                            "reliability": r.reliability,
-                            "response_time_ms": r.response_time_ms,
-                            "success": r.success,
-                            "status": r.status,
-                            "error": r.error,
-                        }
-                        for r in benchmark_results
-                    ]
-                    
-                    self.stats_repo.update_dns_benchmark(benchmark_dict)
-
-            except Exception as exc:
-                logging.error(f"DNS monitor failed: {exc}")
-                # Set status to failed on exception
-                self.stats_repo.update_dns(None, t("failed"))
-
-            await asyncio.sleep(DNS_CHECK_INTERVAL)
-
-    async def background_mtu_monitor(self) -> None:
-        """Monitor MTU."""
-        if not ENABLE_MTU_MONITORING:
-            return
-            
-        while not self.stop_event.is_set():
-            try:
-                # Get MTU info
-                mtu_info = await self.run_blocking(
-                    self.mtu_service.check_mtu,
-                    TARGET_IP
-                )
-                
-                local_mtu = mtu_info["local_mtu"]
-                path_mtu = mtu_info["path_mtu"]
-                
-                # Determine status
-                status = t("mtu_ok")
-                if local_mtu and path_mtu:
-                    diff = local_mtu - path_mtu
-                    if path_mtu < 1000:
-                        status = t("mtu_fragmented")
-                    elif diff >= MTU_DIFF_THRESHOLD and path_mtu < local_mtu:
-                        status = t("mtu_low")
-                
-                # Update hysteresis counters via repository
-                is_issue = status in [t("mtu_low"), t("mtu_fragmented")]
-                cons_issues, cons_ok = self.stats_repo.update_mtu_hysteresis(is_issue)
-                current = self.stats_repo.get_mtu_status()
-                
-                # Apply hysteresis
-                if is_issue:
-                    if cons_issues >= MTU_ISSUE_CONSECUTIVE and current != status:
-                        self.stats_repo.update_mtu(local_mtu, path_mtu, status)
-                        self.stats_repo.set_mtu_status_change_time()
-                        logging.info(f"MTU problem: {status}")
-                        if METRICS_AVAILABLE:
-                            try:
-                                MTU_PROBLEMS_TOTAL.inc()
-                                MTU_STATUS_GAUGE.set(1 if status == t("mtu_low") else 2)
-                            except Exception:
-                                pass
-                else:
-                    if cons_ok >= MTU_CLEAR_CONSECUTIVE and current != t("mtu_ok"):
-                        self.stats_repo.update_mtu(local_mtu, path_mtu, t("mtu_ok"))
-                        self.stats_repo.set_mtu_status_change_time()
-                        logging.info("MTU status cleared")
-                        if METRICS_AVAILABLE:
-                            try:
-                                MTU_STATUS_GAUGE.set(0)
-                            except Exception:
-                                pass
-                
-            except Exception as exc:
-                logging.error(f"MTU monitor failed: {exc}")
-            
-            await asyncio.sleep(MTU_CHECK_INTERVAL)
-
-    async def background_ttl_monitor(self) -> None:
-        """Monitor TTL."""
-        if not ENABLE_TTL_MONITORING:
-            return
-            
-        while not self.stop_event.is_set():
-            try:
-                ttl, hops = await self.run_blocking(
-                    self._extract_ttl,
-                    TARGET_IP
-                )
-                self.stats_repo.update_ttl(ttl, hops)
-            except Exception as exc:
-                logging.error(f"TTL monitor failed: {exc}")
-            
-            await asyncio.sleep(TTL_CHECK_INTERVAL)
-
-    def _extract_ttl(self, host: str) -> tuple[int | None, int | None]:
-        """Extract TTL from ping - using PingService internals."""
-        try:
-            ping_cmd = shutil.which("ping")
-            if not ping_cmd:
-                return None, None
-            
-            is_ipv6 = self.ping_service._detect_ipv6(host)
-            
-            if sys.platform == "win32":
-                cmd = [ping_cmd, "-n", "1", "-w", "1000", host]
-                encoding = "oem"
-            else:
-                if is_ipv6:
-                    cmd = [ping_cmd, "-6", "-c", "1", host]
-                else:
-                    cmd = [ping_cmd, "-c", "1", host]
-                encoding = "utf-8"
-            
-            # Use creationflags on Windows to prevent orphan processes
-            kwargs: dict[str, Any] = {}
-            if sys.platform == "win32":
-                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=2,
-                encoding=encoding,
-                errors="replace",
-                **kwargs,
-            )
-            
-            ttl_match = re.search(r"TTL[=:\s]+(\d+)", result.stdout, re.IGNORECASE)
-            if ttl_match:
-                ttl = int(ttl_match.group(1))
-                common_initial_ttl_values = [64, 128, 255]
-                estimated_hops = None
-                for initial_ttl in common_initial_ttl_values:
-                    if ttl <= initial_ttl:
-                        estimated_hops = initial_ttl - ttl
-                        break
-                return ttl, estimated_hops
-        except Exception as exc:
-            logging.error(f"TTL extraction failed: {exc}")
-        return None, None
-
-    async def background_problem_analyzer(self) -> None:
-        """Analyze problems periodically."""
-        if not ENABLE_PROBLEM_ANALYSIS:
-            return
-            
-        while not self.stop_event.is_set():
-            try:
-                problem_type = self.problem_analyzer.analyze_current_problem()
-                prediction = self.problem_analyzer.predict_problems()
-                pattern = self.problem_analyzer.identify_pattern()
-                
-                self.stats_repo.update_problem_analysis(problem_type, prediction, pattern)
-                
-            except Exception as exc:
-                logging.error(f"Problem analysis failed: {exc}")
-            
-            await asyncio.sleep(PROBLEM_ANALYSIS_INTERVAL)
-
-    async def background_hop_monitor(self) -> None:
-        """Discover hops and ping them periodically."""
-        if not ENABLE_HOP_MONITORING:
-            return
-
-        import time as _time
-
-        # Set up streaming callback — UI updates as each hop is discovered
-        def _on_hop_discovered(snapshot):
-            self.stats_repo.update_hop_monitor(snapshot, discovering=True)
-
-        self.hop_monitor_service.set_on_hop_callback(_on_hop_discovered)
-
-        # Initial discovery (streaming — hops appear one by one)
-        self.stats_repo.update_hop_monitor([], discovering=True)
-        await self.run_blocking(
-            self.hop_monitor_service.discover_hops, TARGET_IP
-        )
-        self.stats_repo.update_hop_monitor(
-            self.hop_monitor_service.get_hops_snapshot(), discovering=False
-        )
-
-        last_discovery = _time.time()
-
-        while not self.stop_event.is_set():
-            try:
-                # Check if IP change triggered immediate re-discovery
-                need_rediscovery = (
-                    self.hop_monitor_service.rediscovery_requested
-                    or _time.time() - last_discovery > HOP_REDISCOVER_INTERVAL
-                )
-
-                if need_rediscovery:
-                    self.hop_monitor_service.clear_rediscovery()
-                    self.stats_repo.update_hop_monitor([], discovering=True)
-                    await self.run_blocking(
-                        self.hop_monitor_service.discover_hops, TARGET_IP
-                    )
-                    self.stats_repo.update_hop_monitor(
-                        self.hop_monitor_service.get_hops_snapshot(), discovering=False
-                    )
-                    last_discovery = _time.time()
-                else:
-                    # Ping all hops
-                    await self.run_blocking(self.hop_monitor_service.ping_all_hops)
-                    self.stats_repo.update_hop_monitor(
-                        self.hop_monitor_service.get_hops_snapshot(), discovering=False
-                    )
-
-            except Exception as exc:
-                logging.error(f"Hop monitor failed: {exc}")
-
-            await asyncio.sleep(HOP_PING_INTERVAL)
-
-    async def background_route_analyzer(self) -> None:
-        """Analyze route periodically."""
-        from config import (
-            ROUTE_CHANGE_CONSECUTIVE,
-            ROUTE_CHANGE_HOP_DIFF,
-            ROUTE_IGNORE_FIRST_HOPS,
-            ROUTE_SAVE_ON_CHANGE_CONSECUTIVE,
-        )
-        
-        if not ENABLE_ROUTE_ANALYSIS:
-            return
-            
-        while not self.stop_event.is_set():
-            try:
-                traceroute_output = await self.run_blocking(
-                    self.traceroute_service.run_traceroute,
-                    TARGET_IP
-                )
-                
-                hops = self.route_analyzer.parse_traceroute_output(traceroute_output)
-                analysis = self.route_analyzer.analyze_route(hops)
-                
-                # Determine significant diffs
-                diff_indices = analysis.get("diff_indices", [])
-                significant_diffs = [i for i in diff_indices if i >= ROUTE_IGNORE_FIRST_HOPS]
-                sig_count = len(significant_diffs)
-                
-                # Update hysteresis counters via repository
-                is_significant = sig_count >= ROUTE_CHANGE_HOP_DIFF
-                cons_changes, cons_ok = self.stats_repo.update_route_hysteresis(is_significant)
-                
-                # Update route status
-                if cons_changes >= ROUTE_CHANGE_CONSECUTIVE:
-                    if not self.stats_repo.is_route_changed():
-                        self.stats_repo.set_route_changed(True)
-                        add_visual_alert(
-                            self.stats_repo.lock,
-                            self.stats_repo.get_stats(),
-                            f"[i] {t('route_changed')}",
-                            "info"
-                        )
-                        if METRICS_AVAILABLE:
-                            try:
-                                ROUTE_CHANGES_TOTAL.inc()
-                                ROUTE_CHANGED_GAUGE.set(1)
-                            except Exception:
-                                pass
-                        
-                        # Auto-trigger traceroute on route change
-                        if cons_changes >= ROUTE_SAVE_ON_CHANGE_CONSECUTIVE:
-                            self.traceroute_service.trigger_traceroute(TARGET_IP)
-                
-                elif cons_ok >= ROUTE_CHANGE_CONSECUTIVE:
-                    if self.stats_repo.is_route_changed():
-                        self.stats_repo.set_route_changed(False)
-                        add_visual_alert(
-                            self.stats_repo.lock,
-                            self.stats_repo.get_stats(),
-                            f"[i] {t('route_stable')}",
-                            "info"
-                        )
-                        if METRICS_AVAILABLE:
-                            try:
-                                ROUTE_CHANGED_GAUGE.set(0)
-                            except Exception:
-                                pass
-                
-                # Update route info
-                self.stats_repo.update_route(
-                    hops,
-                    analysis["problematic_hop"],
-                    self.stats_repo.is_route_changed(),
-                    sig_count
-                )
-                
-                # Alert on problematic hop
-                if analysis["problematic_hop"]:
-                    add_visual_alert(
-                        self.stats_repo.lock,
-                        self.stats_repo.get_stats(),
-                        f"[!] {t('problematic_hop')}: {analysis['problematic_hop']}",
-                        "warning"
-                    )
-                
-            except Exception as exc:
-                logging.error(f"Route analysis failed: {exc}")
-            
-            await asyncio.sleep(ROUTE_ANALYSIS_INTERVAL)
-
-    async def background_version_checker(self) -> None:
-        """Check for updates periodically."""
-        if not ENABLE_VERSION_CHECK:
-            return
-        
-        while not self.stop_event.is_set():
-            try:
-                from services.version_service import check_update_available
-                update_available, current, latest = check_update_available()
-                
-                if latest:
-                    if update_available:
-                        # Update version info only if new version available
-                        self.stats_repo.set_latest_version(latest, False)
-                        logging.info(f"Update available: {current} → {latest}")
-                        # Add visual alert for new version
-                        add_visual_alert(
-                            self.stats_repo.lock,
-                            self.stats_repo.get_stats(),
-                            f"[i] {t('update_available').format(current=current, latest=latest)}",
-                            "info"
-                        )
-                    else:
-                        # Version is current - clear any previous version info
-                        self.stats_repo.set_latest_version(None, True)
-                        logging.debug(f"Version check: current version {current} is up to date")
-                else:
-                    logging.debug("Version check: unable to fetch latest version")
-                    
-            except Exception as exc:
-                logging.error(f"Version check failed: {exc}")
-            
-            await asyncio.sleep(VERSION_CHECK_INTERVAL)
 
     # ==================== Threshold Checking ====================
 

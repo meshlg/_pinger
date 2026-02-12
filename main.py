@@ -90,16 +90,7 @@ class PingerApp:
         self.console.print(f"[dim]{t('press')}[/dim]\n")
         self.monitor.stats_repo.set_start_time(datetime.now())
 
-        tasks = [
-            asyncio.create_task(self.monitor.background_ip_updater()),
-            asyncio.create_task(self.monitor.background_dns_monitor()),
-            asyncio.create_task(self.monitor.background_mtu_monitor()),
-            asyncio.create_task(self.monitor.background_ttl_monitor()),
-            asyncio.create_task(self.monitor.background_problem_analyzer()),
-            asyncio.create_task(self.monitor.background_route_analyzer()),
-            asyncio.create_task(self.monitor.background_hop_monitor()),
-            asyncio.create_task(self.monitor.background_version_checker()),
-        ]
+        tasks = self.monitor.start_tasks()
 
         try:
             with Live(
@@ -117,19 +108,7 @@ class PingerApp:
             logging.error(f"Main loop error: {exc}")
         finally:
             self.monitor.stop_event.set()
-
-            # Cancel all background tasks with timeout
-            for task in tasks:
-                task.cancel()
-
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=SHUTDOWN_TIMEOUT_SECONDS
-                )
-            except asyncio.TimeoutError:
-                logging.warning("Some background tasks did not terminate in time")
-
+            await self.monitor.stop_tasks()
             self.monitor.shutdown()
             self.console.print(f"[dim]{t('bg_stopped')}[/dim]")
 

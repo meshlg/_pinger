@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.8] - 2026-02-12
+### Refactoring
+- **Monitor Class Decomposition** — Addressed God Object anti-pattern in `monitor.py` (reduced from 941 to ~520 lines).
+  - Extracted 8 background tasks into separate classes in `core/` package (`IPUpdaterTask`, `DNSMonitorTask`, etc.).
+  - Implemented `TaskOrchestrator` for unified background task lifecycle management.
+  - Introduced `BackgroundTask` ABC to eliminate duplicated loop/error-handling boilerplate.
+  - Improved testability and maintainability of core monitoring logic.
+
 ## [2.3.7] - 2026-02-12
 ### Security
 - **IP Service Hardening** — Switched public IP resolution from unencrypted HTTP to HTTPS with multi-provider fallback (ipinfo.io → ipapi.co → ip-api.com).
