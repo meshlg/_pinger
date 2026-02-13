@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1.1659]
+### Fixed
+- **Timezone-aware datetimes** — Replaced all naive `datetime.now()` with timezone-aware `datetime.now(timezone.utc)` throughout the project.
+  - This fixes timestamp inconsistency in Docker/Kubernetes where TZ environment variable affects naive datetime.
+  - All internal timestamps now use UTC timezone.
+  - UI display converted to local timezone via `.astimezone()` for user-friendly output.
+  - Updated 14 files: ui.py, stats_repository.py, services/traceroute_service.py, route_analyzer.py, problem_analyzer.py, pinger/__init__.py, main.py, demo_mode.py, core/alert_prioritizer.py, core/alert_types.py, core/adaptive_thresholds.py.
+
 ## [2.4.0.0717]
 ### Fixed
 - **Thread Safety for _ping_counter** — Added `threading.Lock` to protect incremental counter in `Monitor` class.

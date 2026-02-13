@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from core.alert_types import AlertEntity, AlertGroup, AlertPriority, AlertType
@@ -192,7 +192,7 @@ class AlertPrioritizer:
         Returns:
             Time factor score 0-1
         """
-        age_seconds = (datetime.now() - alert.timestamp).total_seconds()
+        age_seconds = (datetime.now(timezone.utc) - alert.timestamp).total_seconds()
         
         # Normalize to 0-1 based on escalation threshold
         # Alerts older than threshold get max score

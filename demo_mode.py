@@ -11,7 +11,7 @@ import sys
 import time
 import threading
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 # Add project to path FIRST
@@ -89,7 +89,7 @@ class FakeStatsProvider(StatsDataProvider):
         - alerts: Multiple active alerts
         """
         self.scenario = scenario
-        self.start_time = datetime.now() - timedelta(hours=2, minutes=34, seconds=12)
+        self.start_time = datetime.now(timezone.utc) - timedelta(hours=2, minutes=34, seconds=12)
         self.dns_benchmark = FakeDNSBenchmark()
         self._lock = threading.Lock()
 
@@ -130,8 +130,8 @@ class FakeStatsProvider(StatsDataProvider):
         self._consecutive_losses = 2
         self._max_consecutive_losses = 5
         self._active_alerts = [
-            {"message": t("alert_high_avg_latency").format(val=52.3), "type": "warning", "time": datetime.now() - timedelta(minutes=5)},
-            {"message": t("alert_high_jitter").format(val=12.1), "type": "warning", "time": datetime.now() - timedelta(minutes=3)},
+            {"message": t("alert_high_avg_latency").format(val=52.3), "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=5)},
+            {"message": t("alert_high_jitter").format(val=12.1), "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=3)},
         ]
         self._problem_type = "isp"
         self._route_changed = False
@@ -150,8 +150,8 @@ class FakeStatsProvider(StatsDataProvider):
         self._consecutive_losses = 4
         self._max_consecutive_losses = 8
         self._active_alerts = [
-            {"message": t("alert_connection_lost").format(n=4), "type": "critical", "time": datetime.now() - timedelta(seconds=30)},
-            {"message": t("alert_high_loss").format(val=18.7), "type": "warning", "time": datetime.now() - timedelta(minutes=2)},
+            {"message": t("alert_connection_lost").format(n=4), "type": "critical", "time": datetime.now(timezone.utc) - timedelta(seconds=30)},
+            {"message": t("alert_high_loss").format(val=18.7), "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=2)},
         ]
         self._problem_type = "isp"
         self._route_changed = True
@@ -169,10 +169,10 @@ class FakeStatsProvider(StatsDataProvider):
         self._consecutive_losses = 1
         self._max_consecutive_losses = 4
         self._active_alerts = [
-            {"message": "IP: 203.0.113.45 -> 203.0.113.78", "type": "info", "time": datetime.now() - timedelta(minutes=15)},
-            {"message": t("alert_high_loss").format(val=9.8), "type": "warning", "time": datetime.now() - timedelta(minutes=8)},
-            {"message": t("alert_high_jitter").format(val=9.2), "type": "warning", "time": datetime.now() - timedelta(minutes=4)},
-            {"message": "MTU: 1500 -> 1492", "type": "warning", "time": datetime.now() - timedelta(minutes=2)},
+            {"message": "IP: 203.0.113.45 -> 203.0.113.78", "type": "info", "time": datetime.now(timezone.utc) - timedelta(minutes=15)},
+            {"message": t("alert_high_loss").format(val=9.8), "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=8)},
+            {"message": t("alert_high_jitter").format(val=9.2), "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=4)},
+            {"message": "MTU: 1500 -> 1492", "type": "warning", "time": datetime.now(timezone.utc) - timedelta(minutes=2)},
         ]
         self._problem_type = "local"
         self._route_changed = False
@@ -283,14 +283,14 @@ class FakeStatsProvider(StatsDataProvider):
             # ── Times ──
             "start_time": self.start_time,
             "last_problem_time": (
-                datetime.now() - timedelta(minutes=12)
+                datetime.now(timezone.utc) - timedelta(minutes=12)
                 if self._problem_type != "none" else None
             ),
 
             # ── IP change ──
             "previous_ip": "203.0.113.45" if self.scenario == "alerts" else None,
             "ip_change_time": (
-                datetime.now() - timedelta(minutes=15)
+                datetime.now(timezone.utc) - timedelta(minutes=15)
                 if self.scenario == "alerts" else None
             ),
 
@@ -310,7 +310,7 @@ class FakeStatsProvider(StatsDataProvider):
 
             # ── Traceroute ──
             "last_traceroute_time": (
-                datetime.now() - timedelta(seconds=45)
+                datetime.now(timezone.utc) - timedelta(seconds=45)
                 if self.scenario == "problems" else None
             ),
             "traceroute_running": self.scenario == "problems",
@@ -325,7 +325,7 @@ class FakeStatsProvider(StatsDataProvider):
             "mtu_consecutive_issues": 0 if self.scenario != "alerts" else 3,
             "mtu_consecutive_ok": 50 if self.scenario != "alerts" else 0,
             "mtu_last_status_change": (
-                datetime.now() - timedelta(minutes=2)
+                datetime.now(timezone.utc) - timedelta(minutes=2)
                 if self.scenario == "alerts" else None
             ),
 
@@ -350,7 +350,7 @@ class FakeStatsProvider(StatsDataProvider):
             "route_consecutive_changes": 1 if self._route_changed else 0,
             "route_consecutive_ok": 0 if self._route_changed else 45,
             "route_last_change_time": (
-                datetime.now() - timedelta(hours=3, minutes=22)
+                datetime.now(timezone.utc) - timedelta(hours=3, minutes=22)
                 if self._route_changed else None
             ),
             "route_last_diff_count": 2 if self._route_changed else 0,
@@ -365,7 +365,7 @@ class FakeStatsProvider(StatsDataProvider):
 
             # ── Version ──
             "latest_version": None,
-            "version_check_time": datetime.now() - timedelta(minutes=15),
+            "version_check_time": datetime.now(timezone.utc) - timedelta(minutes=15),
             "version_up_to_date": True,
         }
 

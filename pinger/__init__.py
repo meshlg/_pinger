@@ -63,8 +63,8 @@ def enforce_single_instance() -> SingleInstance | None:
         # Notify the running instance about this attempt
         try:
             from single_instance_notifications import _notify_running_instance
-            from datetime import datetime
-            msg = t("alert_second_instance_attempt").format(time=datetime.now().strftime("%H:%M:%S"))
+            from datetime import datetime, timezone
+            msg = t("alert_second_instance_attempt").format(time=datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S"))
             _notify_running_instance(msg)
         except Exception:
             pass

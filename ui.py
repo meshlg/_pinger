@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import statistics
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 import time
 import threading
@@ -119,7 +119,7 @@ class MonitorUI:
     def _fmt_uptime(start_time: datetime | None) -> str:
         if start_time is None:
             return t("na")
-        total = int((datetime.now() - start_time).total_seconds())
+        total = int((datetime.now(timezone.utc) - start_time).total_seconds())
         d = total // 86400
         h = (total % 86400) // 3600
         m = (total % 3600) // 60
@@ -138,7 +138,7 @@ class MonitorUI:
     def _fmt_since(ts: datetime | None) -> str:
         if ts is None:
             return t("never")
-        sec = int((datetime.now() - ts).total_seconds())
+        sec = int((datetime.now(timezone.utc) - ts).total_seconds())
         if sec < 5:
             return t("just_now")
         if sec < 60:
@@ -262,7 +262,7 @@ class MonitorUI:
     # ═══════════════════════════════════════════════════════════════════════════
 
     def render_header(self, width: int, tier: LayoutTier) -> Panel:
-        now = datetime.now().strftime("%H:%M:%S")
+        now = datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
         snap = self.monitor.get_stats_snapshot()
         latest_version = snap.get("latest_version")
         version_up_to_date = snap.get("version_up_to_date", False)
@@ -552,7 +552,7 @@ class MonitorUI:
         if snap["last_problem_time"] is None:
             last_prob_txt = f"[{_GREEN}]{t('never')}[/{_GREEN}]"
         else:
-            age = (datetime.now() - snap["last_problem_time"]).total_seconds()
+            age = (datetime.now(timezone.utc) - snap["last_problem_time"]).total_seconds()
             since_txt = self._fmt_since(snap["last_problem_time"])
             last_prob_txt = f"[{_RED}]{since_txt}[/{_RED}]" if age < 60 else f"[{_YELLOW}]{since_txt}[/{_YELLOW}]"
 

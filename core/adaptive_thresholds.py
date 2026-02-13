@@ -10,7 +10,7 @@ from __future__ import annotations
 import statistics
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
@@ -221,7 +221,7 @@ class AdaptiveThresholds:
         if not last_update:
             return True
         
-        age_minutes = (datetime.now() - last_update).total_seconds() / 60
+        age_minutes = (datetime.now(timezone.utc) - last_update).total_seconds() / 60
         return age_minutes >= self.update_interval_minutes
     
     def _update_baseline(self, metric: str) -> None:
@@ -243,7 +243,7 @@ class AdaptiveThresholds:
         
         # Store baseline
         self._baselines[metric] = baseline
-        self._last_update[metric] = datetime.now()
+        self._last_update[metric] = datetime.now(timezone.utc)
     
     def _get_historical_data(self, metric: str) -> List[float]:
         """
@@ -342,7 +342,7 @@ class AdaptiveThresholds:
             min_value=min(data),
             max_value=max(data),
             sample_count=len(data),
-            last_updated=datetime.now(),
+            last_updated=datetime.now(timezone.utc),
         )
     
     def update_baselines(self) -> None:

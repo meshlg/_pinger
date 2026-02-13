@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional, TypeVar
 
@@ -107,11 +107,11 @@ class TracerouteService:
             
             traceroutes_dir = Path("traceroutes")
             traceroutes_dir.mkdir(exist_ok=True)
-            filename = traceroutes_dir / f"traceroute_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            filename = traceroutes_dir / f"traceroute_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
             
             with open(filename, "w", encoding="utf-8") as handle:
                 handle.write(
-                    f"Traceroute to {target}\nTime: {datetime.now():%Y-%m-%d %H:%M:%S}\n"
+                    f"Traceroute to {target}\nTime: {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}\n"
                 )
                 handle.write("=" * 70 + "\n")
                 handle.write(data)
@@ -134,7 +134,7 @@ class TracerouteService:
             return False
         
         last = self._stats_repo.get_last_traceroute_time()
-        if last and (datetime.now() - last).total_seconds() < TRACEROUTE_COOLDOWN:
+        if last and (datetime.now(timezone.utc) - last).total_seconds() < TRACEROUTE_COOLDOWN:
             return False
         
         asyncio.create_task(self.traceroute_worker(target))

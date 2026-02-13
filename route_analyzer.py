@@ -5,7 +5,7 @@ import logging
 import re
 import statistics
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from config import (
@@ -130,7 +130,7 @@ class RouteAnalyzer:
 
         # Save route to history
         route_record = {
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "hops": hops,
             "hop_count": len(hops),
             "problematic_hop": problematic_hop,

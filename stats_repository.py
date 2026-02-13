@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import statistics
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, TypedDict, Optional
 
 from config import (
@@ -219,7 +219,7 @@ class StatsRepository:
                     self._stats["max_consecutive_losses"],
                     self._stats["consecutive_losses"],
                 )
-                self._stats["last_problem_time"] = datetime.now()
+                self._stats["last_problem_time"] = datetime.now(timezone.utc)
                 
                 if alert_on_packet_loss:
                     loss_flag = True
@@ -346,7 +346,7 @@ class StatsRepository:
         """Record IP change."""
         with self._lock:
             self._stats["previous_ip"] = old_ip
-            self._stats["ip_change_time"] = datetime.now()
+            self._stats["ip_change_time"] = datetime.now(timezone.utc)
 
     def update_route(
         self,
@@ -408,7 +408,7 @@ class StatsRepository:
     def set_mtu_status_change_time(self) -> None:
         """Record MTU status change time."""
         with self._lock:
-            self._stats["mtu_last_status_change"] = datetime.now()
+            self._stats["mtu_last_status_change"] = datetime.now(timezone.utc)
 
     def update_route_hysteresis(self, is_change: bool) -> tuple[int, int]:
         """Update route change hysteresis counters. Returns (consecutive_changes, consecutive_ok)."""
@@ -425,7 +425,7 @@ class StatsRepository:
         """Set route changed flag with timestamp."""
         with self._lock:
             self._stats["route_changed"] = changed
-            self._stats["route_last_change_time"] = datetime.now()
+            self._stats["route_last_change_time"] = datetime.now(timezone.utc)
 
     def is_route_changed(self) -> bool:
         """Get current route changed state."""
@@ -437,7 +437,7 @@ class StatsRepository:
         with self._lock:
             self._stats["traceroute_running"] = running
             if running:
-                self._stats["last_traceroute_time"] = datetime.now()
+                self._stats["last_traceroute_time"] = datetime.now(timezone.utc)
 
     def is_traceroute_running(self) -> bool:
         """Check if traceroute is currently running."""
@@ -460,7 +460,7 @@ class StatsRepository:
         with self._lock:
             self._stats["latest_version"] = version
             self._stats["version_up_to_date"] = up_to_date
-            self._stats["version_check_time"] = datetime.now()
+            self._stats["version_check_time"] = datetime.now(timezone.utc)
 
     def get_latest_version_info(self) -> tuple[str | None, bool, datetime | None]:
         """Get latest version info. Returns (latest_version, up_to_date, check_time)."""
@@ -544,7 +544,7 @@ class StatsRepository:
         
         with self._lock:
             self._stats.setdefault("active_alerts", []).append(
-                {"message": message, "type": alert_type, "time": datetime.now()}
+                {"message": message, "type": alert_type, "time": datetime.now(timezone.utc)}
             )
             if len(self._stats["active_alerts"]) > MAX_ACTIVE_ALERTS:
                 self._stats["active_alerts"].pop(0)
@@ -563,7 +563,7 @@ class StatsRepository:
             
         with self._lock:
             last = self._stats.get("last_alert_time")
-            if last is None or (datetime.now() - last).total_seconds() >= ALERT_COOLDOWN:
+            if last is None or (datetime.now(timezone.utc) - last).total_seconds() >= ALERT_COOLDOWN:
                 # Play sound
                 import sys
                 try:
@@ -574,13 +574,13 @@ class StatsRepository:
                         print("\a", end="", flush=True)
                 except Exception:
                     pass
-                self._stats["last_alert_time"] = datetime.now()
+                self._stats["last_alert_time"] = datetime.now(timezone.utc)
 
     def clean_old_alerts(self) -> None:
         """Remove alerts older than ALERT_DISPLAY_TIME."""
         from config import ALERT_DISPLAY_TIME
         
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         with self._lock:
             self._stats["active_alerts"] = [
                 a

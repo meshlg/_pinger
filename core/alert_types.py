@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -191,8 +191,8 @@ class AlertGroup:
     alerts: List[AlertEntity] = field(default_factory=list)
     context: Optional[AlertContext] = None
     priority: AlertPriority = AlertPriority.LOW
-    created_at: datetime = field(default_factory=datetime.now)
-    updated_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     count: int = 0
     active: bool = True
     
@@ -200,7 +200,7 @@ class AlertGroup:
         """Add alert to group and update metadata."""
         self.alerts.append(alert)
         self.count = len(self.alerts)
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now(timezone.utc)
         
         # Update priority to highest in group
         if alert.priority > self.priority:
@@ -226,7 +226,7 @@ class AlertGroup:
     
     def get_age_seconds(self) -> float:
         """Get age of group in seconds."""
-        return (datetime.now() - self.created_at).total_seconds()
+        return (datetime.now(timezone.utc) - self.created_at).total_seconds()
     
     def should_escalate(self, escalation_threshold_seconds: float) -> bool:
         """Check if group should be escalated based on age."""
@@ -271,7 +271,7 @@ class AlertHistory:
     def _cleanup(self) -> None:
         """Remove old entries based on size and retention."""
         # Remove by retention time
-        cutoff_time = datetime.now().timestamp() - self.retention_seconds
+        cutoff_time = datetime.now(timezone.utc).timestamp() - self.retention_seconds
         self.entries = [
             e for e in self.entries
             if e.timestamp.timestamp() >= cutoff_time
@@ -291,7 +291,7 @@ class AlertHistory:
     
     def get_recent(self, seconds: float) -> List[AlertEntity]:
         """Get alerts from last N seconds."""
-        cutoff = datetime.now().timestamp() - seconds
+        cutoff = datetime.now(timezone.utc).timestamp() - seconds
         return [e for e in self.entries if e.timestamp.timestamp() >= cutoff]
     
     def get_count_by_priority(self) -> Dict[AlertPriority, int]:

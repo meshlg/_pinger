@@ -6,7 +6,7 @@ import sys
 import asyncio
 import logging
 import signal
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, TYPE_CHECKING
 
 from rich.console import Console
@@ -100,7 +100,7 @@ class PingerApp:
             f"\n[bold green]>>> {t('start').format(target=TARGET_IP)} <<<[/bold green]"
         )
         self.console.print(f"[dim]{t('press')}[/dim]\n")
-        self.monitor.stats_repo.set_start_time(datetime.now())
+        self.monitor.stats_repo.set_start_time(datetime.now(timezone.utc))
 
         tasks = self.monitor.start_tasks()
 

@@ -4,7 +4,7 @@ import sys
 import logging
 import statistics
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
@@ -94,7 +94,7 @@ class ProblemAnalyzer:
 
         # Check for time-based patterns
         if len(self.problem_history) >= 20:
-            current_hour = datetime.now().hour
+            current_hour = datetime.now(timezone.utc).hour
             time_pattern_problems = [
                 p for p in self.problem_history
                 if p.get("timestamp") and p["timestamp"].hour == current_hour
@@ -137,7 +137,7 @@ class ProblemAnalyzer:
 
     def _record_problem(self, problem_type: str, snap: StatsSnapshot) -> None:
         """Record problem occurrence in history."""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         last_record = self.problem_history[-1] if self.problem_history else None
 
         # Suppress duplicate problems within cooldown window
