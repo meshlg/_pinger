@@ -11,7 +11,7 @@ import os
 # Version
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION = "2.3.9.0042"
+VERSION = "2.4.0.0717"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Language Detection
@@ -290,8 +290,8 @@ HEALTH_TOKEN_HEADER = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
 # UI Layout
 # ─────────────────────────────────────────────────────────────────────────────
 
-UI_COMPACT_THRESHOLD = int(os.environ.get("UI_COMPACT_THRESHOLD", "100"))
-UI_WIDE_THRESHOLD = int(os.environ.get("UI_WIDE_THRESHOLD", "150"))
+UI_COMPACT_THRESHOLD = int(os.environ.get("UI_COMPACT_THRESHOLD", "110"))
+UI_WIDE_THRESHOLD = int(os.environ.get("UI_WIDE_THRESHOLD", "170"))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging

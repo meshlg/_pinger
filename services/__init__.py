@@ -6,6 +6,7 @@ from .mtu_service import MTUService
 from .ip_service import IPService
 from .traceroute_service import TracerouteService
 from .hop_monitor_service import HopMonitorService
+from .geo_service import GeoService
 
 __all__ = [
     "PingService",
@@ -14,4 +15,5 @@ __all__ = [
     "IPService",
     "TracerouteService",
     "HopMonitorService",
+    "GeoService",
 ]

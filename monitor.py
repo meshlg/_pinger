@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -95,11 +96,12 @@ class Monitor:
         self.stop_event = asyncio.Event()
         self._shutdown_complete = asyncio.Event()
         self._active_subprocesses: set[subprocess.Popen] = set()
-        self._subprocess_lock = __import__('threading').Lock()
+        self._subprocess_lock = threading.Lock()
         
         # Memory monitoring counter (check every N pings)
         self._ping_counter = 0
         self._memory_check_interval = 10
+        self._ping_lock = threading.Lock()
         
         # Data repository
         self.stats_repo = StatsRepository()
@@ -116,6 +118,8 @@ class Monitor:
         
         # Hop monitor
         self.hop_monitor_service = HopMonitorService(executor=self.executor)
+        # Enable geolocation for hop monitoring (requires requests library)
+        self.hop_monitor_service.enable_geo()
         
         # Analyzers
         self.problem_analyzer = ProblemAnalyzer(stats_repo=self.stats_repo)
@@ -292,13 +296,24 @@ class Monitor:
         self._shutdown_complete.set()
         logging.info("Monitor shutdown complete")
         
-        # Force exit if threads are still hanging
+        # Check for hanging threads and warn, but allow graceful exit
         import threading as _threading
         alive = [t for t in _threading.enumerate()
                  if t.is_alive() and not t.daemon and t != _threading.main_thread()]
         if alive:
-            logging.warning(f"Force exiting: {len(alive)} non-daemon threads still alive")
-            os._exit(0)
+            thread_names = [t.name for t in alive]
+            logging.warning(
+                f"Shutdown complete with {len(alive)} non-daemon threads still alive: {thread_names}. "
+                f"Using sys.exit() for graceful cleanup."
+            )
+            # Flush all logging handlers before exit
+            for handler in logging.root.handlers:
+                try:
+                    handler.flush()
+                except Exception:
+                    pass
+            # Use sys.exit() instead of os._exit() to allow atexit handlers to run
+            sys.exit(0)
 
     async def run_blocking(self, func, *args, **kwargs) -> Any:
         """Run blocking function in executor."""
@@ -349,11 +364,12 @@ class Monitor:
         self._metrics_handler.update_metrics(result)
         
         # 5. Periodic maintenance (every N pings)
-        self._ping_counter += 1
-        if self._ping_counter >= self._memory_check_interval:
-            self._ping_counter = 0
-            self._check_memory_and_cleanup()
-            self._check_instance_notifications()
+        with self._ping_lock:
+            self._ping_counter += 1
+            if self._ping_counter >= self._memory_check_interval:
+                self._ping_counter = 0
+                self._check_memory_and_cleanup()
+                self._check_instance_notifications()
         
         return result.success, result.latency
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import threading
@@ -34,6 +35,14 @@ class HopStatus:
     total_pings: int = 0
     last_ok: bool = True
     latency_history: list = field(default_factory=list)
+    # new fields for stage 1
+    jitter: float = 0.0
+    prev_latency: Optional[float] = None
+    latency_delta: float = 0.0
+    # new fields for stage 3 - geolocation
+    country: str = ""
+    country_code: str = ""
+    asn: str = ""
 
     @property
     def loss_pct(self) -> float:
@@ -51,6 +60,15 @@ class HopStatus:
             "loss_pct": self.loss_pct,
             "total_pings": self.total_pings,
             "last_ok": self.last_ok,
+            # new fields
+            "jitter": self.jitter,
+            "latency_delta": self.latency_delta,
+            # for sparkline rendering - last 10 values
+            "latency_history": self.latency_history[-10:] if self.latency_history else [],
+            # geolocation fields
+            "country": self.country,
+            "country_code": self.country_code,
+            "asn": self.asn,
         }
 
 
@@ -69,6 +87,14 @@ class HopMonitorService:
         self._rediscovery_requested = threading.Event()
         self._on_hop_callback = None  # called when a new hop is discovered
         self._active_proc: subprocess.Popen | None = None  # tracked for shutdown kill
+        self._geo_service = None  # lazy-loaded geolocation service
+
+    def enable_geo(self) -> None:
+        """Enable geolocation lookups for hops."""
+        if self._geo_service is None:
+            from .geo_service import GeoService
+            self._geo_service = GeoService()
+            logging.info("Hop geolocation enabled")
 
     # ── Discovery ──
 
@@ -104,6 +130,12 @@ class HopMonitorService:
                 self._hops = hops
                 self._discovered = True
                 self._last_discovery = time.time()
+            
+            # Fetch geolocation for all discovered hops (in background)
+            if self._geo_service is not None:
+                for hop in hops:
+                    self._update_hop_geo(hop)
+            
             return hops
         except Exception as exc:
             logging.error(f"Hop discovery failed: {exc}", exc_info=True)
@@ -303,15 +335,54 @@ class HopMonitorService:
             hop.last_ok = ok
             if ok and latency is not None:
                 hop.last_latency = latency
+                
+                # Calculate delta (change vs previous ping)
+                if hop.prev_latency is not None:
+                    hop.latency_delta = latency - hop.prev_latency
+                hop.prev_latency = latency
+                
+                # Add to history and maintain size limit
                 hop.latency_history.append(latency)
                 if len(hop.latency_history) > self.LATENCY_HISTORY_SIZE:
                     hop.latency_history = hop.latency_history[-self.LATENCY_HISTORY_SIZE:]
+                
+                # Update min/max
                 hop.min_latency = min(hop.min_latency, latency)
                 hop.max_latency = max(hop.max_latency, latency)
+                
+                # Calculate avg
                 hop.avg_latency = sum(hop.latency_history) / len(hop.latency_history)
+                
+                # Calculate jitter (standard deviation) when we have enough samples
+                if len(hop.latency_history) >= 2:
+                    hop.jitter = statistics.stdev(hop.latency_history)
             else:
                 hop.loss_count += 1
                 hop.last_latency = None
+                # Reset delta on failure
+                hop.latency_delta = 0.0
+
+    def _update_hop_geo(self, hop: HopStatus) -> None:
+        """Update geolocation for a hop (if enabled and not already set)."""
+        if self._geo_service is None:
+            return
+        if hop.country_code:  # Already have geo data
+            return
+        
+        # Run in background to not block ping loop
+        def _fetch_geo():
+            try:
+                info = self._geo_service.get_geo(hop.ip)
+                if info:
+                    with self._lock:
+                        hop.country = info.country
+                        hop.country_code = info.country_code
+                        hop.asn = info.asn
+            except Exception as exc:
+                logging.debug(f"Geo fetch failed for {hop.ip}: {exc}")
+        
+        # Schedule geo lookup in background
+        self._executor.submit(_fetch_geo)
 
     # ── Public API ──
 

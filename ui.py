@@ -225,6 +225,38 @@ class MonitorUI:
             return _YELLOW
         return _GREEN
 
+    # Render sparkline from latency history
+    @staticmethod
+    def _render_sparkline(history: list) -> str:
+        """Render mini chart from latency history using Unicode box characters."""
+        if not history or len(history) < 2:
+            return ""
+        
+        # Normalize to 6 levels
+        min_val, max_val = min(history), max(history)
+        range_val = max_val - min_val if max_val != min_val else 1
+        
+        chars = " ▁▂▃▅▇"  # 6 levels (index 0-5)
+        
+        result = []
+        # Take only last 6 values to fit column width
+        recent = history[-6:]
+        for val in recent:
+            idx = min(5, int((val - min_val) / range_val * 5))
+            result.append(chars[idx])
+        
+        return "".join(result)
+
+    # Render trend arrow based on delta
+    @staticmethod
+    def _render_trend_arrow(delta: float, threshold: float = 2.0) -> str:
+        """Render trend arrow based on delta value."""
+        if delta > threshold:
+            return "↑"  # increasing
+        elif delta < -threshold:
+            return "↓"  # decreasing
+        return "→"  # stable
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Panels
     # ═══════════════════════════════════════════════════════════════════════════
@@ -572,9 +604,16 @@ class MonitorUI:
             box=None, padding=(0, 1), expand=True,
         )
         tbl.add_column(t("hop_col_num"), style=_TEXT_DIM, width=3, justify="right")
+        # Add sparkline column for compact mode
+        if tier == "compact":
+            tbl.add_column("", width=6, justify="left")
         tbl.add_column(t("hop_col_min"), width=9, justify="right")
         tbl.add_column(t("hop_col_avg"), width=9, justify="right")
         tbl.add_column(t("hop_col_last"), width=9, justify="right")
+        # Add delta and jitter columns for standard/wide modes
+        if tier != "compact":
+            tbl.add_column(t("hop_col_delta"), width=7, justify="right")
+            tbl.add_column(t("hop_col_jitter"), width=8, justify="right")
         tbl.add_column(t("hop_col_loss"), width=7, justify="right")
         tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True)
 
@@ -593,11 +632,31 @@ class MonitorUI:
             loss = h.get("loss_pct", 0.0)
             ip = h.get("ip", "?")
             hostname = h.get("hostname", ip)
-
+            
+            # New fields for Etap 1
+            jitter = h.get("jitter", 0.0)
+            delta = h.get("latency_delta", 0.0)
+            latency_history = h.get("latency_history", [])
+            
+            # Stage 3 - geolocation fields
+            country = h.get("country", "")
+            country_code = h.get("country_code", "")
+            asn = h.get("asn", "")
+            
             if hostname and hostname != ip and tier != "compact":
-                host_txt = f"{hostname} [{_TEXT_DIM}]\\[{ip}][/{_TEXT_DIM}]"
+                host_txt = f"{hostname} [{_TEXT_DIM}][{ip}][/{_TEXT_DIM}]"
             else:
                 host_txt = ip
+            
+            # Add geo info after hostname (for all tiers)
+            if country_code or asn:
+                geo_parts = []
+                if country_code:
+                    geo_parts.append(country_code)
+                if asn:
+                    geo_parts.append(f"AS{asn}")
+                geo_txt = f" [{_TEXT_DIM}]({' '.join(geo_parts)})[/{_TEXT_DIM}]"
+                host_txt = host_txt + geo_txt
 
             def _lat_fmt(val: Any) -> str:
                 if val is None:
@@ -608,16 +667,57 @@ class MonitorUI:
             last_txt = f"[{_RED}]  *[/{_RED}]" if (not ok or lat is None) else _lat_fmt(lat)
             min_txt = _lat_fmt(mn)
             avg_txt = _lat_fmt(avg if avg > 0 else None)
+            
+            # Sparkline for compact mode
+            if tier == "compact":
+                spark = self._render_sparkline(latency_history)
+                if spark:
+                    spark_txt = f"[{_TEXT_DIM}]{spark}[/{_TEXT_DIM}]"
+                else:
+                    spark_txt = ""
+                # Compact: show sparkline + trend arrow instead of delta/jitter
+                trend = self._render_trend_arrow(delta)
+                if trend and delta != 0:
+                    if delta > 0:
+                        trend_txt = f"[{_YELLOW}]{trend}[/{_YELLOW}]"
+                    else:
+                        trend_txt = f"[{_GREEN}]{trend}[/{_GREEN}]"
+                else:
+                    trend_txt = f"[{_TEXT_DIM}]{trend}[/{_TEXT_DIM}]"
+                last_txt = f"{last_txt} {trend_txt}"
+            
+            # Delta formatting (standard/wide mode)
+            if tier != "compact":
+                trend = self._render_trend_arrow(delta)
+                if delta > 0:
+                    delta_txt = f"[{_YELLOW}]{trend}+{delta:.0f}[/{_YELLOW}]"
+                elif delta < 0:
+                    delta_txt = f"[{_GREEN}]{trend}{delta:.0f}[/{_GREEN}]"
+                else:
+                    delta_txt = f"[{_TEXT_DIM}]{trend}—[/{_TEXT_DIM}]"
+                
+                # Jitter formatting
+                if jitter > 0:
+                    jitter_txt = f"[{_TEXT_DIM}]{jitter:.1f}[/{_TEXT_DIM}]"
+                else:
+                    jitter_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
             if loss > 10:
-                loss_txt = f"[{_RED}]{loss:.1f}%[/{_RED}]"
+                loss_txt = f"[{_RED}]{loss:.1f}![/{_RED}]"
             elif loss > 0:
                 loss_txt = f"[{_YELLOW}]{loss:.1f}%[/{_YELLOW}]"
             else:
                 loss_txt = f"[{_GREEN}]{loss:.1f}%[/{_GREEN}]"
 
             row_style = _TEXT_DIM if (not ok and h.get("total_pings", 0) > 2) else ""
-            tbl.add_row(str(hop_num), min_txt, avg_txt, last_txt, loss_txt, host_txt, style=row_style)
+            
+            # Build row based on tier
+            if tier == "compact":
+                # Compact: spark + trend
+                tbl.add_row(str(hop_num), spark_txt, min_txt, avg_txt, last_txt, loss_txt, host_txt, style=row_style)
+            else:
+                # Standard/wide: delta and jitter columns already show trend info
+                tbl.add_row(str(hop_num), min_txt, avg_txt, last_txt, delta_txt, jitter_txt, loss_txt, host_txt, style=row_style)
 
             if not ok:
                 worst_hop = h

@@ -68,15 +68,27 @@ class PingerApp:
                 logging.debug(f"Could not set Windows console handler: {exc}")
 
     def _force_shutdown(self) -> None:
-        """Force shutdown — kill all children and exit immediately."""
+        """Force shutdown — kill all children and exit gracefully."""
         if self._shutdown_called:
             return
         self._shutdown_called = True
+        
+        # Flush logging handlers before shutdown
+        for handler in logging.root.handlers:
+            try:
+                handler.flush()
+            except Exception:
+                pass
+        
         try:
             self.monitor.shutdown()
-        except Exception:
-            pass
-        os._exit(0)
+        except Exception as exc:
+            logging.warning(f"Error during forced shutdown: {exc}")
+        
+        # Use sys.exit() instead of os._exit() to allow atexit handlers to run
+        # This ensures lock files are released and buffers are flushed
+        logging.info("Forced shutdown complete, exiting gracefully")
+        sys.exit(0)
 
     async def run(self) -> None:
         self._install_signal_handlers()

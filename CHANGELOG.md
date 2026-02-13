@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0.0717]
+### Fixed
+- **Thread Safety for _ping_counter** — Added `threading.Lock` to protect incremental counter in `Monitor` class.
+  - Previous code `self._ping_counter += 1` with subsequent check was vulnerable to race conditions.
+  - Added `self._ping_lock = threading.Lock()` in `__init__` and wrapped increment+check in `with self._ping_lock:` block.
+  - Ensures safe operation if `ping_once()` or `_ping_counter` access is extended to multiple threads in future.
+  - Verified other fields: `_active_subprocesses` already protected by `_subprocess_lock`, `_executor_tasks` only used during shutdown.
+
+- **Graceful Shutdown with sys.exit()** — Replaced `os._exit(0)` with `sys.exit(0)` to allow proper Python shutdown sequence.
+  - `os._exit()` bypasses Python's interpreter shutdown, preventing finalizers from running, losing buffered file writes, and leaving lock files on disk.
+  - In `monitor.py`: Changed force exit to use `sys.exit(0)` after flushing all logging handlers.
+  - In `main.py`: Changed `_force_shutdown()` to use `sys.exit(0)` after graceful cleanup.
+  - Now `atexit` handlers run properly, ensuring `SingleInstance` lock file is released on exit.
+  - Added explicit flush of all logging handlers before exit to prevent log message loss.
+
+### Added
+- **Hop Panel Enhancements (Stage 1, 2 & 3)** — Added new metrics, visual improvements, and geolocation to hop monitoring panel.
+  - **Stage 1 - Basic metrics**: jitter (standard deviation), latency delta (change vs previous ping).
+  - **Stage 2 - Visual**: Sparklines `▁▂▃▅▇` showing latency history in compact mode; trend arrows ↑↓→.
+  - **Stage 3 - Geolocation**: New `GeoService` for IP geolocation via ip-api.com with caching.
+    - `services/geo_service.py` - GeoService class with 1-hour cache, 45 req/min rate limit.
+    - HopStatus includes `country`, `country_code`, `asn` fields.
+    - `HopMonitorService.enable_geo()` to enable geolocation lookups.
+    - Wide mode displays Country and ASN columns.
+  - Updated `HopStatus` dataclass with new fields: `jitter`, `prev_latency`, `latency_delta`, `latency_history`, `country`, `country_code`, `asn`.
+  - UI shows new columns: Delta (Δ) and Jitter in standard/wide; sparkline + trend in compact; Country and ASN in wide.
+
 ## [2.3.9.0042] - 2026-02-12
 ### Refactoring
 - **Ping Service Code Deduplication** — Eliminated duplicate ping command execution logic between `TTLMonitorTask._extract_ttl()` and `PingService._ping_with_system()`.
