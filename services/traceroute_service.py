@@ -18,6 +18,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from stats_repository import StatsRepository
 
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.astimezone()
+    return dt
+
 try:
     from prometheus_client import Counter  # type: ignore
     METRICS_AVAILABLE = True
@@ -134,6 +143,7 @@ class TracerouteService:
             return False
         
         last = self._stats_repo.get_last_traceroute_time()
+        last = _ensure_utc(last)
         if last and (datetime.now(timezone.utc) - last).total_seconds() < TRACEROUTE_COOLDOWN:
             return False
         

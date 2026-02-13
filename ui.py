@@ -7,6 +7,16 @@ from typing import TYPE_CHECKING, Any, Literal
 import time
 import threading
 
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Naive datetime - assume it's local time and convert to UTC
+        return dt.astimezone()
+    return dt
+
 from rich import box
 from rich.console import Console, Group
 from rich.layout import Layout
@@ -119,6 +129,9 @@ class MonitorUI:
     def _fmt_uptime(start_time: datetime | None) -> str:
         if start_time is None:
             return t("na")
+        start_time = _ensure_utc(start_time)
+        if start_time is None:
+            return t("na")
         total = int((datetime.now(timezone.utc) - start_time).total_seconds())
         d = total // 86400
         h = (total % 86400) // 3600
@@ -136,6 +149,9 @@ class MonitorUI:
 
     @staticmethod
     def _fmt_since(ts: datetime | None) -> str:
+        if ts is None:
+            return t("never")
+        ts = _ensure_utc(ts)
         if ts is None:
             return t("never")
         sec = int((datetime.now(timezone.utc) - ts).total_seconds())
@@ -552,9 +568,13 @@ class MonitorUI:
         if snap["last_problem_time"] is None:
             last_prob_txt = f"[{_GREEN}]{t('never')}[/{_GREEN}]"
         else:
-            age = (datetime.now(timezone.utc) - snap["last_problem_time"]).total_seconds()
-            since_txt = self._fmt_since(snap["last_problem_time"])
-            last_prob_txt = f"[{_RED}]{since_txt}[/{_RED}]" if age < 60 else f"[{_YELLOW}]{since_txt}[/{_YELLOW}]"
+            last_problem_time = _ensure_utc(snap["last_problem_time"])
+            if last_problem_time is None:
+                last_prob_txt = f"[{_GREEN}]{t('never')}[/{_GREEN}]"
+            else:
+                age = (datetime.now(timezone.utc) - last_problem_time).total_seconds()
+                since_txt = self._fmt_since(snap["last_problem_time"])
+                last_prob_txt = f"[{_RED}]{since_txt}[/{_RED}]" if age < 60 else f"[{_YELLOW}]{since_txt}[/{_YELLOW}]"
 
         prob_time_tbl = self._kv_table(width, key_width=14)
         prob_time_tbl.add_row(f"{t('last_problem')}:", last_prob_txt)

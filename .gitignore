@@ -18,6 +18,7 @@ ENV/
 *.swp
 *.swo
 *~
+.kilocode/
 
 # Logs
 *.log

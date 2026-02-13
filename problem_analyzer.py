@@ -18,6 +18,15 @@ from config import (
 )
 
 
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.astimezone()
+    return dt
+
+
 class ProblemAnalyzer:
     """Analyzes network problems and identifies patterns."""
 
@@ -139,11 +148,9 @@ class ProblemAnalyzer:
         """Record problem occurrence in history."""
         now = datetime.now(timezone.utc)
         last_record = self.problem_history[-1] if self.problem_history else None
-
-        # Suppress duplicate problems within cooldown window
-        if last_record and last_record.get("type") == problem_type:
-            last_ts = last_record.get("timestamp")
-            if last_ts is not None:
+        last_ts = last_record.get("timestamp") if last_record else None
+        last_ts = _ensure_utc(last_ts)
+        if last_ts is not None:
                 delta = (now - last_ts).total_seconds()
                 if delta < PROBLEM_LOG_SUPPRESSION_SECONDS:
                     return

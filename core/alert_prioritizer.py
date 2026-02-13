@@ -10,6 +10,15 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.astimezone()
+    return dt
+
 from typing import Dict, List, Optional
 
 from core.alert_types import AlertEntity, AlertGroup, AlertPriority, AlertType
@@ -192,7 +201,8 @@ class AlertPrioritizer:
         Returns:
             Time factor score 0-1
         """
-        age_seconds = (datetime.now(timezone.utc) - alert.timestamp).total_seconds()
+        alert_timestamp = _ensure_utc(alert.timestamp)
+        age_seconds = (datetime.now(timezone.utc) - alert_timestamp).total_seconds()
         
         # Normalize to 0-1 based on escalation threshold
         # Alerts older than threshold get max score

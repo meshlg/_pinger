@@ -10,6 +10,16 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+
+def _ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.astimezone()
+    return dt
+
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -226,7 +236,8 @@ class AlertGroup:
     
     def get_age_seconds(self) -> float:
         """Get age of group in seconds."""
-        return (datetime.now(timezone.utc) - self.created_at).total_seconds()
+        created_at = _ensure_utc(self.created_at)
+        return (datetime.now(timezone.utc) - created_at).total_seconds()
     
     def should_escalate(self, escalation_threshold_seconds: float) -> bool:
         """Check if group should be escalated based on age."""
@@ -271,10 +282,11 @@ class AlertHistory:
     def _cleanup(self) -> None:
         """Remove old entries based on size and retention."""
         # Remove by retention time
-        cutoff_time = datetime.now(timezone.utc).timestamp() - self.retention_seconds
+        now = datetime.now(timezone.utc)
+        cutoff_time = now.timestamp() - self.retention_seconds
         self.entries = [
             e for e in self.entries
-            if e.timestamp.timestamp() >= cutoff_time
+            if _ensure_utc(e.timestamp) is not None and _ensure_utc(e.timestamp).timestamp() >= cutoff_time
         ]
         
         # Remove by size (keep most recent)
@@ -291,8 +303,9 @@ class AlertHistory:
     
     def get_recent(self, seconds: float) -> List[AlertEntity]:
         """Get alerts from last N seconds."""
-        cutoff = datetime.now(timezone.utc).timestamp() - seconds
-        return [e for e in self.entries if e.timestamp.timestamp() >= cutoff]
+        now = datetime.now(timezone.utc)
+        cutoff = now.timestamp() - seconds
+        return [e for e in self.entries if _ensure_utc(e.timestamp) is not None and _ensure_utc(e.timestamp).timestamp() >= cutoff]
     
     def get_count_by_priority(self) -> Dict[AlertPriority, int]:
         """Get counts by priority level."""
