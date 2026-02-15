@@ -132,7 +132,11 @@ Six real-time panels track your connection status — from edge latency to route
 
 - Audio + visual alerts for latency, jitter, packet loss, and connection drops
 - Hysteresis to prevent flickering — alerts trigger only on state changes
-- Cooldown timers to prevent alert spam
+- **Smart Features:**
+  - **Deduplication** — prevents repetitive alerts for the same issue
+  - **Grouping** — combines related alerts into a single notification
+  - **Adaptive Thresholds** — automatically learns normal network behavior
+  - **Fatigue Prevention** — suppresses alerts during prolonged incidents
 - Alert feed with timestamps for problem correlation
 
 ### ✪ Problem Analysis and Prediction
@@ -246,6 +250,14 @@ CONSECUTIVE_LOSS_THRESHOLD = 5   # Consecutive loss threshold
 
 ENABLE_SOUND_ALERTS = True
 ALERT_COOLDOWN = 5              # Minimum interval between sounds (seconds)
+
+# Smart Features
+ENABLE_SMART_ALERTS = True
+ENABLE_ADAPTIVE_THRESHOLDS = True
+ADAPTIVE_BASELINE_WINDOW_HOURS = 24
+ENABLE_ALERT_DEDUPLICATION = True
+ENABLE_ALERT_GROUPING = True
+```
 ```
 
 ### ✧ DNS Monitoring
