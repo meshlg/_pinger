@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3.0136]
+### Added
+- **Smart Alert System** - Advanced alerting with adaptive thresholds and alert fatigue prevention.
+  - **Adaptive Thresholds**: Automatically learns normal latency patterns and sets dynamic thresholds based on time of day and day of week.
+  - **Alert Fatigue Prevention**: Automatically reduces alert frequency during prolonged incidents (1-3-5-15-30 minute intervals).
+  - **Smart Recovery**: Automatically cancels alerts when metrics return to normal for 3 consecutive checks.
+  - **Alert Prioritization**: Ranks alerts by severity (CRITICAL, WARNING, INFO) and groups related alerts.
+  - **Alert Deduplication**: Prevents duplicate alerts for the same issue.
+  - **Alert History**: Logs all alerts (active and recovered) with timestamps.
+  - **Configuration**: New settings in `config/settings_model.py`:
+    - `SMART_ALERT_ENABLED`: Enable/disable the system
+    - `SMART_ALERT_ADAPTIVE_ENABLED`: Enable adaptive thresholds
+    - `SMART_ALERT_FATIGUE_ENABLED`: Enable alert fatigue prevention
+    - `SMART_ALERT_RECOVERY_ENABLED`: Enable smart recovery
+    - `SMART_ALERT_HISTORY_ENABLED`: Enable alert history
+    - `SMART_ALERT_HISTORY_RETENTION_DAYS`: Auto-delete old history
+  - **UI Integration**:
+    - New "Alerts" tab in the main UI
+    - Real-time alert notifications with sound
+    - Alert history log with filtering and search
+    - Visual indicators for alert severity and status
+    - Alert statistics and trends
+
+### Refactoring
+- **Alert System Architecture** - Complete rewrite of the alerting system for better performance and maintainability.
+  - **Centralized Alert Manager**: `core/alert_manager.py` - Manages alert lifecycle, state, and history
+  - **Alert Prioritizer**: `core/alert_prioritizer.py` - Ranks alerts by severity and groups related alerts
+  - **Adaptive Thresholds**: `core/adaptive_thresholds.py` - Calculates dynamic thresholds based on historical data
+  - **Alert Fatigue Prevention**: `core/alert_fatigue.py` - Manages alert cooldown and suppression
+  - **Smart Recovery**: `core/smart_recovery.py` - Detects recovery and cancels alerts
+  - **Alert History**: `core/alert_history.py` - Manages alert history log
+  - **Alert Types**: `core/alert_types.py` - Centralized alert type definitions
+  - **Alert Service**: `services/alert_service.py` - Service layer for alert operations
+  - **Alert Repository**: `services/alert_repository.py` - Data access layer for alert history
+  - **UI Integration**: `ui/alerts_tab.py`, `ui/alert_history_tab.py`, `ui/main_ui.py` - UI components
+
+### Changed
+- **Alert Configuration** - Moved alert configuration from `config.py` to `config/settings_model.py`
+  - Added new Smart Alert System settings with default values
+  - Kept existing alert settings with backward compatibility
+  - Added documentation for new settings
+
+### Fixed
+- **Alert History Cleanup** - Added automatic cleanup of old alert history entries
+  - Old entries are deleted when they exceed retention period
+  - Cleanup runs automatically on startup and periodically
+  - Prevents alert history from growing indefinitely
+
 ## [2.4.2.0556]
 ### Security
 - **Docker Compose authentication** - Enabled Basic Auth by default in `docker-compose.yml` for health endpoint.

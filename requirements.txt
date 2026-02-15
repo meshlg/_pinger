@@ -5,3 +5,4 @@ pythonping==1.1.4
 prometheus_client==0.24.1
 dnspython==2.8.0
 psutil==7.2.2
+pydantic-settings>=2.0.0

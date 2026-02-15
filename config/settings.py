@@ -6,12 +6,16 @@ All configuration variables are defined here and can be overridden via environme
 
 import locale
 import os
+from .settings_model import Settings
+
+# Initialize settings
+settings = Settings()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Version
 # ─────────────────────────────────────────────────────────────────────────────
 
-VERSION = "2.4.2.0556"
+VERSION = settings.VERSION
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Language Detection
@@ -45,261 +49,214 @@ CURRENT_LANGUAGE = _detect_system_language()
 # Core Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
-TARGET_IP = os.environ.get("TARGET_IP", "1.1.1.1")
-INTERVAL = float(os.environ.get("INTERVAL", "1"))
-WINDOW_SIZE = 1800
-LATENCY_WINDOW = 600
+TARGET_IP = settings.TARGET_IP
+INTERVAL = settings.INTERVAL
+WINDOW_SIZE = settings.WINDOW_SIZE
+LATENCY_WINDOW = settings.LATENCY_WINDOW
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Alert Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_SOUND_ALERTS = True
-ALERT_COOLDOWN = 5
-ALERT_ON_PACKET_LOSS = True
-ALERT_ON_HIGH_LATENCY = True
-HIGH_LATENCY_THRESHOLD = 100
+ENABLE_SOUND_ALERTS = settings.ENABLE_SOUND_ALERTS
+ALERT_COOLDOWN = settings.ALERT_COOLDOWN
+ALERT_ON_PACKET_LOSS = settings.ALERT_ON_PACKET_LOSS
+ALERT_ON_HIGH_LATENCY = settings.ALERT_ON_HIGH_LATENCY
+HIGH_LATENCY_THRESHOLD = settings.HIGH_LATENCY_THRESHOLD
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Threshold Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_THRESHOLD_ALERTS = True
-PACKET_LOSS_THRESHOLD = 5.0
-AVG_LATENCY_THRESHOLD = 100
-CONSECUTIVE_LOSS_THRESHOLD = 5
-JITTER_THRESHOLD = 30
+ENABLE_THRESHOLD_ALERTS = settings.ENABLE_THRESHOLD_ALERTS
+PACKET_LOSS_THRESHOLD = settings.PACKET_LOSS_THRESHOLD
+AVG_LATENCY_THRESHOLD = settings.AVG_LATENCY_THRESHOLD
+CONSECUTIVE_LOSS_THRESHOLD = settings.CONSECUTIVE_LOSS_THRESHOLD
+JITTER_THRESHOLD = settings.JITTER_THRESHOLD
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Smart Alert System
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Enable smart alert features (deduplication, grouping, prioritization, adaptive thresholds)
-ENABLE_SMART_ALERTS = os.environ.get("ENABLE_SMART_ALERTS", "true").lower() in ("true", "1", "yes")
-
-# Alert Deduplication
-ENABLE_ALERT_DEDUPLICATION = os.environ.get("ENABLE_ALERT_DEDUPLICATION", "true").lower() in ("true", "1", "yes")
-ALERT_DEDUP_WINDOW_SECONDS = int(os.environ.get("ALERT_DEDUP_WINDOW_SECONDS", "300"))  # 5 minutes
-ALERT_SIMILARITY_THRESHOLD = float(os.environ.get("ALERT_SIMILARITY_THRESHOLD", "0.85"))  # 0-1, higher = more strict
-
-# Alert Grouping
-ENABLE_ALERT_GROUPING = os.environ.get("ENABLE_ALERT_GROUPING", "true").lower() in ("true", "1", "yes")
-ALERT_GROUP_WINDOW_SECONDS = int(os.environ.get("ALERT_GROUP_WINDOW_SECONDS", "600"))  # 10 minutes
-ALERT_GROUP_MAX_SIZE = int(os.environ.get("ALERT_GROUP_MAX_SIZE", "20"))  # Max alerts in one group
-
-# Dynamic Prioritization
-ENABLE_DYNAMIC_PRIORITY = os.environ.get("ENABLE_DYNAMIC_PRIORITY", "true").lower() in ("true", "1", "yes")
-PRIORITY_BUSINESS_IMPACT_WEIGHT = float(os.environ.get("PRIORITY_BUSINESS_IMPACT_WEIGHT", "0.4"))
-PRIORITY_USER_IMPACT_WEIGHT = float(os.environ.get("PRIORITY_USER_IMPACT_WEIGHT", "0.3"))
-PRIORITY_SERVICE_CRITICALITY_WEIGHT = float(os.environ.get("PRIORITY_SERVICE_CRITICALITY_WEIGHT", "0.2"))
-PRIORITY_TIME_WEIGHT = float(os.environ.get("PRIORITY_TIME_WEIGHT", "0.1"))
-ALERT_ESCALATION_TIME_MINUTES = int(os.environ.get("ALERT_ESCALATION_TIME_MINUTES", "30"))  # Escalate after 30 min
-
-# Adaptive Thresholds
-ENABLE_ADAPTIVE_THRESHOLDS = os.environ.get("ENABLE_ADAPTIVE_THRESHOLDS", "true").lower() in ("true", "1", "yes")
-ADAPTIVE_BASELINE_WINDOW_HOURS = int(os.environ.get("ADAPTIVE_BASELINE_WINDOW_HOURS", "24"))  # Calculate baseline from 24h
-ADAPTIVE_UPDATE_INTERVAL_MINUTES = int(os.environ.get("ADAPTIVE_UPDATE_INTERVAL_MINUTES", "60"))  # Recalculate every hour
-ADAPTIVE_ANOMALY_SIGMA = float(os.environ.get("ADAPTIVE_ANOMALY_SIGMA", "2.0"))  # Std deviations for anomaly detection
-
-# Noise Reduction
-ENABLE_NOISE_REDUCTION = os.environ.get("ENABLE_NOISE_REDUCTION", "true").lower() in ("true", "1", "yes")
-ALERT_RATE_LIMIT_PER_MINUTE = int(os.environ.get("ALERT_RATE_LIMIT_PER_MINUTE", "10"))  # Max alerts per minute
-ALERT_BURST_LIMIT = int(os.environ.get("ALERT_BURST_LIMIT", "5"))  # Max alerts in 10 seconds
-
-# Alert History
-ALERT_HISTORY_SIZE = int(os.environ.get("ALERT_HISTORY_SIZE", "500"))  # Keep last N alerts
-ALERT_HISTORY_RETENTION_HOURS = int(os.environ.get("ALERT_HISTORY_RETENTION_HOURS", "48"))  # Clean old alerts
+ENABLE_SMART_ALERTS = settings.ENABLE_SMART_ALERTS
+ENABLE_ALERT_DEDUPLICATION = settings.ENABLE_ALERT_DEDUPLICATION
+ALERT_DEDUP_WINDOW_SECONDS = settings.ALERT_DEDUP_WINDOW_SECONDS
+ALERT_SIMILARITY_THRESHOLD = settings.ALERT_SIMILARITY_THRESHOLD
+ENABLE_ALERT_GROUPING = settings.ENABLE_ALERT_GROUPING
+ALERT_GROUP_WINDOW_SECONDS = settings.ALERT_GROUP_WINDOW_SECONDS
+ALERT_GROUP_MAX_SIZE = settings.ALERT_GROUP_MAX_SIZE
+ENABLE_DYNAMIC_PRIORITY = settings.ENABLE_DYNAMIC_PRIORITY
+PRIORITY_BUSINESS_IMPACT_WEIGHT = settings.PRIORITY_BUSINESS_IMPACT_WEIGHT
+PRIORITY_USER_IMPACT_WEIGHT = settings.PRIORITY_USER_IMPACT_WEIGHT
+PRIORITY_SERVICE_CRITICALITY_WEIGHT = settings.PRIORITY_SERVICE_CRITICALITY_WEIGHT
+PRIORITY_TIME_WEIGHT = settings.PRIORITY_TIME_WEIGHT
+ALERT_ESCALATION_TIME_MINUTES = settings.ALERT_ESCALATION_TIME_MINUTES
+ENABLE_ADAPTIVE_THRESHOLDS = settings.ENABLE_ADAPTIVE_THRESHOLDS
+ADAPTIVE_BASELINE_WINDOW_HOURS = settings.ADAPTIVE_BASELINE_WINDOW_HOURS
+ADAPTIVE_UPDATE_INTERVAL_MINUTES = settings.ADAPTIVE_UPDATE_INTERVAL_MINUTES
+ADAPTIVE_ANOMALY_SIGMA = settings.ADAPTIVE_ANOMALY_SIGMA
+ENABLE_NOISE_REDUCTION = settings.ENABLE_NOISE_REDUCTION
+ALERT_RATE_LIMIT_PER_MINUTE = settings.ALERT_RATE_LIMIT_PER_MINUTE
+ALERT_BURST_LIMIT = settings.ALERT_BURST_LIMIT
+ALERT_HISTORY_SIZE = settings.ALERT_HISTORY_SIZE
+ALERT_HISTORY_RETENTION_HOURS = settings.ALERT_HISTORY_RETENTION_HOURS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IP Change Detection
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_IP_CHANGE_ALERT = True
-IP_CHECK_INTERVAL = 15
-IP_CHANGE_SOUND = True
-LOG_IP_CHANGES = True
+ENABLE_IP_CHANGE_ALERT = settings.ENABLE_IP_CHANGE_ALERT
+IP_CHECK_INTERVAL = settings.IP_CHECK_INTERVAL
+IP_CHANGE_SOUND = settings.IP_CHANGE_SOUND
+LOG_IP_CHANGES = settings.LOG_IP_CHANGES
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DNS Monitoring
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_DNS_MONITORING = True
-DNS_TEST_DOMAIN = "cloudflare.com"
-DNS_CHECK_INTERVAL = 10
-DNS_SLOW_THRESHOLD = 100
-
-# DNS record types to test (requires dnspython)
-DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "MX", "TXT", "NS"]
-
-# DNS Benchmark tests (Cached/Uncached/DotCom)
-ENABLE_DNS_BENCHMARK = True
-DNS_BENCHMARK_DOTCOM_DOMAIN = "cloudflare.com"  # Domain for DotCom test
-DNS_BENCHMARK_SERVERS = ["system"]  # "system" uses system resolver, or list IPs: ["1.1.1.1", "8.8.8.8"]
-DNS_BENCHMARK_HISTORY_SIZE = 50  # Number of queries to keep for statistics
+ENABLE_DNS_MONITORING = settings.ENABLE_DNS_MONITORING
+DNS_TEST_DOMAIN = settings.DNS_TEST_DOMAIN
+DNS_CHECK_INTERVAL = settings.DNS_CHECK_INTERVAL
+DNS_SLOW_THRESHOLD = settings.DNS_SLOW_THRESHOLD
+DNS_RECORD_TYPES = settings.DNS_RECORD_TYPES
+ENABLE_DNS_BENCHMARK = settings.ENABLE_DNS_BENCHMARK
+DNS_BENCHMARK_DOTCOM_DOMAIN = settings.DNS_BENCHMARK_DOTCOM_DOMAIN
+DNS_BENCHMARK_SERVERS = settings.DNS_BENCHMARK_SERVERS
+DNS_BENCHMARK_HISTORY_SIZE = settings.DNS_BENCHMARK_HISTORY_SIZE
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Traceroute Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_AUTO_TRACEROUTE = False  # Disabled — traceroute only on manual trigger or route change
-TRACEROUTE_TRIGGER_LOSSES = 3
-TRACEROUTE_COOLDOWN = 300       # Min interval (seconds)
-TRACEROUTE_MAX_HOPS = 15
+ENABLE_AUTO_TRACEROUTE = settings.ENABLE_AUTO_TRACEROUTE
+TRACEROUTE_TRIGGER_LOSSES = settings.TRACEROUTE_TRIGGER_LOSSES
+TRACEROUTE_COOLDOWN = settings.TRACEROUTE_COOLDOWN
+TRACEROUTE_MAX_HOPS = settings.TRACEROUTE_MAX_HOPS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MTU Monitoring
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_MTU_MONITORING = True
-MTU_CHECK_INTERVAL = 30
-ENABLE_PATH_MTU_DISCOVERY = True
-PATH_MTU_CHECK_INTERVAL = 120
-DEFAULT_MTU = 1500
-
-# MTU issue detection hysteresis
-MTU_ISSUE_CONSECUTIVE = 3  # how many consecutive failing checks to mark an MTU issue
-MTU_CLEAR_CONSECUTIVE = 2  # how many consecutive OK checks to clear the MTU issue
-MTU_DIFF_THRESHOLD = 50    # minimal difference between local and path MTU to consider an issue (bytes)
+ENABLE_MTU_MONITORING = settings.ENABLE_MTU_MONITORING
+MTU_CHECK_INTERVAL = settings.MTU_CHECK_INTERVAL
+ENABLE_PATH_MTU_DISCOVERY = settings.ENABLE_PATH_MTU_DISCOVERY
+PATH_MTU_CHECK_INTERVAL = settings.PATH_MTU_CHECK_INTERVAL
+DEFAULT_MTU = settings.DEFAULT_MTU
+MTU_ISSUE_CONSECUTIVE = settings.MTU_ISSUE_CONSECUTIVE
+MTU_CLEAR_CONSECUTIVE = settings.MTU_CLEAR_CONSECUTIVE
+MTU_DIFF_THRESHOLD = settings.MTU_DIFF_THRESHOLD
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TTL Monitoring
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_TTL_MONITORING = True
-TTL_CHECK_INTERVAL = 10
+ENABLE_TTL_MONITORING = settings.ENABLE_TTL_MONITORING
+TTL_CHECK_INTERVAL = settings.TTL_CHECK_INTERVAL
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Hop Monitoring
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_HOP_MONITORING = True
-HOP_PING_INTERVAL = 1          # seconds between hop ping cycles
-HOP_PING_TIMEOUT = 0.5         # seconds per hop ping (500ms for fast response)
-HOP_REDISCOVER_INTERVAL = 3600 # Once per hour only
-HOP_LATENCY_GOOD = 50          # ms — green threshold
-HOP_LATENCY_WARN = 100         # ms — yellow threshold (above = red)
+ENABLE_HOP_MONITORING = settings.ENABLE_HOP_MONITORING
+HOP_PING_INTERVAL = settings.HOP_PING_INTERVAL
+HOP_PING_TIMEOUT = settings.HOP_PING_TIMEOUT
+HOP_REDISCOVER_INTERVAL = settings.HOP_REDISCOVER_INTERVAL
+HOP_LATENCY_GOOD = settings.HOP_LATENCY_GOOD
+HOP_LATENCY_WARN = settings.HOP_LATENCY_WARN
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Problem Analysis
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_PROBLEM_ANALYSIS = True
-PROBLEM_ANALYSIS_INTERVAL = 60
-PROBLEM_HISTORY_SIZE = 100
-PREDICTION_WINDOW = 300
-# Suppress repetitive logs for problems and route changes (seconds)
-PROBLEM_LOG_SUPPRESSION_SECONDS = 6000
-ROUTE_LOG_SUPPRESSION_SECONDS = 6000
+ENABLE_PROBLEM_ANALYSIS = settings.ENABLE_PROBLEM_ANALYSIS
+PROBLEM_ANALYSIS_INTERVAL = settings.PROBLEM_ANALYSIS_INTERVAL
+PROBLEM_HISTORY_SIZE = settings.PROBLEM_HISTORY_SIZE
+PREDICTION_WINDOW = settings.PREDICTION_WINDOW
+PROBLEM_LOG_SUPPRESSION_SECONDS = settings.PROBLEM_LOG_SUPPRESSION_SECONDS
+ROUTE_LOG_SUPPRESSION_SECONDS = settings.ROUTE_LOG_SUPPRESSION_SECONDS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Route Analysis
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_ROUTE_ANALYSIS = True
-ROUTE_ANALYSIS_INTERVAL = 1800  # Check route every 30 min
-ROUTE_HISTORY_SIZE = 10
-HOP_TIMEOUT_THRESHOLD = 3000
-
-# Route change detection settings
-ROUTE_CHANGE_CONSECUTIVE = 2  # consecutive detections to consider route changed
-ROUTE_CHANGE_HOP_DIFF = 2     # minimal number of changed hops to consider significant
-ROUTE_IGNORE_FIRST_HOPS = 2   # ignore changes in first N hops (local network)
-ROUTE_SAVE_ON_CHANGE_CONSECUTIVE = 2  # save traceroute after N consecutive changes
+ENABLE_ROUTE_ANALYSIS = settings.ENABLE_ROUTE_ANALYSIS
+ROUTE_ANALYSIS_INTERVAL = settings.ROUTE_ANALYSIS_INTERVAL
+ROUTE_HISTORY_SIZE = settings.ROUTE_HISTORY_SIZE
+HOP_TIMEOUT_THRESHOLD = settings.HOP_TIMEOUT_THRESHOLD
+ROUTE_CHANGE_CONSECUTIVE = settings.ROUTE_CHANGE_CONSECUTIVE
+ROUTE_CHANGE_HOP_DIFF = settings.ROUTE_CHANGE_HOP_DIFF
+ROUTE_IGNORE_FIRST_HOPS = settings.ROUTE_IGNORE_FIRST_HOPS
+ROUTE_SAVE_ON_CHANGE_CONSECUTIVE = settings.ROUTE_SAVE_ON_CHANGE_CONSECUTIVE
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Visual Alerts
 # ─────────────────────────────────────────────────────────────────────────────
 
-SHOW_VISUAL_ALERTS = True
-ALERT_DISPLAY_TIME = 10
-ALERT_PANEL_LINES = 3
-MAX_ACTIVE_ALERTS = 3
+SHOW_VISUAL_ALERTS = settings.SHOW_VISUAL_ALERTS
+ALERT_DISPLAY_TIME = settings.ALERT_DISPLAY_TIME
+ALERT_PANEL_LINES = settings.ALERT_PANEL_LINES
+MAX_ACTIVE_ALERTS = settings.MAX_ACTIVE_ALERTS
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Resource Limits and Safety Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Prevent excessive resource usage and memory leaks
-MAX_WORKER_THREADS = int(os.environ.get("MAX_WORKER_THREADS", "4"))  # Limit thread pool size
-MAX_EXECUTOR_QUEUE_SIZE = int(os.environ.get("MAX_EXECUTOR_QUEUE_SIZE", "100"))  # Prevent task queue overflow
-MAX_MEMORY_MB = int(os.environ.get("MAX_MEMORY_MB", "500"))  # Memory limit warning threshold
-ENABLE_MEMORY_MONITORING = os.environ.get("ENABLE_MEMORY_MONITORING", "true").lower() in ("true", "1", "yes")
-
-# Collection size limits to prevent memory leaks
-MAX_ALERTS_HISTORY = int(os.environ.get("MAX_ALERTS_HISTORY", "100"))  # Max alerts in history
-MAX_TRACEROUTE_FILES = int(os.environ.get("MAX_TRACEROUTE_FILES", "100"))  # Auto-cleanup old traceroutes
-MAX_PROBLEM_HISTORY = int(os.environ.get("MAX_PROBLEM_HISTORY", "50"))  # Problem analyzer history limit
-MAX_ROUTE_HISTORY = int(os.environ.get("MAX_ROUTE_HISTORY", "20"))  # Route changes history
-MAX_DNS_BENCHMARK_HISTORY = int(os.environ.get("MAX_DNS_BENCHMARK_HISTORY", "100"))  # DNS benchmark results
-
-# Rate limiting to prevent excessive operations
-PING_BURST_LIMIT = int(os.environ.get("PING_BURST_LIMIT", "10"))  # Max concurrent pings
-DNS_CHECK_COOLDOWN = int(os.environ.get("DNS_CHECK_COOLDOWN", "5"))  # Seconds between DNS checks
-TRACEROUTE_MIN_INTERVAL = int(os.environ.get("TRACEROUTE_MIN_INTERVAL", "60"))  # Minimum seconds between traceroutes
-
-# Graceful shutdown timeout
-SHUTDOWN_TIMEOUT_SECONDS = int(os.environ.get("SHUTDOWN_TIMEOUT_SECONDS", "10"))
-FORCE_KILL_TIMEOUT = int(os.environ.get("FORCE_KILL_TIMEOUT", "5"))
+MAX_WORKER_THREADS = settings.MAX_WORKER_THREADS
+MAX_EXECUTOR_QUEUE_SIZE = settings.MAX_EXECUTOR_QUEUE_SIZE
+MAX_MEMORY_MB = settings.MAX_MEMORY_MB
+ENABLE_MEMORY_MONITORING = settings.ENABLE_MEMORY_MONITORING
+MAX_ALERTS_HISTORY = settings.MAX_ALERTS_HISTORY
+MAX_TRACEROUTE_FILES = settings.MAX_TRACEROUTE_FILES
+MAX_PROBLEM_HISTORY = settings.MAX_PROBLEM_HISTORY
+MAX_ROUTE_HISTORY = settings.MAX_ROUTE_HISTORY
+MAX_DNS_BENCHMARK_HISTORY = settings.MAX_DNS_BENCHMARK_HISTORY
+PING_BURST_LIMIT = settings.PING_BURST_LIMIT
+DNS_CHECK_COOLDOWN = settings.DNS_CHECK_COOLDOWN
+TRACEROUTE_MIN_INTERVAL = settings.TRACEROUTE_MIN_INTERVAL
+SHUTDOWN_TIMEOUT_SECONDS = settings.SHUTDOWN_TIMEOUT_SECONDS
+FORCE_KILL_TIMEOUT = settings.FORCE_KILL_TIMEOUT
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Single Instance
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Enable single instance enforcement (prevents multiple copies running simultaneously)
-ENABLE_SINGLE_INSTANCE = os.environ.get("ENABLE_SINGLE_INSTANCE", "true").lower() in ("true", "1", "yes")
-# Check for stale lock files (remove lock if owning process is dead, requires psutil)
-ENABLE_STALE_LOCK_CHECK = os.environ.get("ENABLE_STALE_LOCK_CHECK", "true").lower() in ("true", "1", "yes")
+ENABLE_SINGLE_INSTANCE = settings.ENABLE_SINGLE_INSTANCE
+ENABLE_STALE_LOCK_CHECK = settings.ENABLE_STALE_LOCK_CHECK
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Metrics
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_METRICS = os.environ.get("ENABLE_METRICS", "true").lower() in ("true", "1", "yes")
-
-# Version check settings
-ENABLE_VERSION_CHECK = os.environ.get("ENABLE_VERSION_CHECK", "true").lower() in ("true", "1", "yes")
-VERSION_CHECK_INTERVAL = int(os.environ.get("VERSION_CHECK_INTERVAL", "3600"))  # Check every hour (3600 seconds)
-
-# Metrics server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
-# For Kubernetes/Docker: use internal network (e.g., "0.0.0.0" for pod network)
-# Authentication via METRICS_AUTH_USER and METRICS_AUTH_PASS (Basic Auth)
-METRICS_ADDR = os.environ.get("METRICS_ADDR", "127.0.0.1")
-METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
+ENABLE_METRICS = settings.ENABLE_METRICS
+ENABLE_VERSION_CHECK = settings.ENABLE_VERSION_CHECK
+VERSION_CHECK_INTERVAL = settings.VERSION_CHECK_INTERVAL
+METRICS_ADDR = settings.METRICS_ADDR
+METRICS_PORT = settings.METRICS_PORT
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Health Endpoint
 # ─────────────────────────────────────────────────────────────────────────────
 
-ENABLE_HEALTH_ENDPOINT = os.environ.get("ENABLE_HEALTH_ENDPOINT", "true").lower() in ("true", "1", "yes")
-# Health server binding - SECURITY: defaults to localhost (127.0.0.1) for local-only access
-# For Kubernetes/Docker: use internal network (e.g., "0.0.0.0" for pod network)
-# WARNING: Authentication is REQUIRED for non-localhost bindings (see below)
-# Set HEALTH_ALLOW_NO_AUTH=1 to bypass auth requirement (NOT recommended for production)
-HEALTH_ADDR = os.environ.get("HEALTH_ADDR", "127.0.0.1")
-HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8001"))
-
-# Authentication methods (at least one required for non-localhost):
-# 1. Basic Auth: Set both variables
-HEALTH_AUTH_USER = os.environ.get("HEALTH_AUTH_USER", "")
-HEALTH_AUTH_PASS = os.environ.get("HEALTH_AUTH_PASS", "")
-# 2. Token Auth: Set this variable (simpler for load balancers/Prometheus)
-HEALTH_TOKEN = os.environ.get("HEALTH_TOKEN", "")
-HEALTH_TOKEN_HEADER = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
+ENABLE_HEALTH_ENDPOINT = settings.ENABLE_HEALTH_ENDPOINT
+HEALTH_ADDR = settings.HEALTH_ADDR
+HEALTH_PORT = settings.HEALTH_PORT
+HEALTH_AUTH_USER = settings.HEALTH_AUTH_USER
+HEALTH_AUTH_PASS = settings.HEALTH_AUTH_PASS
+HEALTH_TOKEN = settings.HEALTH_TOKEN
+HEALTH_TOKEN_HEADER = settings.HEALTH_TOKEN_HEADER
 
 # ─────────────────────────────────────────────────────────────────────────────
 # UI Layout
 # ─────────────────────────────────────────────────────────────────────────────
 
-UI_COMPACT_THRESHOLD = int(os.environ.get("UI_COMPACT_THRESHOLD", "110"))
-UI_WIDE_THRESHOLD = int(os.environ.get("UI_WIDE_THRESHOLD", "170"))
+UI_COMPACT_THRESHOLD = settings.UI_COMPACT_THRESHOLD
+UI_WIDE_THRESHOLD = settings.UI_WIDE_THRESHOLD
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging
 # ─────────────────────────────────────────────────────────────────────────────
 
-LOG_DIR = os.path.expanduser("~/.pinger")
-LOG_FILE = os.path.join(LOG_DIR, "ping_monitor.log")
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
-
-# If True, truncate (clear) log file at startup
-LOG_TRUNCATE_ON_START = os.environ.get("LOG_TRUNCATE_ON_START", "true").lower() in ("true", "1", "yes")
+LOG_DIR = settings.LOG_DIR
+LOG_FILE = settings.LOG_FILE
+LOG_LEVEL = settings.LOG_LEVEL
+LOG_TRUNCATE_ON_START = settings.LOG_TRUNCATE_ON_START
