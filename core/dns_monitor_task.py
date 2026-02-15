@@ -8,6 +8,9 @@ from config import (
     DNS_CHECK_INTERVAL,
     DNS_RECORD_TYPES,
     ENABLE_DNS_MONITORING,
+    ENABLE_DNS_BENCHMARK,
+    DNS_BENCHMARK_DOTCOM_DOMAIN,
+    DNS_BENCHMARK_SERVERS,
     t,
 )
 from core.background_task import BackgroundTask
@@ -52,12 +55,6 @@ class DNSMonitorTask(BackgroundTask):
             self.stats_repo.update_dns_detailed(results_dict)
 
             # Run benchmark tests (Cached/Uncached/DotCom)
-            from config import (
-                ENABLE_DNS_BENCHMARK,
-                DNS_BENCHMARK_DOTCOM_DOMAIN,
-                DNS_BENCHMARK_SERVERS,
-            )
-
             if ENABLE_DNS_BENCHMARK:
                 benchmark_results = await self.run_blocking(
                     self.dns_service.run_benchmark_tests,

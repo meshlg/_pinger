@@ -17,9 +17,12 @@ COPY config.py main.py monitor.py ui.py alerts.py pinger.py \
      stats_repository.py problem_analyzer.py route_analyzer.py \
      single_instance.py single_instance_notifications.py \
      ./
+COPY config/ ./config/
+COPY core/ ./core/
 COPY services/ ./services/
 COPY infrastructure/ ./infrastructure/
 COPY pinger/ ./pinger/
+COPY ui_protocols/ ./ui_protocols/
 
 # Create data directories
 RUN mkdir -p /app/logs /app/traceroutes

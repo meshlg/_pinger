@@ -42,6 +42,9 @@ from config import (
     ENABLE_ALERT_GROUPING,
     ENABLE_DYNAMIC_PRIORITY,
     ENABLE_ADAPTIVE_THRESHOLDS,
+    # Memory monitoring
+    ENABLE_MEMORY_MONITORING,
+    MAX_MEMORY_MB,
     t,
 )
 
@@ -375,8 +378,6 @@ class Monitor:
 
     def _check_memory_and_cleanup(self) -> None:
         """Check memory usage, cleanup old data, and shutdown if limit exceeded."""
-        from config import ENABLE_MEMORY_MONITORING, MAX_MEMORY_MB
-        
         if not ENABLE_MEMORY_MONITORING:
             return
         

@@ -343,6 +343,9 @@ export VERSION_CHECK_INTERVAL=1800
 
 ### ⚓︎ Docker Compose
 
+> [!WARNING]
+> При привязке health endpoint к `0.0.0.0` **требуется** аутентификация. По умолчанию `docker-compose.yml` использует Basic Auth с `HEALTH_AUTH_USER=admin` и `HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS:-changeme}`. **Измените пароль по умолчанию** через переменную окружения или файл `.env` перед развёртыванием.
+
 ```bash
 docker compose up -d
 ```

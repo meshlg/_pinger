@@ -343,6 +343,9 @@ export VERSION_CHECK_INTERVAL=1800
 
 ### ⚓︎ Docker Compose
 
+> [!WARNING]
+> When binding health endpoint to `0.0.0.0`, authentication is **required**. The default `docker-compose.yml` uses Basic Auth with `HEALTH_AUTH_USER=admin` and `HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS:-changeme}`. **Change the default password** via environment variable or `.env` file before deployment.
+
 ```bash
 docker compose up -d
 ```

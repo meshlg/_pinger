@@ -41,6 +41,7 @@ try:
         VERSION,
         UI_COMPACT_THRESHOLD,
         UI_WIDE_THRESHOLD,
+        LOG_FILE,
         t,
     )
 except ImportError:
@@ -53,6 +54,7 @@ except ImportError:
         VERSION,
         UI_COMPACT_THRESHOLD,
         UI_WIDE_THRESHOLD,
+        LOG_FILE,
         t,
     )
 
@@ -943,7 +945,6 @@ class MonitorUI:
         )
 
     def render_footer(self, width: int, tier: LayoutTier) -> Panel:
-        from config import LOG_FILE, VERSION
         log_path = LOG_FILE.replace(os.path.expanduser("~"), "~")
         txt = f"[{_TEXT_DIM}]{t('footer').format(log_file=log_path)}[/{_TEXT_DIM}]"
         snap = self.monitor.get_stats_snapshot()

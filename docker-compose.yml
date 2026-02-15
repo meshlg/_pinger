@@ -13,9 +13,9 @@ services:
       # - For Kubernetes/internal network: HEALTH_ADDR=0.0.0.0 + authentication REQUIRED
       - HEALTH_ADDR=0.0.0.0  # Pod network access
       # Authentication (choose ONE method):
-      # Method 1: Basic Auth
-      # - HEALTH_AUTH_USER=admin
-      # - HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS}
+      # Method 1: Basic Auth (required for HEALTH_ADDR=0.0.0.0)
+      - HEALTH_AUTH_USER=admin
+      - HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS:-changeme}  # Override via .env or shell
       # Method 2: Token Auth (recommended for load balancers/Prometheus)
       # - HEALTH_TOKEN=${HEALTH_TOKEN}
       # For testing only (logs warning):

@@ -12,6 +12,8 @@ import atexit
 import logging
 from pathlib import Path
 
+from config import ENABLE_STALE_LOCK_CHECK
+
 
 def _check_stale_lock(lock_path: Path) -> bool:
     """Check if lock file is stale (process no longer running) and remove it.
@@ -124,7 +126,6 @@ class SingleInstance:
         # Check for stale lock before attempting to acquire (Unix only, Windows uses handle-based locking)
         if sys.platform != "win32":
             try:
-                from config import ENABLE_STALE_LOCK_CHECK
                 if ENABLE_STALE_LOCK_CHECK:
                     _check_stale_lock(self.lock_path)
             except Exception:

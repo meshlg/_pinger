@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2.0556]
+### Security
+- **Docker Compose authentication** - Enabled Basic Auth by default in `docker-compose.yml` for health endpoint.
+  - Added `HEALTH_AUTH_USER=admin` and `HEALTH_AUTH_PASS=${HEALTH_AUTH_PASS:-changeme}` environment variables.
+  - Added warning in README.md and README.ru.md about authentication requirement when binding to `0.0.0.0`.
+  - Users must override the default password via environment variable or `.env` file.
+
+### Fixed
+- **Dockerfile missing directories** - Added missing `COPY` instructions for `config/`, `core/`, and `ui_protocols/` directories.
+  - Docker image was broken because `config/` package was not copied into the image.
+
+### Added
+- **CI/CD Pipeline** - Added GitHub Actions workflow (`.github/workflows/ci.yml`).
+  - **lint** job: ruff (linting), black (format check), mypy (type check)
+  - **test** job: pytest on Python 3.10, 3.11, 3.12 matrix
+  - **build** job: Docker image build with cache
+
+### Refactoring
+- **Explicit imports in config module** - Replaced star imports (`from ... import *`) with explicit imports.
+  - Improved IDE navigation and eliminated potential name conflicts.
+  - Updated `config/__init__.py` and `config.py` (legacy wrapper).
+  - All exported names are now explicitly listed in imports and `__all__`.
+  - Added missing Smart Alert System and UI Layout variables to exports.
+
+- **Inline imports moved to module level** - Moved `from config import ...` statements from inside methods to top of modules.
+  - Improved code readability and import performance.
+  - Updated files: ui.py, monitor.py, alerts.py, single_instance.py, core/dns_monitor_task.py, services/traceroute_service.py.
+  - Kept justified inline imports: `if TYPE_CHECKING:`, `try/except ImportError` fallbacks, optional dependencies, lazy-loaded services.
+
 ## [2.4.1.1835]
 ### Fixed
 - **Timezone-aware datetimes** — Replaced all naive `datetime.now()` with timezone-aware `datetime.now(timezone.utc)` throughout the project.
