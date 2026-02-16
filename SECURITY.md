@@ -160,6 +160,35 @@ env:
         key: health-password
 ```
 
+### Docker Secrets (Recommended)
+Instead of passing sensitive environment variables, you can use Docker Secrets (or file mounts) to securely provide credentials.
+
+1.  **Create secrets files**:
+    ```bash
+    echo "admin" > ./secrets/health_auth_user
+    echo "secret_password" > ./secrets/health_auth_pass
+    ```
+
+2.  **Configure Docker Compose**:
+    ```yaml
+    services:
+      pinger:
+        environment:
+          - HEALTH_AUTH_USER_FILE=/run/secrets/health_auth_user
+          - HEALTH_AUTH_PASS_FILE=/run/secrets/health_auth_pass
+        secrets:
+          - health_auth_user
+          - health_auth_pass
+
+    secrets:
+      health_auth_user:
+        file: ./secrets/health_auth_user
+      health_auth_pass:
+        file: ./secrets/health_auth_pass
+    ```
+
+The application automatically detects `*_FILE` environment variables and reads the corresponding file content.
+
 ### Why No CSRF Protection?
 
 CSRF protection is unnecessary because:

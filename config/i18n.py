@@ -134,8 +134,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "hop_col_jitter": "Джиттер",
         "hop_col_loss": "Потери",
         "hop_col_host": "Хост",
-        "hop_col_country": "Страна",
-        "hop_col_asn": "ASN",
+        "hop_col_loc": "Локация",
+        "hop_col_asn": "Провайдер",
         # ── Monitoring panel ──
         "alerts_label": "Тревоги",
         "traceroute_running": "Идет...",
@@ -309,7 +309,7 @@ LANG: Dict[str, Dict[str, str]] = {
         "hop_col_jitter": "Jitter",
         "hop_col_loss": "Loss",
         "hop_col_host": "Host",
-        "hop_col_country": "Country",
+        "hop_col_loc": "Location",
         "hop_col_asn": "ASN",
         # ── Monitoring panel ──
         "alerts_label": "Alerts",

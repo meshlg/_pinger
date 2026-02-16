@@ -313,7 +313,7 @@ class Monitor:
             thread_names = [t.name for t in alive]
             logging.warning(
                 f"Shutdown complete with {len(alive)} non-daemon threads still alive: {thread_names}. "
-                f"Using sys.exit() for graceful cleanup."
+                f"Attempting to join them..."
             )
             # Flush all logging handlers before exit
             for handler in logging.root.handlers:
@@ -321,8 +321,12 @@ class Monitor:
                     handler.flush()
                 except Exception:
                     pass
-            # Use sys.exit() instead of os._exit() to allow atexit handlers to run
-            sys.exit(0)
+            
+            # Attempt to join remaining threads with a short timeout
+            for t in alive:
+                t.join(timeout=1.0)
+                if t.is_alive():
+                    logging.error(f"Thread {t.name} did not terminate.")
 
     async def run_blocking(self, func, *args, **kwargs) -> Any:
         """Run blocking function in executor."""

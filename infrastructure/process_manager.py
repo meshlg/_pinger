@@ -7,27 +7,36 @@ class ProcessManager:
     """
     Centralized manager for child processes to ensure proper cleanup.
     """
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent: int = 50) -> None:
         self._active_processes: Set[asyncio.subprocess.Process] = set()
         self._lock = asyncio.Lock()
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def create_process(self, *args, **kwargs) -> asyncio.subprocess.Process:
         """
         Create a subprocess and register it for cleanup.
         Wraps asyncio.create_subprocess_exec.
+        Blocks if concurrency limit is reached.
         """
-        # Ensure we don't start processes with creationflags on non-Windows
-        # This is strictly a wrapper around create_subprocess_exec, arguments should be prepared by caller.
+        # Acquire semaphore before creating process
+        await self._semaphore.acquire()
         
-        process = await asyncio.create_subprocess_exec(*args, **kwargs)
+        try:
+            process = await asyncio.create_subprocess_exec(*args, **kwargs)
+        except Exception:
+            self._semaphore.release()
+            raise
+
         async with self._lock:
             self._active_processes.add(process)
         return process
 
     async def unregister(self, process: asyncio.subprocess.Process) -> None:
-        """Unregister a process that has completed."""
+        """Unregister a process that has completed and release semaphore."""
         async with self._lock:
-            self._active_processes.discard(process)
+            if process in self._active_processes:
+                self._active_processes.discard(process)
+                self._semaphore.release()
 
     async def run_command(
         self, 

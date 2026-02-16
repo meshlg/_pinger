@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.4.4.1003"
+    VERSION: str = "2.4.4.1851"
     # Also update:
     # - charts/pinger/Chart.yaml (appVersion)
     # - pyproject.toml (version)
@@ -154,6 +154,11 @@ class Settings(BaseSettings):
     PREDICTION_WINDOW: int = Field(default=300, ge=1)
     PROBLEM_LOG_SUPPRESSION_SECONDS: int = Field(default=6000, ge=0)
     ROUTE_LOG_SUPPRESSION_SECONDS: int = Field(default=6000, ge=0)
+    
+    PROBLEM_LOSS_THRESHOLD: float = Field(default=20.0, ge=0.0, le=100.0)
+    PROBLEM_LATENCY_THRESHOLD: float = Field(default=200.0, gt=0)
+    PROBLEM_JITTER_THRESHOLD: float = Field(default=50.0, ge=0)
+    PROBLEM_CONSECUTIVE_LOSS_THRESHOLD: int = Field(default=10, ge=1)
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Route Analysis
@@ -240,5 +245,6 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"
+        extra="ignore",
+        secrets_dir="/run/secrets" if os.path.exists("/run/secrets") else None
     )

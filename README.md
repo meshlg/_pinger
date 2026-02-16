@@ -147,10 +147,13 @@ Six real-time panels track your connection status — from edge latency to route
 
 ### ⌁ Hop Health Monitoring
 
-- Hop discovery via traceroute, then parallel ping of each hop
-- Table with minimum / average / last latency and loss for each hop
-- Color coding: green (good) / yellow (slow) / red (unreachable)
-- Perfect for identifying congestion or shaping on specific path segments
+### ⌁ Hop Health Monitoring
+ 
+ - Hop discovery via traceroute, then parallel ping of each hop
+ - **Rich Diagnostics**: Sparkline history charts, jitter, and latency delta
+ - **Geolocation**: Provider (ASN) and Country detection for each node
+ - Table with color coding and status traffic-lights (🟢/🟡/🔴)
+ - Perfect for identifying congestion, route changes, or backbone issues
 
 ### ☲ Route Analysis
 
@@ -219,8 +222,12 @@ CURRENT_LANGUAGE = "en"  # or "ru"
 
 ### 6. Hop Health Panel
 
-- Per-hop table with minimum / average / last latency and loss
-- Color coding for instant quality assessment of each hop
+### 6. Hop Health Panel
+ 
+ - Route table with full diagnostics (Min/Avg/Last, Loss, Jitter)
+ - Sparkline latency history charts directly in the table (all modes)
+ - Provider (ASN) and Location (Loc) information for wide screens
+ - Status indicators for instant node health assessment
 
 ---
 

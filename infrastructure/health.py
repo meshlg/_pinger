@@ -19,6 +19,20 @@ _cached_config: dict = {}
 _credentials_loaded: bool = False
 
 
+def _read_secret(name: str) -> str | None:
+    """Read secret from file (via _FILE env var) or direct env var."""
+    # Try _FILE variant first (Docker Secrets)
+    file_path = os.environ.get(f"{name}_FILE")
+    if file_path and os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    
+    # Fallback to direct env var
+    return os.environ.get(name)
+
 def _load_security_config() -> dict:
     """Load and cache security configuration from environment.
     
@@ -34,9 +48,9 @@ def _load_security_config() -> dict:
     if _credentials_loaded:
         return _cached_config
     
-    basic_user = os.environ.get("HEALTH_AUTH_USER")
-    basic_pass = os.environ.get("HEALTH_AUTH_PASS")
-    token = os.environ.get("HEALTH_TOKEN")
+    basic_user = _read_secret("HEALTH_AUTH_USER")
+    basic_pass = _read_secret("HEALTH_AUTH_PASS")
+    token = _read_secret("HEALTH_TOKEN")
     token_header = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
     
     # Determine auth type

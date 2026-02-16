@@ -67,11 +67,13 @@ class TracerouteService:
         
         try:
             if sys.platform == "win32":
-                cmd = ["tracert", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "1000", target]
+                # Windows: -d (do not resolve addresses)
+                cmd = ["tracert", "-d", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "1000", target]
                 encoding = "oem"
             else:
                 cmd = [
                     "traceroute",
+                    "-n", # Linux: -n (do not resolve addresses)
                     "-m",
                     str(TRACEROUTE_MAX_HOPS),
                     "-w",
@@ -107,11 +109,13 @@ class TracerouteService:
         
         try:
             if sys.platform == "win32":
-                cmd = ["tracert", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "1000", target]
+                # Windows: -d (do not resolve addresses)
+                cmd = ["tracert", "-d", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "1000", target]
                 encoding = "oem"
             else:
                 cmd = [
                     "traceroute",
+                    "-n", # Linux: -n (do not resolve addresses)
                     "-m",
                     str(TRACEROUTE_MAX_HOPS),
                     "-w",

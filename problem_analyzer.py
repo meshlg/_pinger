@@ -14,6 +14,10 @@ from config import (
     PREDICTION_WINDOW,
     PROBLEM_HISTORY_SIZE,
     PROBLEM_LOG_SUPPRESSION_SECONDS,
+    PROBLEM_LOSS_THRESHOLD,
+    PROBLEM_LATENCY_THRESHOLD,
+    PROBLEM_JITTER_THRESHOLD,
+    PROBLEM_CONSECUTIVE_LOSS_THRESHOLD,
     t,
 )
 
@@ -62,10 +66,10 @@ class ProblemAnalyzer:
         loss_count = recent_results.count(False)
         loss_percentage = (loss_count / len(recent_results) * 100) if recent_results else 0
 
-        if loss_percentage > 20:
+        if loss_percentage > PROBLEM_LOSS_THRESHOLD:
             # High packet loss - determine if ISP or local
             consecutive_losses = snap.get("consecutive_losses", 0)
-            if consecutive_losses >= 10:
+            if consecutive_losses >= PROBLEM_CONSECUTIVE_LOSS_THRESHOLD:
                 problem_type = t("problem_isp")
                 self._record_problem("isp", snap)
             else:
@@ -76,14 +80,14 @@ class ProblemAnalyzer:
         # Check for high latency
         if snap.get("success", 0) > 0:
             avg_latency = snap.get("total_latency_sum", 0) / snap.get("success", 1)
-            if avg_latency > 200:
+            if avg_latency > PROBLEM_LATENCY_THRESHOLD:
                 problem_type = t("problem_isp")
                 self._record_problem("isp", snap)
                 return problem_type
 
         # Check for high jitter
         jitter = snap.get("jitter", 0)
-        if jitter > 50:
+        if jitter > PROBLEM_JITTER_THRESHOLD:
             problem_type = t("problem_isp")
             self._record_problem("isp", snap)
             return problem_type

@@ -14,15 +14,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY config.py main.py monitor.py ui.py alerts.py pinger.py \
-     stats_repository.py problem_analyzer.py route_analyzer.py \
-     single_instance.py single_instance_notifications.py \
-     ./
+    stats_repository.py problem_analyzer.py route_analyzer.py \
+    single_instance.py single_instance_notifications.py \
+    ./
 COPY config/ ./config/
 COPY core/ ./core/
 COPY services/ ./services/
 COPY infrastructure/ ./infrastructure/
 COPY pinger/ ./pinger/
 COPY ui_protocols/ ./ui_protocols/
+
+
+# Copy healthcheck script
+COPY scripts/healthcheck.py /app/healthcheck.py
+RUN chmod +x /app/healthcheck.py
 
 # Create data directories
 RUN mkdir -p /app/logs /app/traceroutes
@@ -48,12 +53,7 @@ EXPOSE 8000 8001
 
 # Health check (handles optional basic auth via env vars)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "\
-import os, urllib.request, base64; \
-r = urllib.request.Request('http://localhost:8001/health'); \
-u = os.environ.get('HEALTH_AUTH_USER',''); p = os.environ.get('HEALTH_AUTH_PASS',''); \
-(r.add_header('Authorization','Basic '+base64.b64encode(f'{u}:{p}'.encode()).decode()) if u and p else None); \
-urllib.request.urlopen(r)" || exit 1
+    CMD python /app/healthcheck.py || exit 1
 
 ENTRYPOINT ["python", "-m", "pinger"]
 CMD []

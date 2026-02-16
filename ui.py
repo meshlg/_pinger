@@ -306,7 +306,7 @@ class MonitorUI:
                 f"[{_TEXT_DIM}]│[/{_TEXT_DIM}]    [{_TEXT_DIM}]{now}[/{_TEXT_DIM}]"
             )
         return Panel(
-            txt, border_style=_ACCENT, box=box.HORIZONTALS, width=width,
+            txt, border_style=_ACCENT, box=box.ROUNDED, width=width,
             style=f"on {_BG}",
         )
 
@@ -344,7 +344,7 @@ class MonitorUI:
                 f"{sep}IP: [{_WHITE}]{ip_val}[/{_WHITE}][{_TEXT_DIM}]{cc}[/{_TEXT_DIM}]"
             )
         return Panel(
-            parts, border_style=color, box=box.HEAVY, width=width,
+            parts, border_style=color, box=box.ROUNDED, width=width,
             style=f"on {_BG}",
         )
 
@@ -598,6 +598,12 @@ class MonitorUI:
             style=f"on {_BG_PANEL}",
         )
 
+    def _truncate(self, text: str, max_len: int) -> str:
+        """Truncate text with ellipsis if it exceeds max_len."""
+        if len(text) <= max_len:
+            return text
+        return text[:max_len-1] + "…"
+
     def render_hop_panel(self, width: int, tier: LayoutTier) -> Panel:
         snap = self.monitor.get_stats_snapshot()
         hops = snap.get("hop_monitor_hops", [])
@@ -623,21 +629,30 @@ class MonitorUI:
 
         tbl = Table(
             show_header=True, header_style=f"bold {_TEXT_DIM}",
-            box=None, padding=(0, 1), expand=True,
+            box=box.ROUNDED, padding=(0, 1), expand=True,
         )
-        tbl.add_column(t("hop_col_num"), style=_TEXT_DIM, width=3, justify="right")
-        # Add sparkline column for compact mode
-        if tier == "compact":
-            tbl.add_column("", width=6, justify="left")
-        tbl.add_column(t("hop_col_min"), width=9, justify="right")
-        tbl.add_column(t("hop_col_avg"), width=9, justify="right")
-        tbl.add_column(t("hop_col_last"), width=9, justify="right")
-        # Add delta and jitter columns for standard/wide modes
+        
+        # Custom styles for columns to prevent wrapping breaking layout
+        tbl.add_column(t("hop_col_num"), style=_TEXT_DIM, width=3, justify="right", no_wrap=True)
+        tbl.add_column("", width=1, justify="center", no_wrap=True) # Status Dot
+        
+        # Latency columns
+        tbl.add_column(t("hop_col_min"), width=6, justify="right", no_wrap=True)
+        tbl.add_column(t("hop_col_avg"), width=6, justify="right", no_wrap=True)
+        tbl.add_column(t("hop_col_last"), width=6, justify="right", no_wrap=True)
+        
         if tier != "compact":
-            tbl.add_column(t("hop_col_delta"), width=7, justify="right")
-            tbl.add_column(t("hop_col_jitter"), width=8, justify="right")
-        tbl.add_column(t("hop_col_loss"), width=7, justify="right")
-        tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True)
+            tbl.add_column(t("hop_col_delta"), width=7, justify="right", no_wrap=True)
+            tbl.add_column(t("hop_col_jitter"), width=8, justify="right", no_wrap=True)
+        
+        tbl.add_column(t("hop_col_loss"), width=6, justify="right", no_wrap=True)
+        
+        # Geo / ASN columns - strict sizing and no wrapping
+        if tier != "compact":
+            tbl.add_column(t("hop_col_asn"), width=28, justify="left", no_wrap=True, overflow="ellipsis")
+            tbl.add_column(t("hop_col_loc"), width=7, justify="left", no_wrap=True)
+            
+        tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True, overflow="ellipsis")
 
         worst_hop = None
         worst_lat = 0.0
@@ -658,57 +673,59 @@ class MonitorUI:
             # New fields for Etap 1
             jitter = h.get("jitter", 0.0)
             delta = h.get("latency_delta", 0.0)
-            latency_history = h.get("latency_history", [])
+            # latency_history = h.get("latency_history", []) # Removed for space
             
             # Stage 3 - geolocation fields
             country = h.get("country", "")
             country_code = h.get("country_code", "")
             asn = h.get("asn", "")
             
-            if hostname and hostname != ip and tier != "compact":
+            # Clean up ASN text (remove redundant AS prefix if repeated, remove corporate suffixes)
+            if asn:
+                # Common cleanups to save space
+                asn_clean = asn
+                # Remove common suffixes to keep it compact
+                for suffix in [" Inc.", " LLC", " Ltd", " Limited", " Corporation", " Corp.", " AB", " AG", " BV"]:
+                     asn_clean = asn_clean.replace(suffix, "")
+                     asn_clean = asn_clean.replace(suffix.upper(), "")
+                
+                # Ensure AS prefix
+                if not asn_clean.upper().startswith("AS"):
+                    asn_display = f"AS{asn_clean}"
+                else:
+                    asn_display = asn_clean
+            else:
+                asn_display = ""
+
+            # Hostname formatting
+            if hostname and hostname != ip:
+                # Truncate very long hostnames to avoid layout issues even with wrapping disabled
+                # (though no_wrap=True should handle it, explicit truncation is safer for visual balance)
                 host_txt = f"{hostname} [{_TEXT_DIM}][{ip}][/{_TEXT_DIM}]"
             else:
                 host_txt = ip
             
-            # Add geo info after hostname (for all tiers)
-            if country_code or asn:
-                geo_parts = []
-                if country_code:
-                    geo_parts.append(country_code)
-                if asn:
-                    geo_parts.append(f"AS{asn}")
-                geo_txt = f" [{_TEXT_DIM}]({' '.join(geo_parts)})[/{_TEXT_DIM}]"
-                host_txt = host_txt + geo_txt
+            # Status Dot
+            if not ok:
+                status_dot = f"[{_RED}]●[/{_RED}]"
+            elif loss > 0:
+                status_dot = f"[{_YELLOW}]●[/{_YELLOW}]"
+            else:
+                status_dot = f"[{_GREEN}]●[/{_GREEN}]"
 
             def _lat_fmt(val: Any) -> str:
                 if val is None:
-                    return f"[{_RED}]  *[/{_RED}]"
+                    return f"[{_RED}]*[/{_RED}]"
                 c = self._lat_color(val)
-                return f"[{c}]{val:.0f} {t('ms')}[/{c}]"
+                return f"[{c}]{val:.0f}[/{c}]"
 
-            last_txt = f"[{_RED}]  *[/{_RED}]" if (not ok or lat is None) else _lat_fmt(lat)
+            last_txt = f"[{_RED}]*[/{_RED}]" if (not ok or lat is None) else _lat_fmt(lat)
             min_txt = _lat_fmt(mn)
             avg_txt = _lat_fmt(avg if avg > 0 else None)
             
-            # Sparkline for compact mode
-            if tier == "compact":
-                spark = self._render_sparkline(latency_history)
-                if spark:
-                    spark_txt = f"[{_TEXT_DIM}]{spark}[/{_TEXT_DIM}]"
-                else:
-                    spark_txt = ""
-                # Compact: show sparkline + trend arrow instead of delta/jitter
-                trend = self._render_trend_arrow(delta)
-                if trend and delta != 0:
-                    if delta > 0:
-                        trend_txt = f"[{_YELLOW}]{trend}[/{_YELLOW}]"
-                    else:
-                        trend_txt = f"[{_GREEN}]{trend}[/{_GREEN}]"
-                else:
-                    trend_txt = f"[{_TEXT_DIM}]{trend}[/{_TEXT_DIM}]"
-                last_txt = f"{last_txt} {trend_txt}"
-            
-            # Delta formatting (standard/wide mode)
+            # Delta formatting
+            delta_txt = ""
+            jitter_txt = ""
             if tier != "compact":
                 trend = self._render_trend_arrow(delta)
                 if delta > 0:
@@ -718,28 +735,41 @@ class MonitorUI:
                 else:
                     delta_txt = f"[{_TEXT_DIM}]{trend}—[/{_TEXT_DIM}]"
                 
-                # Jitter formatting
                 if jitter > 0:
-                    jitter_txt = f"[{_TEXT_DIM}]{jitter:.1f}[/{_TEXT_DIM}]"
+                    jitter_txt = f"[{_TEXT_DIM}]{jitter:.0f}[/{_TEXT_DIM}]"
                 else:
                     jitter_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
             if loss > 10:
-                loss_txt = f"[{_RED}]{loss:.1f}![/{_RED}]"
+                loss_txt = f"[{_RED}]{loss:.0f}![/{_RED}]"
             elif loss > 0:
-                loss_txt = f"[{_YELLOW}]{loss:.1f}%[/{_YELLOW}]"
+                loss_txt = f"[{_YELLOW}]{loss:.0f}%[/{_YELLOW}]"
             else:
-                loss_txt = f"[{_GREEN}]{loss:.1f}%[/{_GREEN}]"
+                loss_txt = f"[{_GREEN}]{loss:.0f}%[/{_GREEN}]"
 
             row_style = _TEXT_DIM if (not ok and h.get("total_pings", 0) > 2) else ""
             
-            # Build row based on tier
-            if tier == "compact":
-                # Compact: spark + trend
-                tbl.add_row(str(hop_num), spark_txt, min_txt, avg_txt, last_txt, loss_txt, host_txt, style=row_style)
-            else:
-                # Standard/wide: delta and jitter columns already show trend info
-                tbl.add_row(str(hop_num), min_txt, avg_txt, last_txt, delta_txt, jitter_txt, loss_txt, host_txt, style=row_style)
+            row_items = [
+                str(hop_num),
+                status_dot,
+                min_txt,
+                avg_txt,
+                last_txt,
+            ]
+            
+            if tier != "compact":
+                row_items.extend([delta_txt, jitter_txt])
+                
+            row_items.append(loss_txt)
+            
+            if tier != "compact":
+                asn_txt = f"[{_TEXT_DIM}]{asn_display}[/{_TEXT_DIM}]"
+                loc_txt = f"[{_TEXT_DIM}]{country_code}[/{_TEXT_DIM}]" if country_code else ""
+                row_items.extend([asn_txt, loc_txt])
+                
+            row_items.append(host_txt)
+            
+            tbl.add_row(*row_items, style=row_style)
 
             if not ok:
                 worst_hop = h
@@ -951,7 +981,7 @@ class MonitorUI:
         latest_version = snap.get("latest_version")
         if latest_version:
             txt += f"    [{_YELLOW}]{_DOT_WARN} {t('update_available').format(current=VERSION, latest=latest_version)}[/{_YELLOW}]"
-        return Panel(txt, border_style=_ACCENT_DIM, box=box.SIMPLE, width=width, style=f"on {_BG}")
+        return Panel(txt, border_style=_ACCENT_DIM, box=box.ROUNDED, width=width, style=f"on {_BG}")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Compact summary (single-panel condensed view)

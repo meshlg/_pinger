@@ -149,13 +149,15 @@ class HopMonitorService:
     async def _run_traceroute_streaming(self, target: str) -> List[HopStatus]:
         """Run traceroute and parse hops line-by-line as they appear."""
         if sys.platform == "win32":
-            cmd = ["tracert", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "500", target]
+            # Windows: -d (do not resolve addresses) speed up discovery significantly!
+            cmd = ["tracert", "-d", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "500", target]
             encoding = "oem"
         else:
             tr = shutil.which("traceroute")
             if not tr:
                 return []
-            cmd = ["traceroute", "-m", str(TRACEROUTE_MAX_HOPS), "-w", "1", target]
+            # Linux: -n (do not resolve addresses)
+            cmd = ["traceroute", "-n", "-m", str(TRACEROUTE_MAX_HOPS), "-w", "1", target]
             encoding = "utf-8"
 
         hops: List[HopStatus] = []
@@ -207,6 +209,9 @@ class HopMonitorService:
                 hop = self._parse_single_line(line, seen_ips)
                 if hop:
                     hops.append(hop)
+                    # Trigger async hostname resolution for this hop
+                    self._resolve_hostname_bg(hop)
+                    
                     # Update hops list immediately so UI sees new hop
                     with self._lock:
                         self._hops = list(hops)
@@ -215,16 +220,41 @@ class HopMonitorService:
                             self._on_hop_callback(self.get_hops_snapshot())
                         except Exception:
                             pass
-                    logging.debug(f"Hop {hop.hop_number}: {hop.ip} ({hop.hostname})")
+                    logging.debug(f"Hop {hop.hop_number}: {hop.ip} (resolving...)")
 
             await proc.wait()
         except Exception as exc:
             logging.error(f"Traceroute exec failed: {exc}")
         finally:
-             pass # ProcessManager handles cleanup
+             # IMPORTANT: Unregister process to prevent memory leak and release semaphore
+             if 'proc' in locals():
+                 await self.process_manager.unregister(proc)
 
         logging.debug(f"Total hops parsed: {len(hops)}")
         return hops
+
+    def _resolve_hostname_bg(self, hop: HopStatus) -> None:
+        """Resolve hostname in background."""
+        
+        def _resolve():
+            import socket
+            try:
+                # This blocks, so run in executor
+                hostname, _, _ = socket.gethostbyaddr(hop.ip)
+                if hostname:
+                    with self._lock:
+                        hop.hostname = hostname
+                    # Notify UI of update
+                    if self._on_hop_callback:
+                        try:
+                            self._on_hop_callback(self.get_hops_snapshot())
+                            pass
+                        except Exception:
+                            pass
+            except Exception:
+                pass # Hostname resolution failed, keep IP
+
+        self._executor.submit(_resolve)
 
     def _parse_single_line(self, line: str, seen_ips: set) -> Optional[HopStatus]:
         """Parse a single traceroute output line into a HopStatus or None."""

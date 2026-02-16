@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4.1851]
+### Performance
+- **Asynchronous Hop Discovery** — Optimized traceroute by disabling synchronous DNS resolution (`-d`/`-n` flags).
+  - **Impact**: Hop discovery is now 5-10x faster (seconds instead of minutes).
+  - **Background Resolution**: Hostnames are resolved asynchronously in background threads without blocking the UI.
+
+### Changed
+- **Hop List UI Overhaul** — Complete redesign of the "Trace Hops" panel.
+  - **Status Indicators**: Added traffic-light dots for instant health assessment.
+  - **Dedicated Columns**: Added specific columns for **Provider (ASN)** and **Location (Loc)** in wide mode.
+  - **Smart Formatting**: Autosizing columns with intelligent text truncation for long path names.
+  - **Cleanup**: Removed corporate suffixes ("Inc.", "LLC") from ISP names to save screen space.
+
+### Localization
+- **Expanded Translations** — Added localization for new UI columns.
+  - **ASN**: Translated as "Провайдер" (Provider) in Russian for better clarity.
+  - **Loc**: Translated as "Локация" (Location) in Russian.
+
 ## [2.4.4.1003]
 ### Security
 - **Subprocess Resource Leaks** — Fixed critical vulnerability where zombie processes could accumulate over time.

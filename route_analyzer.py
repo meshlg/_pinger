@@ -32,36 +32,66 @@ class RouteAnalyzer:
             if not line or line.startswith("Traceroute") or line.startswith("Hops"):
                 continue
 
-            # Parse hop number and latency
-            hop_match = re.search(r"^\s*(\d+)\s+([^\s]+)", line)
-            if not hop_match:
+            try:
+                # 1. Parse Hop Number
+                hop_match = re.match(r"^\s*(\d+)\s", line)
+                if not hop_match:
+                    continue
+                hop_num = int(hop_match.group(1))
+
+                # 2. Extract Latencies
+                # Matches: "10 ms", "<1 ms", "10ms", "=10ms"
+                # Note: We capture only the number part. "<1" becomes "1".
+                latency_matches = re.findall(r"(?:<|=)?\s*(\d+(?:\.\d+)?)\s*ms", line, re.IGNORECASE)
+                latencies = [float(l) for l in latency_matches]
+                
+                # 3. Extract IP/Host
+                ip_or_host = "*" # Default to unknown
+                parts = line.split()
+                
+                if sys.platform == "win32":
+                    # Windows: 1    <1 ms    <1 ms    <1 ms  192.168.1.1
+                    # Or:      1     *        *        *     Request timed out.
+                    # Heuristic: IP/Host is usually the LAST element if it exists
+                    if len(parts) > 1:
+                        candidate = parts[-1]
+                        # Filter out common non-IP endings (messages, units)
+                        if candidate.lower() not in ["ms", "out.", "out", "request", "*"]:
+                            ip_or_host = candidate
+                else:
+                    # Linux: 1  192.168.1.1 (192.168.1.1)  0.1 ms
+                    # Heuristic: IP/Host is usually the SECOND element
+                    if len(parts) > 1:
+                        candidate = parts[1]
+                        if candidate != "*":
+                            ip_or_host = candidate
+                
+                # Clean up (remove parens common in Linux output)
+                ip_or_host = ip_or_host.strip("()")
+
+                if latencies:
+                    avg_latency = statistics.mean(latencies)
+                    max_latency = max(latencies)
+                else:
+                    avg_latency = None
+                    max_latency = None
+
+                # Check for timeout
+                # Windows: "Request timed out."
+                # Linux/Generic: "*"
+                is_timeout = not latencies and ("*" in line or "time" in line.lower())
+
+                hops.append({
+                    "hop": hop_num,
+                    "ip": ip_or_host,
+                    "latencies": latencies,
+                    "avg_latency": avg_latency,
+                    "max_latency": max_latency,
+                    "is_timeout": is_timeout,
+                })
+            except Exception as exc:
+                logging.error(f"Failed to parse traceroute line '{line}': {exc}")
                 continue
-
-            hop_num = int(hop_match.group(1))
-            ip_or_host = hop_match.group(2)
-
-            # Extract latencies (multiple probes per hop)
-            latency_matches = re.findall(r"(\d+(?:\.\d+)?)\s*ms", line)
-            latencies = [float(l) for l in latency_matches]
-
-            if latencies:
-                avg_latency = statistics.mean(latencies)
-                max_latency = max(latencies)
-            else:
-                avg_latency = None
-                max_latency = None
-
-            # Check for timeout
-            is_timeout = "*" in line or "Request timed out" in line
-
-            hops.append({
-                "hop": hop_num,
-                "ip": ip_or_host,
-                "latencies": latencies,
-                "avg_latency": avg_latency,
-                "max_latency": max_latency,
-                "is_timeout": is_timeout,
-            })
 
         return hops
 

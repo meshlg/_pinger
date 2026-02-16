@@ -34,6 +34,9 @@ class HopMonitorTask(BackgroundTask):
             self.stats_repo.update_hop_monitor(snapshot, discovering=True)
 
         self.hop_monitor_service.set_on_hop_callback(_on_hop_discovered)
+        
+        # Enable geolocation
+        self.hop_monitor_service.enable_geo()
 
         self.stats_repo.update_hop_monitor([], discovering=True)
         self.stats_repo.update_hop_monitor([], discovering=True)
