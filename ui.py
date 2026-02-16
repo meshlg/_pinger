@@ -630,6 +630,7 @@ class MonitorUI:
         tbl = Table(
             show_header=True, header_style=f"bold {_TEXT_DIM}",
             box=box.ROUNDED, padding=(0, 1), expand=True,
+            border_style=_ACCENT_DIM,
         )
         
         # Custom styles for columns to prevent wrapping breaking layout
