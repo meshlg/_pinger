@@ -650,7 +650,7 @@ class MonitorUI:
         # Geo / ASN columns - strict sizing and no wrapping
         if tier != "compact":
             tbl.add_column(t("hop_col_asn"), width=28, justify="left", no_wrap=True, overflow="ellipsis")
-            tbl.add_column(t("hop_col_loc"), width=7, justify="left", no_wrap=True)
+            tbl.add_column(t("hop_col_loc"), width=8, justify="left", no_wrap=True)
             
         tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True, overflow="ellipsis")
 
