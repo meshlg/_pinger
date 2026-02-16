@@ -20,5 +20,5 @@ class TTLMonitorTask(BackgroundTask):
         self.ping_service = ping_service
 
     async def execute(self) -> None:
-        ttl, hops = await self.run_blocking(self.ping_service.extract_ttl, TARGET_IP)
+        ttl, hops = await self.ping_service.extract_ttl_async(TARGET_IP)
         self.stats_repo.update_ttl(ttl, hops)

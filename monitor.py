@@ -76,6 +76,7 @@ from infrastructure import (
     start_metrics_server,
     HealthServer,
     start_health_server,
+    get_process_manager,
 )
 
 
@@ -108,6 +109,9 @@ class Monitor:
         
         # Data repository
         self.stats_repo = StatsRepository()
+        
+        # Process Manager
+        self.process_manager = get_process_manager()
         
         # Services
         self.ping_service = PingService()
@@ -228,11 +232,7 @@ class Monitor:
                 logging.debug(f"Killed subprocess pid={proc.pid}")
             except Exception:
                 pass
-        # Also ask services to kill their tracked processes
-        try:
-            self.hop_monitor_service.kill_active_processes()
-        except Exception:
-            pass
+
 
     def shutdown(self) -> None:
         """Shutdown the monitor gracefully with timeout and force kill fallback."""
@@ -243,6 +243,12 @@ class Monitor:
         
         # Kill all tracked child subprocesses FIRST
         self._kill_all_subprocesses()
+        
+        # Kill any async processes managed by ProcessManager
+        try:
+            self.process_manager.cleanup_sync()
+        except Exception:
+            pass
         
         # Cancel any pending executor tasks
         for task in list(self._executor_tasks):

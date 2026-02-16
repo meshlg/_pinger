@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable, TypeVar
 
 from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, t
+from infrastructure import get_process_manager
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ class TracerouteService:
         self._stats_repo = stats_repo
         self._executor = executor
         self._traceroute_available: bool | None = None
+        self.process_manager = get_process_manager()
 
     def _check_traceroute_available(self) -> bool:
         """Check if traceroute/tracert command is available."""
@@ -98,6 +100,44 @@ class TracerouteService:
         except Exception as exc:
             return f"Traceroute error: {exc}"
 
+    async def run_traceroute_async(self, target: str) -> str:
+        """Run traceroute command asynchronously."""
+        if not self._check_traceroute_available():
+            return t("traceroute_not_found")
+        
+        try:
+            if sys.platform == "win32":
+                cmd = ["tracert", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "1000", target]
+                encoding = "oem"
+            else:
+                cmd = [
+                    "traceroute",
+                    "-m",
+                    str(TRACEROUTE_MAX_HOPS),
+                    "-w",
+                    "1",
+                    target,
+                ]
+                encoding = "utf-8"
+            
+            # Use creationflags on Windows to prevent orphan processes
+            kwargs: dict[str, Any] = {}
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+            
+            stdout, _, _ = await self.process_manager.run_command(
+                cmd,
+                timeout=30.0,
+                encoding=encoding,
+                errors="replace",
+                **kwargs
+            )
+            return str(stdout)
+        except asyncio.TimeoutError:
+            return t("traceroute_timeout")
+        except Exception as exc:
+            return f"Traceroute error: {exc}"
+
     async def traceroute_worker(self, target: str) -> None:
         """Async worker to run traceroute and save to file."""
         loop = asyncio.get_running_loop()
@@ -108,11 +148,7 @@ class TracerouteService:
         logging.info(f"Starting traceroute to {target}")
         
         try:
-            data = await loop.run_in_executor(
-                self._executor,
-                self.run_traceroute,
-                target
-            )
+            data = await self.run_traceroute_async(target)
             
             traceroutes_dir = Path("traceroutes")
             traceroutes_dir.mkdir(exist_ok=True)

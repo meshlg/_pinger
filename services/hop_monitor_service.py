@@ -8,7 +8,9 @@ import statistics
 import subprocess
 import sys
 import threading
+import threading
 import time
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,6 +21,7 @@ from config import (
     HOP_PING_TIMEOUT,
     t,
 )
+from infrastructure import get_process_manager
 
 
 @dataclass
@@ -86,8 +89,8 @@ class HopMonitorService:
         self._last_discovery: float = 0.0
         self._rediscovery_requested = threading.Event()
         self._on_hop_callback = None  # called when a new hop is discovered
-        self._active_proc: subprocess.Popen | None = None  # tracked for shutdown kill
         self._geo_service = None  # lazy-loaded geolocation service
+        self.process_manager = get_process_manager()
 
     def enable_geo(self) -> None:
         """Enable geolocation lookups for hops."""
@@ -114,7 +117,7 @@ class HopMonitorService:
     def clear_rediscovery(self) -> None:
         self._rediscovery_requested.clear()
 
-    def discover_hops(self, target: str) -> List[HopStatus]:
+    async def discover_hops(self, target: str) -> List[HopStatus]:
         """Run traceroute with streaming output — hops appear instantly."""
         self._discovering = True
         self._rediscovery_requested.clear()
@@ -123,7 +126,7 @@ class HopMonitorService:
             with self._lock:
                 self._hops = []
 
-            hops = self._run_traceroute_streaming(target)
+            hops = await self._run_traceroute_streaming(target)
 
             logging.info(f"Hop discovery complete: {len(hops)} hops")
             with self._lock:
@@ -143,7 +146,7 @@ class HopMonitorService:
         finally:
             self._discovering = False
 
-    def _run_traceroute_streaming(self, target: str) -> List[HopStatus]:
+    async def _run_traceroute_streaming(self, target: str) -> List[HopStatus]:
         """Run traceroute and parse hops line-by-line as they appear."""
         if sys.platform == "win32":
             cmd = ["tracert", "-h", str(TRACEROUTE_MAX_HOPS), "-w", "500", target]
@@ -158,33 +161,46 @@ class HopMonitorService:
         hops: List[HopStatus] = []
         seen_ips: set = set()
 
-        proc: subprocess.Popen[str] | None = None
         try:
             # Use creationflags on Windows to prevent orphan processes
-            popen_kwargs = {}
+            popen_kwargs: dict[str, Any] = {}
             if sys.platform == "win32":
                 popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
 
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                encoding=encoding,
-                errors="replace",
+            # Use ProcessManager to create process
+            proc = await self.process_manager.create_process(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 **popen_kwargs,
             )
-            self._active_proc = proc
+            
+            # self._active_proc = proc # ProcessManager handles tracking now
+
             deadline = time.time() + 60
 
             if proc.stdout is None:
                 return hops
 
-            for raw_line in iter(proc.stdout.readline, ""):
+            # Read line by line asynchronously
+            while True:
                 if time.time() > deadline:
-                    logging.warning("Traceroute streaming timeout, stopping")
+                     logging.warning("Traceroute streaming timeout, stopping")
+                     proc.terminate()
+                     break
+                
+                try:
+                    line_bytes = await asyncio.wait_for(proc.stdout.readline(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    # No output for 5 seconds? check if process is done
+                    if proc.returncode is not None:
+                        break
+                    continue
+                
+                if not line_bytes:
                     break
 
-                line = raw_line.strip()
+                line = line_bytes.decode(encoding, errors="replace").strip()
                 if not line:
                     continue
 
@@ -201,18 +217,11 @@ class HopMonitorService:
                             pass
                     logging.debug(f"Hop {hop.hop_number}: {hop.ip} ({hop.hostname})")
 
-            if proc.stdout is not None:
-                proc.stdout.close()
-            proc.wait(timeout=5)
+            await proc.wait()
         except Exception as exc:
             logging.error(f"Traceroute exec failed: {exc}")
         finally:
-            self._active_proc = None
-            try:
-                if proc is not None:
-                    proc.kill()
-            except Exception:
-                pass
+             pass # ProcessManager handles cleanup
 
         logging.debug(f"Total hops parsed: {len(hops)}")
         return hops
@@ -249,17 +258,9 @@ class HopMonitorService:
 
     # ── Ping hops ──
 
-    def kill_active_processes(self) -> None:
-        """Kill any running subprocess (called during shutdown)."""
-        proc = self._active_proc
-        if proc is not None:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-            self._active_proc = None
 
-    def ping_all_hops(self) -> None:
+
+    async def ping_all_hops(self) -> None:
         """Ping each discovered hop in parallel and update status."""
         with self._lock:
             hops = list(self._hops)
@@ -267,22 +268,25 @@ class HopMonitorService:
         if not hops:
             return
 
-        # Ping all hops in parallel using executor
-        futures = {
-            self._executor.submit(self._ping_host, hop.ip): hop
-            for hop in hops
-        }
+        # Ping all hops in parallel using asyncio.gather
+        tasks = [self._ping_host(hop.ip) for hop in hops]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for future in futures:
-            hop = futures[future]
+        for hop, result in zip(hops, results):
             try:
-                ok, latency = future.result(timeout=HOP_PING_TIMEOUT + 1)
-                self._update_hop_status(hop, ok, latency)
+                if isinstance(result, Exception):
+                    logging.debug(f"Hop ping failed for {hop.ip}: {result}")
+                    self._update_hop_status(hop, False, None)
+                else:
+                    if result:
+                        ok, latency = result
+                        self._update_hop_status(hop, ok, latency)
+                    else:
+                        self._update_hop_status(hop, False, None)
             except Exception as exc:
-                logging.debug(f"Hop ping failed for {hop.ip}: {exc}")
-                self._update_hop_status(hop, False, None)
+                logging.debug(f"Error updating hop status: {exc}")
 
-    def _ping_host(self, ip: str) -> Tuple[bool, Optional[float]]:
+    async def _ping_host(self, ip: str) -> Tuple[bool, Optional[float]]:
         """Single ping to a hop IP with fast timeout."""
         try:
             if sys.platform == "win32":
@@ -295,37 +299,37 @@ class HopMonitorService:
                 encoding = "utf-8"
 
             # Use creationflags on Windows to prevent orphan processes
-            run_kwargs = {}
+            run_kwargs: dict[str, Any] = {}
             if sys.platform == "win32":
                 run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
 
-            result = subprocess.run(
+            # Use ProcessManager
+            stdout, _, returncode = await self.process_manager.run_command(
                 cmd,
-                capture_output=True,
-                text=True,
-                timeout=HOP_PING_TIMEOUT + 0.5,  # subprocess timeout slightly higher
+                timeout=HOP_PING_TIMEOUT + 0.5,
                 encoding=encoding,
                 errors="replace",
                 **run_kwargs,
             )
-            stdout = result.stdout or ""
+            
+            stdout_str = str(stdout)
 
             match_time = re.search(
                 r"(?:time|время)\s*[=<>]*\s*([0-9]+[.,]?[0-9]*)",
-                stdout,
+                stdout_str,
                 re.IGNORECASE,
             )
             if match_time:
                 return True, float(match_time.group(1).replace(",", "."))
 
-            if re.search(r"time\s*<\s*1\s*(?:ms|мс)?", stdout, re.IGNORECASE):
+            if re.search(r"time\s*<\s*1\s*(?:ms|мс)?", stdout_str, re.IGNORECASE):
                 return True, 0.5
 
-            if result.returncode == 0:
+            if returncode == 0:
                 return True, 0.0
             return False, None
 
-        except (subprocess.TimeoutExpired, Exception):
+        except (asyncio.TimeoutError, Exception):
             return False, None
 
     def _update_hop_status(self, hop: HopStatus, ok: bool, latency: Optional[float]) -> None:

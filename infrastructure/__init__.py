@@ -17,6 +17,7 @@ from .metrics import (
 )
 
 from .health import HealthServer, start_health_server
+from .process_manager import ProcessManager, get_process_manager
 
 __all__ = [
     # Metrics
@@ -34,4 +35,8 @@ __all__ = [
     # Health
     "HealthServer",
     "start_health_server",
+    "start_health_server",
+    # Process Manager
+    "ProcessManager",
+    "get_process_manager",
 ]

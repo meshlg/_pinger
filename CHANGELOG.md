@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4.1003]
+### Security
+- **Subprocess Resource Leaks** — Fixed critical vulnerability where zombie processes could accumulate over time.
+  - Implemented centralized `ProcessManager` to track and safely terminate all child processes.
+  - Refactored `PingService`, `TracerouteService`, and `HopMonitorService` to use asynchronous execution.
+  - Added robust cleanup logic to `Monitor.shutdown()` ensuring all processes are killed on exit.
+
 ## [2.4.3.0136]
 ### Added
 - **Smart Alert System** - Advanced alerting with adaptive thresholds and alert fatigue prevention.

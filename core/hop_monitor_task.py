@@ -36,9 +36,8 @@ class HopMonitorTask(BackgroundTask):
         self.hop_monitor_service.set_on_hop_callback(_on_hop_discovered)
 
         self.stats_repo.update_hop_monitor([], discovering=True)
-        await self.run_blocking(
-            self.hop_monitor_service.discover_hops, TARGET_IP
-        )
+        self.stats_repo.update_hop_monitor([], discovering=True)
+        await self.hop_monitor_service.discover_hops(TARGET_IP)
         self.stats_repo.update_hop_monitor(
             self.hop_monitor_service.get_hops_snapshot(), discovering=False
         )
@@ -54,16 +53,14 @@ class HopMonitorTask(BackgroundTask):
         if need_rediscovery:
             self.hop_monitor_service.clear_rediscovery()
             self.stats_repo.update_hop_monitor([], discovering=True)
-            await self.run_blocking(
-                self.hop_monitor_service.discover_hops, TARGET_IP
-            )
+            await self.hop_monitor_service.discover_hops(TARGET_IP)
             self.stats_repo.update_hop_monitor(
                 self.hop_monitor_service.get_hops_snapshot(), discovering=False
             )
             self._last_discovery = _time.time()
         else:
             # Ping all hops
-            await self.run_blocking(self.hop_monitor_service.ping_all_hops)
+            await self.hop_monitor_service.ping_all_hops()
             self.stats_repo.update_hop_monitor(
                 self.hop_monitor_service.get_hops_snapshot(), discovering=False
             )

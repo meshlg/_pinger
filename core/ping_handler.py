@@ -47,14 +47,10 @@ class PingHandler:
         )
     
     async def execute_async(self, executor) -> PingResult:
-        """Execute ping in thread pool (for async contexts)."""
-        import asyncio
-        loop = asyncio.get_running_loop()
-        success, latency = await loop.run_in_executor(
-            executor,
-            self.ping_service.ping_host,
-            self.target_ip,
-        )
+        """Execute ping asynchronously."""
+        # Use new async method directly
+        success, latency = await self.ping_service.ping_host_async(self.target_ip)
+        
         return PingResult(
             success=success,
             latency=latency,

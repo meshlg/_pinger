@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.4.3.0136"
+    VERSION: str = "2.4.4.1003"
     # Also update:
     # - charts/pinger/Chart.yaml (appVersion)
     # - pyproject.toml (version)
