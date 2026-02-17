@@ -32,8 +32,8 @@ class DNSMonitorTask(BackgroundTask):
     async def execute(self) -> None:
         try:
             # Run detailed DNS check with configured record types
-            results = await self.run_blocking(
-                self.dns_service.check_dns_resolve,
+            # Now fully async, so we await directly
+            results = await self.dns_service.check_dns_resolve(
                 None,  # Use default domain
                 DNS_RECORD_TYPES,
             )
@@ -56,8 +56,7 @@ class DNSMonitorTask(BackgroundTask):
 
             # Run benchmark tests (Cached/Uncached/DotCom)
             if ENABLE_DNS_BENCHMARK:
-                benchmark_results = await self.run_blocking(
-                    self.dns_service.run_benchmark_tests,
+                benchmark_results = await self.dns_service.run_benchmark_tests(
                     DNS_BENCHMARK_DOTCOM_DOMAIN,
                     DNS_BENCHMARK_SERVERS,
                 )

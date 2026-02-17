@@ -11,6 +11,7 @@ from config import (
     MTU_DIFF_THRESHOLD,
     MTU_ISSUE_CONSECUTIVE,
     TARGET_IP,
+    PATH_MTU_CHECK_INTERVAL,
     t,
 )
 from core.background_task import BackgroundTask
@@ -29,13 +30,34 @@ class MTUMonitorTask(BackgroundTask):
             **kw,
         )
         self.mtu_service = mtu_service
+        self._last_path_check = 0.0
+        self._last_known_path_mtu = None
 
     async def execute(self) -> None:
+        import time
+        
+        # Determine if we should check Path MTU
+        now = time.time()
+        should_check_path = (now - self._last_path_check) >= PATH_MTU_CHECK_INTERVAL
+        
         # Get MTU info
-        mtu_info = await self.run_blocking(self.mtu_service.check_mtu, TARGET_IP)
+        mtu_info = await self.run_blocking(
+            self.mtu_service.check_mtu, 
+            TARGET_IP, 
+            discover_path=should_check_path
+        )
 
         local_mtu = mtu_info["local_mtu"]
         path_mtu = mtu_info["path_mtu"]
+        
+        # Update path MTU state
+        if should_check_path:
+            self._last_path_check = now
+            if path_mtu:
+                self._last_known_path_mtu = path_mtu
+        elif path_mtu is None:
+            # Use cached value if we skipped check
+            path_mtu = self._last_known_path_mtu
 
         # Determine status
         status = t("mtu_ok")

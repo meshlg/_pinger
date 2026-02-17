@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.5.1045]
+### Security
+- **Systemic Security Improvements** — Comprehensive hardening of the application.
+  - **Non-blocking DNS**: Refactored `DNSService` to be fully asynchronous, wrapping all blocking `dns.resolver` calls in `loop.run_in_executor`.
+  - **Least Privilege**: Added `ENABLE_PYTHONPING_FALLBACK` (default: True). Administrators can now disable root-requiring `pythonping` fallback.
+  - **Input Validation**: Hardened `IPService` to validate IP addresses received from external APIs using `ipaddress` library.
+
+### Refactoring
+- **Async-Only PingService**: Removed synchronous methods (`ping_host`, `_detect_ipv6`) to enforce non-blocking execution.
+- **Dependency Updates**: Updated `rich` to `^13.7.0` and verified `requests` version.
+
+### Fixed
+- **DNSService AttributeError**: Resolved missing `_query_single_async` method.
+- **DNSService NameError**: Fixed missing `asyncio` import.
+
 ## [2.4.4.1851]
 ### Performance
 - **Asynchronous Hop Discovery** — Optimized traceroute by disabling synchronous DNS resolution (`-d`/`-n` flags).

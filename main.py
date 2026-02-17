@@ -102,6 +102,26 @@ class PingerApp:
         self.console.print(f"[dim]{t('press')}[/dim]\n")
         self.monitor.stats_repo.set_start_time(datetime.now(timezone.utc))
 
+        # Security check: Warn if running as root/admin
+        try:
+            is_admin = False
+            if sys.platform == "win32":
+                import ctypes
+                is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+            else:
+                is_admin = os.geteuid() == 0
+
+            if is_admin:
+                self.console.print(
+                    "\n[bold red on yellow] WARN [/bold red on yellow] [yellow]Running as root/admin is NOT recommended since v2.5.0[/yellow]"
+                )
+                self.console.print(
+                    "[yellow]System commands do not require privileges. Please run as normal user to minimize security risks.[/yellow]\n"
+                )
+                logging.warning("Security: Application detected running with elevated privileges (root/admin). Not recommended.")
+        except Exception as e:
+            logging.debug(f"Failed to check privileges: {e}")
+
         tasks = self.monitor.start_tasks()
 
         try:

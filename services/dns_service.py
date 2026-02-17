@@ -12,6 +12,7 @@ from typing import Optional, Any
 
 import dns.resolver
 import dns.rdatatype
+import asyncio
 
 from config import DNS_SLOW_THRESHOLD, DNS_TEST_DOMAIN, DNS_BENCHMARK_HISTORY_SIZE, t
 
@@ -113,49 +114,20 @@ class DNSService:
         
         return result
 
-    def check_dns_resolve(
-        self,
-        domain: str | None = None,
-        record_types: list[str] | None = None
-    ) -> list[DNSQueryResult]:
-        """
-        Check DNS resolution for multiple record types.
-        
-        Args:
-            domain: Domain to query (default: DNS_TEST_DOMAIN)
-            record_types: List of record types (default: DEFAULT_RECORD_TYPES)
-            
-        Returns:
-            List of DNSQueryResult for each record type
-        """
-        domain = domain or DNS_TEST_DOMAIN
-        record_types = record_types or self.DEFAULT_RECORD_TYPES
-
-        results = []
-        for record_type in record_types:
-            result = self._query_single(domain, record_type)
-            results.append(result)
-
-        return results
-
-    def check_single_record(
-        self,
-        domain: str,
-        record_type: str
-    ) -> DNSQueryResult:
-        """Check single DNS record type."""
-        return self._query_single(domain, record_type)
-
-    def _query_single(self, domain: str, record_type: str) -> DNSQueryResult:
-        """Perform single DNS query."""
+    async def _query_single_async(self, domain: str, record_type: str) -> DNSQueryResult:
+        """Perform single DNS query asynchronously."""
         try:
+            loop = asyncio.get_running_loop()
             start = time.time()
             
             # Get rdatatype enum from string
             rdtype = dns.rdatatype.from_text(record_type)
             
-            # Perform query
-            answer = self._resolver.resolve(domain, rdtype)
+            # Perform query in executor to avoid blocking main loop
+            answer = await loop.run_in_executor(
+                None,
+                lambda: self._resolver.resolve(domain, rdtype)
+            )
             
             response_time = (time.time() - start) * 1000
             
@@ -269,22 +241,37 @@ class DNSService:
                 
         return records
 
+    async def check_dns_resolve(
+        self,
+        domain: str | None = None,
+        record_types: list[str] | None = None
+    ) -> list[DNSQueryResult]:
+        """
+        Check DNS resolution for multiple record types asynchronously.
+        
+        Args:
+            domain: Domain to query (default: DNS_TEST_DOMAIN)
+            record_types: List of record types (default: DEFAULT_RECORD_TYPES)
+            
+        Returns:
+            List of DNSQueryResult for each record type
+        """
+        domain = domain or DNS_TEST_DOMAIN
+        record_types = record_types or self.DEFAULT_RECORD_TYPES
+
+        # Run queries in parallel
+        tasks = [self._query_single_async(domain, rt) for rt in record_types]
+        return await asyncio.gather(*tasks)
+
     # ==================== DNS Benchmark Tests ====================
 
-    def run_benchmark_tests(
+    async def run_benchmark_tests(
         self,
         dotcom_domain: str = "cloudflare.com",
         servers: list[str] | None = None
     ) -> list[DNSBenchmarkResult]:
         """
-        Run DNS benchmark tests: Cached, Uncached, and DotCom.
-        
-        Args:
-            dotcom_domain: Domain for DotCom test (default: cloudflare.com)
-            servers: List of DNS servers to test (default: ["system"])
-            
-        Returns:
-            List of benchmark results with statistics
+        Run DNS benchmark tests asynchronously.
         """
         if servers is None:
             servers = ["system"]
@@ -293,21 +280,18 @@ class DNSService:
         
         for server in servers:
             # Cached test
-            cached_result = self._test_cached(server)
-            results.append(cached_result)
+            results.append(await self._test_cached_async(server))
             
             # Uncached test
-            uncached_result = self._test_uncached(server)
-            results.append(uncached_result)
+            results.append(await self._test_uncached_async(server))
             
             # DotCom test
-            dotcom_result = self._test_dotcom(dotcom_domain, server)
-            results.append(dotcom_result)
+            results.append(await self._test_dotcom_async(dotcom_domain, server))
         
         return results
 
-    def _test_cached(self, server: str) -> DNSBenchmarkResult:
-        """Test cached response by querying same domain twice."""
+    async def _test_cached_async(self, server: str) -> DNSBenchmarkResult:
+        """Test cached response asynchronously."""
         test_domain = DNS_TEST_DOMAIN
         record_type = "A"
         test_type = "cached"
@@ -315,12 +299,23 @@ class DNSService:
         
         try:
             # First query - may be uncached
-            rdtype = dns.rdatatype.from_text(record_type)
-            self._resolver.resolve(test_domain, rdtype)
+            await self._query_single_async(test_domain, record_type)
             
             # Second query - should be cached
+            # We measure time inside _query_single_async, but we need raw time here.
+            # Lets assume _query_single_async is accurate enough or re-implement simple resolve here.
+            
+            # Re-implementing simple resolve ensure we measure what we want
+            loop = asyncio.get_running_loop()
+            rdtype = dns.rdatatype.from_text(record_type)
+            
             start = time.time()
-            answer = self._resolver.resolve(test_domain, rdtype)
+            
+            await loop.run_in_executor(
+                None,
+                lambda: self._resolver.resolve(test_domain, rdtype)
+            )
+            
             response_time = (time.time() - start) * 1000
             
             status = t("slow") if response_time > DNS_SLOW_THRESHOLD else t("ok")
@@ -334,7 +329,6 @@ class DNSService:
             error_msg = str(exc)
             self._update_history(server, test_type, None, False)
         
-        # Calculate stats
         stats = self._calculate_stats(server, test_type)
         
         return DNSBenchmarkResult(
@@ -353,8 +347,8 @@ class DNSService:
             error=error_msg,
         )
 
-    def _test_uncached(self, server: str) -> DNSBenchmarkResult:
-        """Test uncached response with unique random subdomain."""
+    async def _test_uncached_async(self, server: str) -> DNSBenchmarkResult:
+        """Test uncached response asynchronously."""
         random_part = uuid.uuid4().hex[:12]
         test_domain = f"{random_part}.test.com"
         record_type = "A"
@@ -366,12 +360,17 @@ class DNSService:
         success = False
         
         try:
+            loop = asyncio.get_running_loop()
             rdtype = dns.rdatatype.from_text(record_type)
             start = time.time()
             try:
-                self._resolver.resolve(test_domain, rdtype)
+                await loop.run_in_executor(
+                    None,
+                    lambda: self._resolver.resolve(test_domain, rdtype)
+                )
             except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-                pass  # NXDOMAIN/NoAnswer are valid — DNS server responded
+                pass
+            
             response_time = (time.time() - start) * 1000
             status = t("slow") if response_time > DNS_SLOW_THRESHOLD else t("ok")
             success = True
@@ -379,10 +378,7 @@ class DNSService:
         except Exception as exc:
             error = str(exc)
         
-        # Update history
         self._update_history(server, test_type, response_time, success)
-        
-        # Calculate stats
         stats = self._calculate_stats(server, test_type)
         
         return DNSBenchmarkResult(
@@ -401,21 +397,25 @@ class DNSService:
             error=error
         )
 
-    def _test_dotcom(self, domain: str, server: str) -> DNSBenchmarkResult:
-        """Test popular .com domain response time."""
+    async def _test_dotcom_async(self, domain: str, server: str) -> DNSBenchmarkResult:
+        """Test .com domain response asynchronously."""
         record_type = "A"
         test_type = "dotcom"
         error_msg: str | None = None
         
         try:
+            loop = asyncio.get_running_loop()
             rdtype = dns.rdatatype.from_text(record_type)
             start = time.time()
-            answer = self._resolver.resolve(domain, rdtype)
-            response_time = (time.time() - start) * 1000
             
+            await loop.run_in_executor(
+                None,
+                lambda: self._resolver.resolve(domain, rdtype)
+            )
+            
+            response_time = (time.time() - start) * 1000
             status = t("slow") if response_time > DNS_SLOW_THRESHOLD else t("ok")
             
-            # Update history
             self._update_history(server, test_type, response_time, True)
             
         except Exception as exc:
@@ -424,7 +424,6 @@ class DNSService:
             error_msg = str(exc)
             self._update_history(server, test_type, None, False)
         
-        # Calculate stats
         stats = self._calculate_stats(server, test_type)
         
         return DNSBenchmarkResult(
@@ -449,8 +448,13 @@ class DNSService:
         domain: str | None = None
     ) -> tuple[bool, Optional[float], str]:
         """Simple A record check (backward compatible)."""
-        results = self.check_dns_resolve(domain, ["A"])
-        if results:
-            r = results[0]
-            return r.success, r.response_time_ms, r.status
+        # This is strictly blocking legacy, we can leave it or use asyncio.run
+        # But since we changed check_dns_resolve to be async, we must update this.
+        try:
+            results = asyncio.run(self.check_dns_resolve(domain, ["A"]))
+            if results:
+                r = results[0]
+                return r.success, r.response_time_ms, r.status
+        except Exception:
+            pass
         return False, None, t("failed")

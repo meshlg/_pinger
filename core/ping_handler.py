@@ -37,14 +37,8 @@ class PingHandler:
         self.ping_service = ping_service
         self.target_ip = target_ip
     
-    def execute(self) -> PingResult:
-        """Execute ping and return result."""
-        success, latency = self.ping_service.ping_host(self.target_ip)
-        return PingResult(
-            success=success,
-            latency=latency,
-            target=self.target_ip,
-        )
+    # Removed synchronous execute() to enforce async usage.
+
     
     async def execute_async(self, executor) -> PingResult:
         """Execute ping asynchronously."""

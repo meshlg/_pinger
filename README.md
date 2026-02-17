@@ -36,6 +36,9 @@
 </div>
 
 > **Works everywhere:** Windows, Linux, and macOS with system `ping` and `traceroute` (`tracert` on Windows) commands.
+>
+> [!WARNING]
+> **Security Notice:** Do not run Pinger as root/admin. It uses system commands (`ping`, `traceroute`) which do not require elevated privileges for basic operation. Running as root increases the risk of privilege escalation if a vulnerability is exploited.
 
 ---
 
@@ -245,6 +248,7 @@ TARGET_IP = "8.8.8.8"          # Target IP for ping
 INTERVAL = 1                    # Ping interval (seconds)
 WINDOW_SIZE = 1800              # Statistics window (30 min)
 LATENCY_WINDOW = 600            # Latency history (10 min)
+ENABLE_PYTHONPING_FALLBACK = True # Enable pythonping fallback (requires root/admin)
 ```
 
 ### ⚑ Thresholds and Alerts

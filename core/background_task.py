@@ -43,12 +43,12 @@ class BackgroundTask(ABC):
 
     # ── helpers available to subclasses ──────────────────────────────────
 
-    async def run_blocking(self, func: Callable[..., Any], *args: Any) -> Any:
+    async def run_blocking(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Run a blocking function in the thread-pool executor."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             self.executor,
-            lambda: func(*args),
+            lambda: func(*args, **kwargs),
         )
 
     # ── lifecycle ────────────────────────────────────────────────────────

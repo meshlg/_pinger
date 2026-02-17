@@ -65,7 +65,17 @@ class IPService:
                         country = data.get(provider["country"], "N/A") if provider["country"] else "N/A"
                         country_code = data.get(provider["country_code"]) if provider["country_code"] else None
                         if ip:
-                            return ip, country, country_code
+                            # Validate IP address
+                            try:
+                                import ipaddress
+                                # This will raise ValueError if invalid
+                                ip_obj = ipaddress.ip_address(ip)
+                                # Normalized string
+                                clean_ip = str(ip_obj)
+                                return clean_ip, country, country_code
+                            except ValueError:
+                                logging.warning(f"Invalid IP returned by {provider['url']}: {ip}")
+                                continue
             except Exception as exc:
                 logging.debug(f"IP provider {provider['url']} failed: {exc}")
                 continue

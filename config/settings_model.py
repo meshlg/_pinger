@@ -1,6 +1,8 @@
 import os
 from typing import List, Optional
-from pydantic import Field
+import ipaddress
+import re
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -12,7 +14,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.4.4.1851"
+    VERSION: str = "2.4.5.1045"
     # Also update:
     # - charts/pinger/Chart.yaml (appVersion)
     # - pyproject.toml (version)
@@ -136,6 +138,11 @@ class Settings(BaseSettings):
     TTL_CHECK_INTERVAL: int = Field(default=10, ge=1)
 
     # ─────────────────────────────────────────────────────────────────────────────
+    # Ping Settings
+    # ─────────────────────────────────────────────────────────────────────────────
+    ENABLE_PYTHONPING_FALLBACK: bool = Field(default=True, description="Allow fallback to root-required pythonping if system ping fails")
+
+    # ─────────────────────────────────────────────────────────────────────────────
     # Hop Monitoring
     # ─────────────────────────────────────────────────────────────────────────────
     ENABLE_HOP_MONITORING: bool = True
@@ -240,6 +247,42 @@ class Settings(BaseSettings):
     LOG_FILE: str = Field(default_factory=lambda: os.path.join(os.path.expanduser("~/.pinger"), "ping_monitor.log"))
     LOG_LEVEL: str = "INFO"
     LOG_TRUNCATE_ON_START: bool = True
+
+    @field_validator("TARGET_IP")
+    @classmethod
+    def validate_target_ip(cls, v: str) -> str:
+        """Validate that TARGET_IP is a valid IP address or hostname."""
+        v = v.strip()
+        if not v:
+            raise ValueError("TARGET_IP cannot be empty")
+        
+        # 1. Check if it's a valid IP address (IPv4 or IPv6)
+        try:
+            ipaddress.ip_address(v)
+            return v
+        except ValueError:
+            pass
+            
+        # 2. Check if it's a valid hostname
+        # - Alphanumeric, dots, hyphens
+        # - Cannot start or end with hyphen (per label, but simplified here)
+        # - Max length 253 chars
+        if len(v) > 253:
+             raise ValueError("Hostname too long")
+             
+        # Regex for standard hostname (RFC 1123 loose)
+        # We also want to prevent argument injection chars like space, &, ;, |, etc.
+        # This regex allows a-z, 0-9, dot, hyphen. 
+        # It explicitly bans starting with - (argument injection risk).
+        if v.startswith("-"):
+            raise ValueError("Hostname cannot start with hyphen")
+            
+        allowed = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?$")
+        
+        if not allowed.match(v):
+            raise ValueError(f"Invalid target: '{v}'. Must be a valid IP or hostname.")
+            
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",

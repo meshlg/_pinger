@@ -298,8 +298,16 @@ class HopMonitorService:
         if not hops:
             return
 
-        # Ping all hops in parallel using asyncio.gather
-        tasks = [self._ping_host(hop.ip) for hop in hops]
+        # Limit concurrency to avoid starving the main ping/traceroute
+        # Global limit is 50 (ProcessManager), so 20 leaves plenty of headroom
+        sem = asyncio.Semaphore(20)
+
+        async def _ping_with_limit(hop_ip: str) -> Tuple[bool, Optional[float]]:
+            async with sem:
+                return await self._ping_host(hop_ip)
+
+        # Ping all hops in parallel but limited by semaphore
+        tasks = [_ping_with_limit(hop.ip) for hop in hops]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for hop, result in zip(hops, results):

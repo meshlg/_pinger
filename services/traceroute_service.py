@@ -11,8 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, TypeVar
-
-from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, t
+from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, MAX_TRACEROUTE_FILES, t
 from infrastructure import get_process_manager
 
 from typing import TYPE_CHECKING
@@ -64,6 +63,10 @@ class TracerouteService:
         """Run traceroute command and return output."""
         if not self._check_traceroute_available():
             return t("traceroute_not_found")
+            
+        # Security check: prevent argument injection
+        if target.strip().startswith("-"):
+            return "Security error: Invalid target (starts with hyphen)"
         
         try:
             if sys.platform == "win32":
@@ -106,6 +109,10 @@ class TracerouteService:
         """Run traceroute command asynchronously."""
         if not self._check_traceroute_available():
             return t("traceroute_not_found")
+            
+        # Security check: prevent argument injection
+        if target.strip().startswith("-"):
+            return "Security error: Invalid target (starts with hyphen)"
         
         try:
             if sys.platform == "win32":
@@ -158,12 +165,33 @@ class TracerouteService:
             traceroutes_dir.mkdir(exist_ok=True)
             filename = traceroutes_dir / f"traceroute_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
             
-            with open(filename, "w", encoding="utf-8") as handle:
-                handle.write(
-                    f"Traceroute to {target}\nTime: {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}\n"
-                )
-                handle.write("=" * 70 + "\n")
-                handle.write(data)
+            # File I/O in executor to avoid blocking event loop
+            def _write_and_cleanup():
+                # Write new file
+                with open(filename, "w", encoding="utf-8") as handle:
+                    handle.write(
+                        f"Traceroute to {target}\nTime: {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}\n"
+                    )
+                    handle.write("=" * 70 + "\n")
+                    handle.write(data)
+                
+                # Cleanup old files
+                try:
+                    files = list(traceroutes_dir.glob("traceroute_*.txt"))
+                    if len(files) > MAX_TRACEROUTE_FILES:
+                        # Sort by modification time (oldest first)
+                        files.sort(key=lambda p: p.stat().st_mtime)
+                        # Remove excess
+                        to_remove = files[:-MAX_TRACEROUTE_FILES]
+                        for f in to_remove:
+                            try:
+                                f.unlink()
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logging.error(f"Failed to cleanup traceroutes: {e}")
+
+            await loop.run_in_executor(None, _write_and_cleanup)
             
             self._stats_repo.add_alert(f"[+] {t('traceroute_saved').format(file=filename)}", "success")
             logging.info(f"Traceroute saved: {filename}")
