@@ -8,7 +8,6 @@ import statistics
 import subprocess
 import sys
 import threading
-import threading
 import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -248,7 +247,6 @@ class HopMonitorService:
                     if self._on_hop_callback:
                         try:
                             self._on_hop_callback(self.get_hops_snapshot())
-                            pass
                         except Exception:
                             pass
             except Exception:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import re
@@ -66,97 +67,6 @@ class PingService:
                 return is_ipv6
             except Exception:
                 return False
-
-    # removed sync detect_ipv6, ping_host, _ping_with_system, _run_ping_command
-    # to enforce async usage and prevent blocking operations.
-
-
-    def _ping_with_pythonping(self, host: str) -> Tuple[bool, Optional[float]]:
-        """Fallback ping using pythonping library."""
-        try:
-            if pythonping_ping is None:
-                return False, None
-            resp = pythonping_ping(host, count=1, timeout=1)
-            
-            # Try to extract latency from response
-            for attr in ("rtt_avg_ms", "rtt_avg", "avg_rtt", "rtt_ms", "rtt"):
-                if hasattr(resp, attr):
-                    try:
-                        return True, float(getattr(resp, attr))
-                    except Exception:
-                        continue
-            
-            # Try iterating response
-            try:
-                iterator = iter(resp)
-            except TypeError:
-                iterator = None
-            
-            if iterator is not None:
-                for item in resp:
-                    for attr in ("time_elapsed_ms", "time_elapsed", "rtt_ms", "rtt"):
-                        if hasattr(item, attr):
-                            value = getattr(item, attr)
-                            try:
-                                if attr == "time_elapsed":
-                                    return True, float(value) * 1000.0
-                                return True, float(value)
-                            except Exception:
-                                continue
-                    match = re.search(r"time[=<]?\s*([0-9]+[.,]?[0-9]*)", str(item), re.IGNORECASE)
-                    if match:
-                        return True, float(match.group(1).replace(",", "."))
-            
-            # Try parsing string representation
-            match_resp = re.search(
-                r"time[=<]?\s*([0-9]+[.,]?[0-9]*)",
-                str(resp),
-                re.IGNORECASE,
-            )
-            if match_resp:
-                return True, float(match_resp.group(1).replace(",", "."))
-            
-            logging.warning("pythonping produced no latency info")
-            return False, None
-        except Exception as exc:
-            logging.error(f"pythonping failed: {exc}")
-            return False, None
-
-    def _build_ping_command(self, host: str, is_ipv6: bool | None = None) -> Tuple[list[str], str, dict[str, Any]] | None:
-        """Build the ping command, encoding and kwargs."""
-        ping_cmd = shutil.which("ping")
-        if not ping_cmd:
-            return None
-            
-        # Security check: prevent argument injection
-        if host.strip().startswith("-"):
-            logging.error(f"Security: Invalid host '{host}' (starts with hyphen)")
-            return None
-            
-        # is_ipv6 detection is now async, so it must be passed in or awaited
-        # This method is called by _run_ping_command_async, which will await _detect_ipv6_async
-        # So, if is_ipv6 is None, it means the caller didn't provide it, which is fine for this helper.
-        # However, the original _build_ping_command used _detect_ipv6 (sync).
-        # Since _detect_ipv6 is removed, this method should ideally receive is_ipv6 from an async caller.
-        # For now, I'll assume the caller (which is _run_ping_command_async) will provide it.
-        # If it's None, it means an error in logic, but the type hint allows it.
-        
-        if sys.platform == "win32":
-            cmd = [ping_cmd, "-n", "1", "-w", "1000", host]
-            encoding = "oem"
-        else:
-            if is_ipv6: # This relies on is_ipv6 being correctly passed by the async caller
-                cmd = [ping_cmd, "-6", "-c", "1", host]
-            else:
-                cmd = [ping_cmd, "-c", "1", host]
-            encoding = "utf-8"
-        
-        # Use creationflags on Windows to prevent orphan processes
-        kwargs: dict[str, Any] = {}
-        if sys.platform == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-            
-        return cmd, encoding, kwargs
 
     def _ping_with_pythonping(self, host: str) -> Tuple[bool, Optional[float]]:
         """Fallback ping using pythonping library."""
@@ -317,12 +227,6 @@ class PingService:
             return True, 0.0
         return False, None
 
-    def _ping_with_system(self, host: str, is_ipv6: bool) -> Tuple[bool, Optional[float]]:
-        """System ping command."""
-        stdout = self._run_ping_command(host, is_ipv6)
-        if stdout is None:
-            return False, None
-        return self._parse_ping_output(stdout)
 
     async def extract_ttl_async(self, host: str) -> tuple[int | None, int | None]:
         """
@@ -348,8 +252,6 @@ class PingService:
                     estimated_hops = initial_ttl - ttl
                     break
             return ttl, estimated_hops
-        return None, None
-            
         return None, None
 
     def is_available(self) -> bool:

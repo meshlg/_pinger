@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.6.0209]
+### Fixed
+- **PingService NameError** — Added missing `import asyncio` to `services/ping_service.py`. Methods `_detect_ipv6_async` and `_run_ping_command_async` used `asyncio.get_running_loop()` and `asyncio.TimeoutError` without importing the module, causing `name 'asyncio' is not defined` crash during async ping operations.
+- **PingService duplicate methods** — Removed duplicate definitions of `_ping_with_pythonping` and `_build_ping_command` left over from sync→async refactoring.
+- **PingService dead code** — Removed unreachable `return None, None` in `extract_ttl_async` and dead `_ping_with_system` method referencing removed `_run_ping_command`.
+- **HopMonitorService cleanup** — Removed duplicate `import threading` and dead `pass` statement in `_resolve_hostname_bg`.
+
 ## [2.4.5.1045]
 ### Security
 - **Systemic Security Improvements** — Comprehensive hardening of the application.

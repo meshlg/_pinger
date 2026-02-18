@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, Literal
 import time
 import threading
 
-
 def _ensure_utc(dt: datetime | None) -> datetime | None:
     """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
     if dt is None:
