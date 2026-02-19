@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.6.1418]
+### Changed
+- **UI full redesign** — Rewrote `ui.py` from scratch (1124→750 lines). Height-aware layout (4 tiers: minimal/short/standard/full), consolidated panels (Latency+Stats → Metrics, Analysis+Monitoring → single panel), single snapshot per render cycle, adaptive hop table columns based on terminal width, explicit size-based Layout to prevent overflow/overlap.
+
 ## [2.4.6.0209]
 ### Fixed
 - **PingService NameError** — Added missing `import asyncio` to `services/ping_service.py`. Methods `_detect_ipv6_async` and `_run_ping_command_async` used `asyncio.get_running_loop()` and `asyncio.TimeoutError` without importing the module, causing `name 'asyncio' is not defined` crash during async ping operations.
