@@ -376,7 +376,10 @@ class Monitor:
         # 4. Update metrics (MetricsHandler - SRP)
         self._metrics_handler.update_metrics(result)
         
-        # 5. Periodic maintenance (every N pings)
+        # 5. Clean up old visual alerts
+        self.cleanup_alerts()
+        
+        # 6. Periodic maintenance (every N pings)
         with self._ping_lock:
             self._ping_counter += 1
             if self._ping_counter >= self._memory_check_interval:

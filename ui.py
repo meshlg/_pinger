@@ -346,7 +346,7 @@ class MonitorUI:
                 f"   {sep}{t('ping')}: {ping_txt}"
                 f"{sep}{t('loss')}: {loss_txt}"
                 f"{sep}{t('uptime')}: [{_WHITE}]{uptime_txt}[/{_WHITE}]"
-                f"{sep}IP: [{_WHITE}]{ip_val}[/{_WHITE}][{_TEXT_DIM}]{cc}[/{_TEXT_DIM}]"
+                f"{sep}{t('ip_label')}: [{_WHITE}]{ip_val}[/{_WHITE}][{_TEXT_DIM}]{cc}[/{_TEXT_DIM}]"
             )
         return Panel(
             parts, border_style=color, box=box.ROUNDED, width=width,
@@ -573,9 +573,9 @@ class MonitorUI:
         else:
             ms_dns = snap["dns_resolve_time"]
             if snap["dns_status"] == t("ok"):
-                items.append(Text.from_markup(f"  [{_GREEN}]OK[/{_GREEN}] [{_TEXT_DIM}]({ms_dns:.0f}ms)[/{_TEXT_DIM}]"))
+                items.append(Text.from_markup(f"  [{_GREEN}]{t('ok_label')}[/{_GREEN}] [{_TEXT_DIM}]({ms_dns:.0f}{t('ms')})[/{_TEXT_DIM}]"))
             elif snap["dns_status"] == t("slow"):
-                items.append(Text.from_markup(f"  [{_YELLOW}]{t('slow')}[/{_YELLOW}] [{_TEXT_DIM}]({ms_dns:.0f}ms)[/{_TEXT_DIM}]"))
+                items.append(Text.from_markup(f"  [{_YELLOW}]{t('slow')}[/{_YELLOW}] [{_TEXT_DIM}]({ms_dns:.0f}{t('ms')})[/{_TEXT_DIM}]"))
             else:
                 items.append(Text.from_markup(f"  [{_RED}]{t('error')}[/{_RED}]"))
 
@@ -601,7 +601,7 @@ class MonitorUI:
                     all_avg.append(r["avg_ms"])
             bench_line = "  " + "  ".join(bench_parts)
             if bench_queries > 1 and all_avg:
-                bench_line += f"  [{_TEXT_DIM}]│ avg:{sum(all_avg)/len(all_avg):.0f}ms[/{_TEXT_DIM}]"
+                bench_line += f"  [{_TEXT_DIM}]│ {t('avg_ms')}:{sum(all_avg)/len(all_avg):.0f}{t('ms')}[/{_TEXT_DIM}]"
             items.append(Text.from_markup(bench_line))
 
         # ── Network (TTL, MTU, Traceroute) ──
@@ -642,7 +642,6 @@ class MonitorUI:
 
         # ── Alerts ──
         items.append(self._section_header(t("notifications"), inner_w))
-        self.monitor.cleanup_alerts()
         alert_lines: list[str] = []
         if SHOW_VISUAL_ALERTS and snap["active_alerts"]:
             for alert in snap["active_alerts"]:
@@ -811,7 +810,8 @@ class MonitorUI:
         items: list[Table | Text] = [tbl]
 
         if len(hops) > max_hops:
-            items.append(Text.from_markup(f"  [{_TEXT_DIM}]+{len(hops) - max_hops} more...[/{_TEXT_DIM}]"))
+            more_txt = t("more_hops").format(count=len(hops) - max_hops)
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]+{more_txt}[/{_TEXT_DIM}]"))
 
         if worst_hop and worst_lat > HOP_LATENCY_GOOD:
             w_ip = worst_hop.get("ip", "?")

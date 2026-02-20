@@ -141,6 +141,9 @@ LANG: Dict[str, Dict[str, str]] = {
         "traceroute_running": "Идет...",
         "alerts_off": "ВЫКЛ",
         "no_alerts": "Нет уведомлений.",
+        "more_hops": "еще {count}...",
+        "avg_ms": "ср",
+        "ip_label": "IP",
         # ── Footer ──
         "footer": "Ctrl+C — остановка  │  Логи: {log_file}",
         "update_available": "Обновление доступно: {current} → {latest} — pipx upgrade network-pinger",
@@ -316,6 +319,9 @@ LANG: Dict[str, Dict[str, str]] = {
         "traceroute_running": "Running...",
         "alerts_off": "OFF",
         "no_alerts": "No notifications.",
+        "more_hops": "{count} more...",
+        "avg_ms": "avg",
+        "ip_label": "IP",
         # ── Footer ──
         "footer": "Ctrl+C — stop  |  Logs: {log_file}",
         "update_available": "Update available: {current} → {latest} — pipx upgrade network-pinger",

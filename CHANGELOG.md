@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.7.1033]
+### Fixed
+- **Ping timeout false positive** — Fixed an issue in `services/ping_service.py` where ping timeouts on Windows were incorrectly parsed as successful pings with 0.0ms latency. The parser now correctly checks the subprocess return code.
+- **UI state mutation** — Removed `cleanup_alerts()` call from `ui.py`'s `_render_analysis_panel` to ensure the UI remains strictly a presentation layer. The cleanup logic was moved to the main `ping_once` cycle in `monitor.py`.
+- **Hard shutdown in main thread** — Replaced `sys.exit(0)` in the Windows console handler (`main.py`) with a graceful `self.monitor.stop_event.set()` to allow `asyncio` events to be properly awaited and cleaned up.
+- **Mathematical variable naming** — Renamed `variance` to `stdev` in `route_analyzer.py` to accurately reflect the use of `statistics.stdev`.
+- **UI Localization** — Replaced hardcoded UI strings in `ui.py` (such as "more...", "avg:", "ms") with their respective `t()` translation calls mapped in `config/i18n.py`.
+
 ## [2.4.6.1418]
 ### Changed
 - **UI full redesign** — Rewrote `ui.py` from scratch (1124→750 lines). Height-aware layout (4 tiers: minimal/short/standard/full), consolidated panels (Latency+Stats → Metrics, Analysis+Monitoring → single panel), single snapshot per render cycle, adaptive hop table columns based on terminal width, explicit size-based Layout to prevent overflow/overlap.

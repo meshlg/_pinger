@@ -156,7 +156,7 @@ class PingService:
 
     # _run_ping_command (sync) removed.
 
-    async def _run_ping_command_async(self, host: str, is_ipv6: bool | None = None) -> str | None:
+    async def _run_ping_command_async(self, host: str, is_ipv6: bool | None = None) -> Tuple[str | None, int | None]:
         """Execute system ping command asynchronously."""
         if is_ipv6 is None:
             is_ipv6 = await self._detect_ipv6_async(host)
@@ -168,19 +168,19 @@ class PingService:
         
         try:
             # timeout=2.0 seconds matches synchronous timeout
-            stdout, _, _ = await self.process_manager.run_command(
+            stdout, _, returncode = await self.process_manager.run_command(
                 cmd,
                 timeout=2.0,
                 encoding=encoding,
                 errors="replace",
                 **kwargs
             )
-            return str(stdout)
+            return str(stdout), returncode
         except asyncio.TimeoutError:
-            return None
+            return None, None
         except Exception as exc:
             logging.error(f"async ping command failed: {exc}")
-            return None
+            return None, None
 
     async def ping_host_async(self, host: str) -> Tuple[bool, Optional[float]]:
         """Ping a host asynchronously and return (success, latency_ms)."""
@@ -193,15 +193,32 @@ class PingService:
 
         is_ipv6 = await self._detect_ipv6_async(host)
         
-        stdout = await self._run_ping_command_async(host, is_ipv6)
+        stdout, returncode = await self._run_ping_command_async(host, is_ipv6)
         if stdout is None:
             return False, None
             
-        return self._parse_ping_output(stdout)
+        return self._parse_ping_output(stdout, returncode)
 
-    def _parse_ping_output(self, stdout: str) -> Tuple[bool, Optional[float]]:
+    def _parse_ping_output(self, stdout: str, returncode: int | None = 0) -> Tuple[bool, Optional[float]]:
 
         """Parse ping output for latency."""
+        if returncode is not None and returncode != 0:
+            return False, None
+
+        failure_patterns = [
+            "request timed out",
+            "unreachable",
+            "заданный узел недоступен",
+            "превышен интервал",
+            "100% packet loss",
+            "100% loss",
+            "переданный",
+        ]
+        stdout_lower = stdout.lower()
+        for pattern in failure_patterns:
+            if pattern in stdout_lower:
+                return False, None
+
         # Parse latency
         match_time = re.search(
             r"(?:time|время)\s*[=<>]*\s*([0-9]+[.,]?[0-9]*)",
@@ -238,7 +255,7 @@ class PingService:
         Returns:
             Tuple of (ttl, estimated_hops) or (None, None) on error
         """
-        stdout = await self._run_ping_command_async(host)
+        stdout, _ = await self._run_ping_command_async(host)
         if stdout is None:
             return None, None
         

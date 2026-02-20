@@ -122,8 +122,8 @@ class RouteAnalyzer:
 
             # Check for high variance in latencies
             if len(latencies) >= 2:
-                variance = statistics.stdev(latencies)
-                if variance > 100:  # High variance
+                stdev = statistics.stdev(latencies)
+                if stdev > 100:  # High deviation
                     return hop["hop"]
 
         return None
