@@ -193,7 +193,7 @@ from .settings import (
 )
 
 # UI Layout
-from .settings import UI_COMPACT_THRESHOLD, UI_WIDE_THRESHOLD
+from .settings import UI_COMPACT_THRESHOLD, UI_WIDE_THRESHOLD, UI_THEME
 
 # Logging
 from .settings import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_TRUNCATE_ON_START
@@ -357,6 +357,7 @@ __all__ = [
     # UI Layout
     "UI_COMPACT_THRESHOLD",
     "UI_WIDE_THRESHOLD",
+    "UI_THEME",
     # Logging
     "LOG_DIR",
     "LOG_FILE",

@@ -155,6 +155,7 @@ from config import (
     # UI Layout
     UI_COMPACT_THRESHOLD,
     UI_WIDE_THRESHOLD,
+    UI_THEME,
     # Logging
     LOG_DIR,
     LOG_FILE,
@@ -310,6 +311,7 @@ __all__ = [
     # UI Layout
     "UI_COMPACT_THRESHOLD",
     "UI_WIDE_THRESHOLD",
+    "UI_THEME",
     # Logging
     "LOG_DIR",
     "LOG_FILE",

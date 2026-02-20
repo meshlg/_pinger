@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.7.1611]
+### Added
+- **Multi-color UI themes** — Added support for UI themes (`orange`, `catppuccin`, `matrix`, `minimal`, `monochrome`, `purple`) via the `UI_THEME` setting to reduce eye strain.
+- **Semantic background** — The background color of the status bar and header now dynamically changes to dark red during critical errors (e.g., connection lost) to grab attention.
+
+### Changed
+- **Cleaner Layout** — Removed excess borders (box-in-a-box styling) to create a cleaner and more modern dashboard layout.
+- **Improved Sparklines** — Added visual highlight (reverse color) to the last data point in the sparklines for better trackability.
+- **Text Hierarchy** — Refined text accents for better readability and clearer data structure.
+
 ## [2.4.7.1033]
 ### Fixed
 - **Ping timeout false positive** — Fixed an issue in `services/ping_service.py` where ping timeouts on Windows were incorrectly parsed as successful pings with 0.0ms latency. The parser now correctly checks the subprocess return code.

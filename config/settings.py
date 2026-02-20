@@ -256,6 +256,7 @@ HEALTH_TOKEN_HEADER = settings.HEALTH_TOKEN_HEADER
 
 UI_COMPACT_THRESHOLD = settings.UI_COMPACT_THRESHOLD
 UI_WIDE_THRESHOLD = settings.UI_WIDE_THRESHOLD
+UI_THEME = settings.UI_THEME
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging

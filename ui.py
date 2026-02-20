@@ -40,6 +40,7 @@ try:
         UI_COMPACT_THRESHOLD,
         UI_WIDE_THRESHOLD,
         LOG_FILE,
+        UI_THEME,
         t,
     )
 except ImportError:
@@ -53,25 +54,33 @@ except ImportError:
         UI_COMPACT_THRESHOLD,
         UI_WIDE_THRESHOLD,
         LOG_FILE,
+        UI_THEME,
         t,
     )
 
+try:
+    from config.ui_theme import get_theme
+except ImportError:
+    from .config.ui_theme import get_theme
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Style constants
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Color palette – black theme with orange accent
-_BG = "#000000"
-_BG_PANEL = "#0a0a0a"
-_ACCENT = "#ff8c00"
-_ACCENT_DIM = "#3d2800"
-_TEXT = "#d4d4d4"
-_TEXT_DIM = "#707070"
-_GREEN = "#4ec94e"
-_YELLOW = "#ffb347"
-_RED = "#ff4444"
-_WHITE = "#f0f0f0"
+theme = get_theme(UI_THEME)
+
+# Color palette – dynamic from theme
+_BG = theme.bg
+_BG_PANEL = theme.bg_panel
+_ACCENT = theme.accent
+_ACCENT_DIM = theme.accent_dim
+_TEXT = theme.text
+_TEXT_DIM = theme.text_dim
+_GREEN = theme.green
+_YELLOW = theme.yellow
+_RED = theme.red
+_WHITE = theme.white
+_CRITICAL_BG = theme.critical_bg
 
 # Unicode elements
 _SPARK_CHARS = "▁▂▃▄▅▆▇█"
@@ -131,9 +140,9 @@ class MonitorUI:
         h = self.console.size.height
         if h < 25:
             return "minimal"
-        if h < 40:
+        if h < 32:
             return "short"
-        if h < 55:
+        if h < 40:
             return "standard"
         return "full"
 
@@ -198,17 +207,27 @@ class MonitorUI:
         mn, mx = min(data), max(data)
         rng = mx - mn if mx != mn else 1.0
         chars = []
-        for v in data:
+        for i, v in enumerate(data):
             idx = int((v - mn) / rng * (len(_SPARK_CHARS) - 1))
             idx = max(0, min(idx, len(_SPARK_CHARS) - 1))
             rel = (v - mn) / rng
+
             if rel < 0.4:
                 color = _GREEN
             elif rel < 0.7:
                 color = _YELLOW
             else:
                 color = _RED
-            chars.append(f"[{color}]{_SPARK_CHARS[idx]}[/{color}]")
+
+            # Add a visual indicator to the very last bar
+            is_last = (i == len(data) - 1)
+            char = _SPARK_CHARS[idx]
+
+            if is_last:
+                chars.append(f"[bold {color} reverse]{char}[/bold {color} reverse]")
+            else:
+                chars.append(f"[{color}]{char}[/{color}]")
+
         return "".join(chars)
 
     @staticmethod
@@ -316,42 +335,74 @@ class MonitorUI:
                 f"[{_TEXT_DIM}]│[/{_TEXT_DIM}]    {ver}    "
                 f"[{_TEXT_DIM}]│[/{_TEXT_DIM}]    [{_TEXT_DIM}]{now}[/{_TEXT_DIM}]"
             )
+        bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG
         return Panel(
-            txt, border_style=_ACCENT, box=box.ROUNDED, width=width,
-            style=f"on {_BG}",
+            txt, border_style=_ACCENT_DIM, box=box.SIMPLE, width=width,
+            style=f"on {bg_col}",
+            padding=(0, 1),
         )
 
-    def _render_status_bar(self, snap: StatsSnapshot, width: int, tier: LayoutTier) -> Panel:
+    def _render_toast(self, snap: StatsSnapshot, width: int) -> Panel | None:
+        if not SHOW_VISUAL_ALERTS or not snap.get("active_alerts"):
+            return None
+        
+        alert = snap["active_alerts"][0]
+        a_icon = {"warning": _DOT_WARN, "critical": _DOT_ERR, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
+        bg_col = {"warning": _YELLOW, "critical": _RED, "info": _TEXT_DIM, "success": _GREEN}.get(alert["type"], _TEXT_DIM)
+        fg_col = _BG
+
+        txt = f"[bold {fg_col}]{a_icon} {alert['message']}[/bold {fg_col}]"
+        return Panel(
+            txt, border_style=bg_col, box=box.SIMPLE, width=width,
+            style=f"on {bg_col}",
+            padding=(0, 1),
+        )
+
+    def _render_dashboard(self, snap: StatsSnapshot, width: int, tier: LayoutTier) -> Panel:
         label, color, icon = self._get_connection_state(snap)
         current = snap["last_latency_ms"]
-        ping_txt = f"[bold {_WHITE}]{current}[/bold {_WHITE}] {t('ms')}" if current != t("na") else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        ping_txt = f"{current}" if current != t("na") else "—"
+        
         recent = snap["recent_results"]
         loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
         l_color = _GREEN if loss30 < 1 else (_YELLOW if loss30 < 5 else _RED)
-        loss_txt = f"[{l_color}]{loss30:.1f}%[/{l_color}]"
+        loss_txt = f"{loss30:.1f}%"
+        
         uptime_txt = self._fmt_uptime(snap["start_time"])
         ip_val = snap["public_ip"]
+        lbl_ping = f"{t('ping').upper()}:"
+        lbl_loss = f"{t('loss').upper()}:"
+        lbl_up = f"{t('uptime').upper()}:"
         cc = f" [{snap['country_code']}]" if snap["country_code"] else ""
-        sep = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
 
         if tier == "compact":
             parts = (
-                f"  [bold {color}]{icon} {label}[/bold {color}]"
-                f"{sep}{t('ping')}: {ping_txt}"
-                f"{sep}{t('loss')}: {loss_txt}"
+                f"  [bold {color}]{icon} {label}[/bold {color}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
+                f"[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
+                f"[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
+            )
+            bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG
+            return Panel(
+                parts, border_style=color, box=box.SIMPLE, width=width,
+                style=f"on {bg_col}",
+                padding=(0, 1),
             )
         else:
+            sep = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
             parts = (
-                f"   [bold {color}]{icon} {label}[/bold {color}]"
-                f"   {sep}{t('ping')}: {ping_txt}"
-                f"{sep}{t('loss')}: {loss_txt}"
-                f"{sep}{t('uptime')}: [{_WHITE}]{uptime_txt}[/{_WHITE}]"
-                f"{sep}{t('ip_label')}: [{_WHITE}]{ip_val}[/{_WHITE}][{_TEXT_DIM}]{cc}[/{_TEXT_DIM}]"
+                f"  [bold {color}]{icon} {label}[/bold {color}]"
+                f"{sep}[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}] [{_TEXT_DIM}]{t('ms')}[/{_TEXT_DIM}]"
+                f"{sep}[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
+                f"{sep}[{_TEXT_DIM}]{lbl_up}[/{_TEXT_DIM}] [{_WHITE}]{uptime_txt}[/{_WHITE}]"
+                f"{sep}{ip_val}{cc}"
             )
-        return Panel(
-            parts, border_style=color, box=box.ROUNDED, width=width,
-            style=f"on {_BG}",
-        )
+            
+            bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG
+            return Panel(
+                parts, border_style=color, box=box.SIMPLE, width=width,
+                style=f"on {bg_col}",
+                padding=(0, 1),
+            )
 
     # ── Metrics Panel (Latency + Stats merged) ──────────────────────────────
 
@@ -384,20 +435,23 @@ class MonitorUI:
 
         # ── Latency section ──
         items.append(self._section_header(t("lat"), inner_w))
-        tbl = self._dual_kv_table(width)
-        tbl.add_row(f"{t('current')}:", cur_txt, f"{t('best')}:", f"{best} {t('ms')}")
-        tbl.add_row(f"{t('average')}:", f"{avg_txt} {t('ms')}", f"{t('p95')}:", f"{p95_txt} {t('ms')}")
-        tbl.add_row(f"{t('median')}:", f"{med_txt} {t('ms')}", f"{t('jitter')}:", f"{jit_txt} {t('ms')}")
+        tbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
+        col_w = max(8, (width - 6) // 4)
+        tbl.add_column("k1", style=_TEXT_DIM, width=col_w, no_wrap=True)
+        tbl.add_column("v1", width=col_w, no_wrap=True)
+        tbl.add_column("k2", style=_TEXT_DIM, width=col_w, no_wrap=True)
+        tbl.add_column("v2", width=col_w, no_wrap=True)
+        tbl.add_row(f"{t('current')}:", cur_txt, f"{t('average')}:", f"{avg_txt} {t('ms')}")
+        tbl.add_row(f"{t('best')}:", f"{best} {t('ms')}", f"{t('median')}:", f"{med_txt} {t('ms')}")
+        tbl.add_row(f"{t('p95')}:", f"{p95_txt} {t('ms')}", f"{t('jitter')}:", f"{jit_txt} {t('ms')}")
         items.append(tbl)
 
-        # Sparklines: only in full height and non-compact width
-        if h_tier == "full" and tier != "compact":
+        # Sparklines: show in short/standard/full height and non-compact width
+        if h_tier in ("short", "standard", "full") and tier != "compact":
             spark_w = max(20, width - 6)
             items.append(Text(""))
-            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')}[/{_TEXT_DIM}]"))
-            items.append(Text.from_markup(f"  {self._sparkline(list(latencies), width=spark_w)}"))
-            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')}[/{_TEXT_DIM}]"))
-            items.append(Text.from_markup(f"  {self._sparkline(list(jitter_hist) or [jit], width=spark_w)}"))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')} ›[/{_TEXT_DIM}]  {self._sparkline(list(latencies), width=spark_w)}"))
+            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')} ›[/{_TEXT_DIM}]  {self._sparkline(list(jitter_hist) or [jit], width=spark_w)}"))
 
         # ── Stats section ──
         items.append(self._section_header(t("stats"), inner_w))
@@ -406,13 +460,18 @@ class MonitorUI:
         recent = snap["recent_results"]
         loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
 
-        stbl = self._dual_kv_table(width)
+        stbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
+        col_w = max(8, (width - 6) // 4)
+        stbl.add_column("k1", style=_TEXT_DIM, width=col_w, no_wrap=True)
+        stbl.add_column("v1", width=col_w, no_wrap=True)
+        stbl.add_column("k2", style=_TEXT_DIM, width=col_w, no_wrap=True)
+        stbl.add_column("v2", width=col_w, no_wrap=True)
         stbl.add_row(
             f"{t('sent')}:", f"[{_WHITE}]{snap['total']}[/{_WHITE}]",
-            f"{t('ok_count')}:", f"[{_GREEN}]{snap['success']}[/{_GREEN}]",
+            f"{t('lost')}:", f"[{_RED}]{snap['failure']}[/{_RED}]",
         )
         stbl.add_row(
-            f"{t('lost')}:", f"[{_RED}]{snap['failure']}[/{_RED}]",
+            f"{t('ok_count')}:", f"[{_GREEN}]{snap['success']}[/{_GREEN}]",
             f"{t('losses')}:", f"[{_TEXT_DIM}]{loss_total:.1f}%[/{_TEXT_DIM}]",
         )
         items.append(stbl)
@@ -459,6 +518,7 @@ class MonitorUI:
             box=box.ROUNDED,
             width=width,
             style=f"on {_BG_PANEL}",
+            padding=(0, 1),
         )
 
     # ── Analysis & Monitoring Panel (merged) ─────────────────────────────────
@@ -674,21 +734,23 @@ class MonitorUI:
                           tier: LayoutTier, h_tier: HeightTier) -> Panel:
         hops = snap.get("hop_monitor_hops", [])
         discovering = snap.get("hop_monitor_discovering", False)
-        panel_style = f"on {_BG_PANEL}"
-        title = f"[bold {_ACCENT}]{t('hop_health')}[/bold {_ACCENT}]"
+        panel_style = f"on {_BG}"
+        title = f"[bold {_WHITE}]{t('hop_health')}[/bold {_WHITE}]"
         border = _ACCENT_DIM
 
         if discovering and not hops:
             return Panel(
                 Text.from_markup(f"  [{_TEXT_DIM}]{t('hop_discovering')}[/{_TEXT_DIM}]"),
                 title=title, title_align="left", border_style=border,
-                box=box.ROUNDED, width=width, style=panel_style,
+                box=box.SIMPLE, width=width, style=f"on {_BG}",
+                padding=(0, 1),
             )
         if not hops:
             return Panel(
                 Text.from_markup(f"  [{_TEXT_DIM}]{t('hop_none')}[/{_TEXT_DIM}]"),
                 title=title, title_align="left", border_style=border,
-                box=box.ROUNDED, width=width, style=panel_style,
+                box=box.SIMPLE, width=width, style=f"on {_BG}",
+                padding=(0, 1),
             )
 
         # Adaptive columns based on width tier
@@ -697,7 +759,7 @@ class MonitorUI:
 
         tbl = Table(
             show_header=True, header_style=f"bold {_TEXT_DIM}",
-            box=box.ROUNDED, padding=(0, 1), expand=True,
+            box=box.SIMPLE_HEAD, padding=(0, 1), expand=True,
             border_style=_ACCENT_DIM,
         )
         tbl.add_column(t("hop_col_num"), style=_TEXT_DIM, width=3, justify="right", no_wrap=True)
@@ -827,7 +889,8 @@ class MonitorUI:
         return Panel(
             Group(*items),
             title=title, title_align="left", border_style=border,
-            box=box.ROUNDED, width=width, style=panel_style,
+            box=box.SIMPLE, width=width, style=panel_style,
+            padding=(0, 1),
         )
 
     # ── Footer ───────────────────────────────────────────────────────────────
@@ -838,7 +901,7 @@ class MonitorUI:
         latest_version = snap.get("latest_version")
         if latest_version:
             txt += f"    [{_YELLOW}]{_DOT_WARN} {t('update_available').format(current=VERSION, latest=latest_version)}[/{_YELLOW}]"
-        return Panel(txt, border_style=_ACCENT_DIM, box=box.ROUNDED, width=width, style=f"on {_BG}")
+        return Panel(txt, border_style=_ACCENT_DIM, box=box.SIMPLE, width=width, style=f"on {_BG}", padding=(0, 1))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Layout generation — single snapshot, height-aware sizing
@@ -856,11 +919,11 @@ class MonitorUI:
 
         layout = Layout(name="root")
 
-        # Fixed chrome: header(3) + status(3) + footer(3) = 9 lines
-        fixed_lines = 9
-        remaining = h - fixed_lines
+        header_panel = self._render_header(snap, w, tier)
+        toast_panel = self._render_toast(snap, w)
+        dashboard_panel = self._render_dashboard(snap, w, tier)
+        footer_panel = self._render_footer(snap, w, tier)
 
-        # Calculate hop panel size based on content
         hops = snap.get("hop_monitor_hops", [])
         if h_tier == "minimal":
             hop_display_count = min(len(hops), 5)
@@ -869,48 +932,41 @@ class MonitorUI:
         else:
             hop_display_count = len(hops)
 
-        # Hop panel height: header(3) + rows + worst line(1) + border(2)
+        toast_h = 3 if toast_panel else 0
+        fixed_lines = 9 + toast_h
+        remaining = h - fixed_lines
+
         hop_panel_h = hop_display_count + 5 if hops else 4
         hop_panel_h = min(hop_panel_h, max(4, remaining * 2 // 3))
 
-        # Body gets the rest
         body_h = max(8, remaining - hop_panel_h)
-
-        header_panel = self._render_header(snap, w, tier)
-        status_panel = self._render_status_bar(snap, w, tier)
-        footer_panel = self._render_footer(snap, w, tier)
         hop_panel = self._render_hop_panel(snap, w, tier, h_tier)
 
+        splits = [Layout(header_panel, size=3, name="header")]
+        if toast_panel:
+            splits.append(Layout(toast_panel, size=3, name="toast"))
+        splits.append(Layout(dashboard_panel, size=3, name="dashboard"))
+
         if tier == "compact":
-            # Single column: metrics stacked above analysis
             metrics_panel = self._render_metrics_panel(snap, w, tier, h_tier)
             analysis_panel = self._render_analysis_panel(snap, w, tier, h_tier)
 
             if h_tier == "minimal":
-                # Ultra-compact: just status + hops
-                layout.split_column(
-                    Layout(header_panel, size=3, name="header"),
-                    Layout(status_panel, size=3, name="status"),
-                    Layout(hop_panel, name="hops", ratio=1),
-                    Layout(footer_panel, size=3, name="footer"),
-                )
+                splits.append(Layout(hop_panel, name="hops", ratio=1))
+                splits.append(Layout(footer_panel, size=3, name="footer"))
+                layout.split_column(*splits)
             else:
-                # Compact: stacked sections
                 body = Layout(name="body_inner")
                 body.split_column(
                     Layout(metrics_panel, name="metrics", ratio=1),
                     Layout(analysis_panel, name="analysis", ratio=1),
                 )
-                layout.split_column(
-                    Layout(header_panel, size=3, name="header"),
-                    Layout(status_panel, size=3, name="status"),
-                    Layout(name="body", size=body_h),
-                    Layout(hop_panel, name="hops", size=hop_panel_h),
-                    Layout(footer_panel, size=3, name="footer"),
-                )
+                splits.append(Layout(name="body", size=body_h))
+                splits.append(Layout(hop_panel, name="hops", size=hop_panel_h))
+                splits.append(Layout(footer_panel, size=3, name="footer"))
+                layout.split_column(*splits)
                 layout["body"].update(body)
         else:
-            # Two-column layout for standard/wide
             left_w = (inner // 2) - 1
             right_w = inner - left_w - 1
 
@@ -923,13 +979,10 @@ class MonitorUI:
                 Layout(analysis_panel, name="analysis", ratio=1),
             )
 
-            layout.split_column(
-                Layout(header_panel, size=3, name="header"),
-                Layout(status_panel, size=3, name="status"),
-                Layout(name="body", size=body_h),
-                Layout(hop_panel, name="hops", size=hop_panel_h),
-                Layout(footer_panel, size=3, name="footer"),
-            )
+            splits.append(Layout(name="body", size=body_h))
+            splits.append(Layout(hop_panel, name="hops", size=hop_panel_h))
+            splits.append(Layout(footer_panel, size=3, name="footer"))
+            layout.split_column(*splits)
             layout["body"].update(body)
 
         return layout

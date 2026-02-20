@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.4.7.1033"
+    VERSION: str = "2.4.7.1611"
     # Also update:
     # - charts/pinger/Chart.yaml (appVersion)
     # - pyproject.toml (version)
@@ -239,6 +239,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     UI_COMPACT_THRESHOLD: int = Field(default=110, ge=10)
     UI_WIDE_THRESHOLD: int = Field(default=170, ge=10)
+    UI_THEME: str = Field(default="orange", description="UI Theme (orange, catppuccin, matrix, minimal, monochrome, purple)")
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Logging
