@@ -25,6 +25,8 @@ from config import (
     LATENCY_WINDOW,
 )
 
+from typing import Dict
+
 
 class StatsSnapshot(TypedDict):
     """Immutable snapshot of monitoring stats for UI."""
@@ -75,6 +77,7 @@ class StatsSnapshot(TypedDict):
     route_last_diff_count: int
     active_alerts: list[dict[str, Any]]
     recent_results: list[bool]  # copy of recent results for UI
+    threshold_warmup: Dict[str, Dict[str, int]]
     hop_monitor_hops: list[dict[str, Any]]
     hop_monitor_discovering: bool
     latest_version: str | None
@@ -93,6 +96,7 @@ class StatsRepository:
         self._recent_results: deque[bool] = deque(maxlen=WINDOW_SIZE)
         self._stats["latencies"] = deque(maxlen=LATENCY_WINDOW)
         self._stats["jitter_history"] = deque(maxlen=LATENCY_WINDOW)
+        self._stats["threshold_warmup"] = {}
         self._stats["latest_version"] = None
         self._stats["version_check_time"] = None
         self._stats["version_up_to_date"] = False
@@ -167,6 +171,7 @@ class StatsRepository:
                 "route_last_diff_count": self._stats.get("route_last_diff_count", 0),
                 "active_alerts": list(self._stats.get("active_alerts", [])),
                 "recent_results": list(self._recent_results),
+                "threshold_warmup": dict(self._stats.get("threshold_warmup", {})),
                 "hop_monitor_hops": list(self._stats.get("hop_monitor_hops", [])),
                 "hop_monitor_discovering": self._stats.get("hop_monitor_discovering", False),
                 "latest_version": self._stats.get("latest_version"),
@@ -392,6 +397,11 @@ class StatsRepository:
         """Get a threshold state."""
         with self._lock:
             return self._stats["threshold_states"].get(key, False)
+
+    def update_threshold_warmup(self, warmup_status: Dict[str, Dict[str, int]]) -> None:
+        """Update adaptive thresholds warmup status."""
+        with self._lock:
+            self._stats["threshold_warmup"] = warmup_status
 
     def get_consecutive_losses(self) -> int:
         """Get current consecutive losses count."""

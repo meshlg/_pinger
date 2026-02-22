@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.8.2154]
+### Added
+- **MTU Discovery Optimization** — Added fast-fail timeouts to the `ping` utility used for Path MTU discovery, reducing the time required from minutes to seconds. Additionally, initial MTU status now ignores the hysteresis delay, meaning it displays immediately on startup.
+- **Maintenance Windows / Quiet Hours** — Added `ENABLE_QUIET_HOURS` config with `QUIET_HOURS_START` and `QUIET_HOURS_END` to suppress alert sounds during scheduled maintenance windows or nighttime. Visual alerts are still logged to the UI, but without the audio disruption.
+- **IP Provider Reliability Metrics** — Added Prometheus metrics `pinger_ip_provider_requests_total` and `pinger_ip_provider_latency_ms` to track the reliability and response time of external public IP detection services, making it easier to monitor fallbacks.
+- **Endpoint Security Metrics** — Added Prometheus metrics for health endpoints (`pinger_health_auth_failures_total`, `pinger_health_blocked_ips_total`, `pinger_health_rate_limited_total`) to provide transparency into brute-force and DoS attempts.
+- **Adaptive Warm-up UI Status** — Added "WARM-UP: X/Y" status indicator to the UI dashboard showing the progress of adaptive thresholds learning (`sample_count`/`min_samples`). This provides transparency and reduces confusion about why thresholds are still using defaults.
+- **Outage State Consistency** — Fixed UI inconsistencies during internet disconnection where problem analysis incorrectly showed "No problems" and "Stable" instead of proper "ISP Issue" and "Risk" status.
+  - ProblemAnalyzer now prioritizes active disconnection (connection_lost or consecutive losses) as ISP issue in analysis and prediction.
+  - Added immediate problem analysis refresh in Monitor when connection_lost threshold toggles, eliminating stale state window between background task intervals.
+  - UI now masks stale route hops, MTU values, and hop data during disconnection, showing "DISCONNECTED" status instead of cached values.
+  - Enhanced ProblemAnalyzerTask to pass current problem type to prediction for immediate risk assessment.
+
+### Added
+- **Regression Tests** — Added comprehensive tests for outage state consistency in `tests/test_regressions_security_runtime.py`:
+  - `test_problem_analyzer_reports_outage_as_isp_and_risk()` — Verifies outage classification and prediction.
+  - `test_ui_analysis_panel_masks_stale_route_and_mtu_on_disconnect()` — Ensures UI hides stale data during disconnect.
+  - `test_ui_hop_panel_hides_stale_hops_on_disconnect()` — Verifies hop panel disconnection handling.
+  - `test_monitor_refresh_problem_analysis_updates_snapshot_immediately()` — Confirms immediate refresh on disconnect state changes.
+
 ## [2.4.8.0351]
 ### Security
 - **Timing Attack Prevention** — Replaced direct string comparison with `secrets.compare_digest` for metrics basic auth credentials to prevent timing attacks.

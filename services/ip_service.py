@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import time
 from typing import Any
 
 import requests
 
+from infrastructure.metrics import IP_PROVIDER_REQUESTS_TOTAL, IP_PROVIDER_LATENCY_MS
 
 # HTTP providers (more reliable, IP-only or with geo info)
 _IP_PROVIDERS: list[dict[str, Any]] = [
@@ -56,19 +58,27 @@ class IPService:
         Tries multiple providers in order for resilience.
         """
         for provider in _IP_PROVIDERS:
+            start_time = time.perf_counter()
+            provider_url = provider["url"]
             try:
                 response = requests.get(
-                    provider["url"],
+                    provider_url,
                     timeout=5,
                     headers={"Accept": "application/json, text/plain"},
                 )
+                
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                IP_PROVIDER_LATENCY_MS.labels(provider=provider_url).observe(elapsed_ms)
+                
                 if response.status_code == 200:
                     # Handle plain text responses
                     if provider["ip"] is None:
                         clean_ip = self._normalize_ip(response.text)
                         if clean_ip:
+                            IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="success").inc()
                             return clean_ip, "N/A", None
-                        logging.warning(f"Invalid IP returned by {provider['url']}: {response.text.strip()}")
+                        IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="invalid_ip").inc()
+                        logging.warning(f"Invalid IP returned by {provider_url}: {response.text.strip()}")
                     else:
                         data = response.json()
                         ip = data.get(provider["ip"], "")
@@ -76,10 +86,24 @@ class IPService:
                         country_code = data.get(provider["country_code"]) if provider["country_code"] else None
                         clean_ip = self._normalize_ip(ip)
                         if clean_ip:
+                            IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="success").inc()
                             return clean_ip, country, country_code
-                        logging.warning(f"Invalid IP returned by {provider['url']}: {ip}")
+                        IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="invalid_ip").inc()
+                        logging.warning(f"Invalid IP returned by {provider_url}: {ip}")
+                else:
+                    IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status=f"error_{response.status_code}").inc()
+                    logging.warning(f"IP provider {provider_url} returned status {response.status_code}")
+                    
+            except requests.exceptions.Timeout:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                IP_PROVIDER_LATENCY_MS.labels(provider=provider_url).observe(elapsed_ms)
+                IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="timeout").inc()
+                logging.debug(f"IP provider {provider_url} timed out")
             except Exception as exc:
-                logging.debug(f"IP provider {provider['url']} failed: {exc}")
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                IP_PROVIDER_LATENCY_MS.labels(provider=provider_url).observe(elapsed_ms)
+                IP_PROVIDER_REQUESTS_TOTAL.labels(provider=provider_url, status="error").inc()
+                logging.debug(f"IP provider {provider_url} failed: {exc}")
                 continue
 
         return "Error", "Error", None

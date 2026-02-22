@@ -70,8 +70,26 @@ class MTUMonitorTask(BackgroundTask):
 
         # Update hysteresis counters via repository
         is_issue = status in [t("mtu_low"), t("mtu_fragmented")]
-        cons_issues, cons_ok = self.stats_repo.update_mtu_hysteresis(is_issue)
         current = self.stats_repo.get_mtu_status()
+        
+        # Fast-track first update by bypassing hysteresis
+        is_first_run = self.stats_repo.get_stats().get("local_mtu") is None
+        if is_first_run:
+            self.stats_repo.update_mtu(local_mtu, path_mtu, status)
+            self.stats_repo.set_mtu_status_change_time()
+            # Update hysteresis tracking locally to seed the state
+            self.stats_repo.update_mtu_hysteresis(is_issue)
+            logging.info(f"MTU initial status: {status}")
+            if METRICS_AVAILABLE:
+                try:
+                    if is_issue:
+                        MTU_PROBLEMS_TOTAL.inc()
+                    MTU_STATUS_GAUGE.set(0 if not is_issue else (1 if status == t("mtu_low") else 2))
+                except Exception:
+                    pass
+            return
+
+        cons_issues, cons_ok = self.stats_repo.update_mtu_hysteresis(is_issue)
 
         # Apply hysteresis
         if is_issue:

@@ -26,6 +26,9 @@ from .settings import (
     ALERT_ON_PACKET_LOSS,
     ALERT_ON_HIGH_LATENCY,
     HIGH_LATENCY_THRESHOLD,
+    ENABLE_QUIET_HOURS,
+    QUIET_HOURS_START,
+    QUIET_HOURS_END,
 )
 
 # Threshold settings
@@ -229,6 +232,9 @@ __all__ = [
     "ALERT_ON_PACKET_LOSS",
     "ALERT_ON_HIGH_LATENCY",
     "HIGH_LATENCY_THRESHOLD",
+    "ENABLE_QUIET_HOURS",
+    "QUIET_HOURS_START",
+    "QUIET_HOURS_END",
     # Threshold settings
     "ENABLE_THRESHOLD_ALERTS",
     "PACKET_LOSS_THRESHOLD",

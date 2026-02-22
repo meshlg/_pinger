@@ -21,7 +21,7 @@ class ProblemAnalyzerTask(BackgroundTask):
 
     async def execute(self) -> None:
         problem_type = self.problem_analyzer.analyze_current_problem()
-        prediction = self.problem_analyzer.predict_problems()
+        prediction = self.problem_analyzer.predict_problems(problem_type)
         pattern = self.problem_analyzer.identify_pattern()
 
         self.stats_repo.update_problem_analysis(problem_type, prediction, pattern)

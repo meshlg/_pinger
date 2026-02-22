@@ -44,6 +44,15 @@ try:
     ALERT_GROUPS_ACTIVE = Gauge("pinger_alert_groups_active", "Active alert groups")
     ALERT_PRIORITY_GAUGE = Gauge("pinger_alert_priority", "Alerts by priority", ["priority"])
     
+    # IP Provider metrics
+    IP_PROVIDER_REQUESTS_TOTAL = Counter("pinger_ip_provider_requests_total", "Total requests to IP providers", ["provider", "status"])
+    IP_PROVIDER_LATENCY_MS = Histogram("pinger_ip_provider_latency_ms", "IP provider request latency in ms", ["provider"])
+    
+    # Endpoint Security metrics
+    HEALTH_AUTH_FAILURES_TOTAL = Counter("pinger_health_auth_failures_total", "Failed authentication attempts on health endpoint")
+    HEALTH_BLOCKED_IPS_TOTAL = Counter("pinger_health_blocked_ips_total", "IPs blocked by rate limiter")
+    HEALTH_RATE_LIMITED_TOTAL = Counter("pinger_health_rate_limited_total", "Requests rejected due to rate limiting")
+    
 except ImportError:
     METRICS_AVAILABLE = False
     # Create dummy classes for when prometheus is not available
@@ -70,6 +79,11 @@ except ImportError:
     ALERTS_RATE_LIMITED_TOTAL = _DummyCounter()
     ALERT_GROUPS_ACTIVE = _DummyGauge()
     ALERT_PRIORITY_GAUGE = _DummyGauge()
+    IP_PROVIDER_REQUESTS_TOTAL = _DummyCounter()
+    IP_PROVIDER_LATENCY_MS = _DummyHistogram()
+    HEALTH_AUTH_FAILURES_TOTAL = _DummyCounter()
+    HEALTH_BLOCKED_IPS_TOTAL = _DummyCounter()
+    HEALTH_RATE_LIMITED_TOTAL = _DummyCounter()
     
     def start_http_server(*args, **kwargs):  # type: ignore
         pass

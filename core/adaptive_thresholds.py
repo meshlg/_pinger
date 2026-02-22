@@ -376,7 +376,22 @@ class AdaptiveThresholds:
     def get_all_baselines(self) -> Dict[str, BaselineData]:
         """Get all baseline data."""
         return self._baselines.copy()
-    
+        
+    def get_warmup_status(self) -> Dict[str, Dict[str, int]]:
+        """Get warmup status for metrics still building baseline."""
+        status = {}
+        for metric in self._configs:
+            # Ensure baselines are updated even if no alerts are triggered
+            if self._should_update_baseline(metric):
+                self._update_baseline(metric)
+                
+            if metric not in self._baselines:
+                data = self._get_historical_data(metric)
+                samples = len(data) if data else 0
+                min_s = self._minimum_samples.get(metric, 5)
+                status[metric] = {"samples": samples, "min_samples": min_s}
+        return status
+
     def clear(self) -> None:
         """Clear all baselines."""
         self._baselines.clear()

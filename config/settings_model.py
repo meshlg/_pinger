@@ -14,10 +14,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.4.8.0351"
-    # Also update:
-    # - charts/pinger/Chart.yaml (appVersion)
-    # - pyproject.toml (version)
+    VERSION: str = "2.4.8.2154"
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Language Detection
@@ -40,6 +37,11 @@ class Settings(BaseSettings):
     ALERT_ON_PACKET_LOSS: bool = True
     ALERT_ON_HIGH_LATENCY: bool = True
     HIGH_LATENCY_THRESHOLD: float = Field(default=100.0, gt=0)
+    
+    # Quiet Hours / Maintenance Window
+    ENABLE_QUIET_HOURS: bool = False
+    QUIET_HOURS_START: str = Field(default="23:00", description="Quiet hours start time (HH:MM)")
+    QUIET_HOURS_END: str = Field(default="08:00", description="Quiet hours end time (HH:MM)")
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Threshold Settings

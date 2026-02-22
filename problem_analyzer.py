@@ -4,13 +4,14 @@ import sys
 import logging
 import statistics
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from stats_repository import StatsRepository, StatsSnapshot
 
 from config import (
+    CONSECUTIVE_LOSS_THRESHOLD,
     PREDICTION_WINDOW,
     PROBLEM_HISTORY_SIZE,
     PROBLEM_LOG_SUPPRESSION_SECONDS,
@@ -47,6 +48,14 @@ class ProblemAnalyzer:
         recent_results = self._stats_repo.get_recent_results()
         
         problem_type = t("problem_none")
+
+        # Active outage always has priority over secondary metrics.
+        connection_lost = bool(snap.get("threshold_states", {}).get("connection_lost", False))
+        consecutive_losses = int(snap.get("consecutive_losses", 0))
+        if connection_lost or consecutive_losses >= CONSECUTIVE_LOSS_THRESHOLD:
+            problem_type = t("problem_isp")
+            self._record_problem("isp", snap)
+            return problem_type
 
         # Check for DNS problems
         dns_status = snap.get("dns_status", "")
@@ -94,12 +103,24 @@ class ProblemAnalyzer:
 
         return problem_type
 
-    def predict_problems(self) -> str:
+    def predict_problems(self, current_problem_type: str | None = None) -> str:
         """Predict likelihood of problems based on history."""
+        if current_problem_type and current_problem_type != t("problem_none"):
+            return t("prediction_risk")
+
+        now = datetime.now(timezone.utc)
+        window_start = now - timedelta(seconds=PREDICTION_WINDOW)
+        recent_problems = [
+            p
+            for p in self.problem_history
+            if p.get("timestamp") is not None and _ensure_utc(p["timestamp"]) is not None and _ensure_utc(p["timestamp"]) >= window_start
+        ]
+
+        if not recent_problems:
+            recent_problems = list(self.problem_history)[-10:]
+
         if len(self.problem_history) < 5:
             return t("prediction_stable")
-
-        recent_problems = list(self.problem_history)[-10:]
         problem_count = sum(1 for p in recent_problems if p.get("type") != "none")
 
         if problem_count >= 5:

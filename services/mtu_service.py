@@ -164,13 +164,15 @@ class MTUService:
                 mid = (search_low + search_high) // 2
 
                 if sys.platform == "win32":
-                    cmd = [ping_cmd, "-n", "1", "-f", "-l", str(mid), target]
+                    # -w 1000 limits timeout to 1 sec to speed up failures
+                    cmd = [ping_cmd, "-n", "1", "-w", "1000", "-f", "-l", str(mid), target]
                     encoding = "oem"
                 else:
+                    # -W 1 limits timeout to 1 sec on Linux
                     if is_ipv6:
-                        cmd = [ping_cmd, "-6", "-c", "1", "-M", "do", "-s", str(mid), target]
+                        cmd = [ping_cmd, "-6", "-c", "1", "-W", "1", "-M", "do", "-s", str(mid), target]
                     else:
-                        cmd = [ping_cmd, "-c", "1", "-M", "do", "-s", str(mid), target]
+                        cmd = [ping_cmd, "-c", "1", "-W", "1", "-M", "do", "-s", str(mid), target]
                     encoding = "utf-8"
 
                 try:

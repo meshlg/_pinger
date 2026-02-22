@@ -376,6 +376,10 @@ class Monitor:
         # 4. Update metrics (MetricsHandler - SRP)
         self._metrics_handler.update_metrics(result)
         
+        if ENABLE_SMART_ALERTS and self.smart_alert_manager:
+            warmup_status = self.smart_alert_manager.adaptive_thresholds.get_warmup_status()
+            self.stats_repo.update_threshold_warmup(warmup_status)
+        
         # 5. Clean up old visual alerts
         self.cleanup_alerts()
         
@@ -493,11 +497,23 @@ class Monitor:
                 self.stats_repo.add_alert(f"[X] {t('alert_connection_lost').format(n=cons_losses)}", "critical")
                 logging.critical(f"Connection lost: {cons_losses} consecutive")
                 self.stats_repo.trigger_alert_sound("lost")
+                self._refresh_problem_analysis()
         else:
             if was_lost:
                 self.stats_repo.update_threshold_state("connection_lost", False)
                 self.stats_repo.add_alert(f"[+] {t('alert_connection_restored')}", "success")
                 logging.info("Connection restored")
+                self._refresh_problem_analysis()
+
+    def _refresh_problem_analysis(self) -> None:
+        """Recalculate problem analysis immediately for state-consistent UI/metrics."""
+        try:
+            problem_type = self.problem_analyzer.analyze_current_problem()
+            prediction = self.problem_analyzer.predict_problems(problem_type)
+            pattern = self.problem_analyzer.identify_pattern()
+            self.stats_repo.update_problem_analysis(problem_type, prediction, pattern)
+        except Exception as exc:
+            logging.debug(f"Problem analysis refresh skipped: {exc}")
 
     def _check_jitter_threshold(self, snap: StatsSnapshot) -> None:
         """Check jitter threshold."""

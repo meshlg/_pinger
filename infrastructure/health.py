@@ -14,6 +14,12 @@ from collections import defaultdict
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import TYPE_CHECKING
 
+from infrastructure.metrics import (
+    HEALTH_AUTH_FAILURES_TOTAL,
+    HEALTH_BLOCKED_IPS_TOTAL,
+    HEALTH_RATE_LIMITED_TOTAL,
+)
+
 if TYPE_CHECKING:
     from stats_repository import StatsRepository
 
@@ -92,6 +98,7 @@ class RateLimiter:
             self._requests[ip].append(now)
             
             if len(self._requests[ip]) > self._max_requests:
+                HEALTH_RATE_LIMITED_TOTAL.inc()
                 return False, f"Rate limit exceeded ({self._max_requests} requests/minute)"
             
             return True, ""
@@ -99,6 +106,7 @@ class RateLimiter:
     def record_failed_auth(self, ip: str) -> None:
         """Record a failed authentication attempt."""
         now = time.time()
+        HEALTH_AUTH_FAILURES_TOTAL.inc()
         
         with self._lock:
             self._failed_auth[ip] = self._cleanup_old_entries(self._failed_auth[ip], 60.0)
@@ -107,6 +115,7 @@ class RateLimiter:
             # Check if should block
             if len(self._failed_auth[ip]) >= self._max_failed_auth:
                 self._blocked[ip] = now + self._block_duration
+                HEALTH_BLOCKED_IPS_TOTAL.inc()
                 logging.warning(
                     f"Health endpoint: IP {ip} blocked for {self._block_duration}s "
                     f"after {len(self._failed_auth[ip])} failed auth attempts"

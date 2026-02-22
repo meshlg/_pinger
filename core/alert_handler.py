@@ -7,6 +7,7 @@ Integrated with SmartAlertManager for intelligent alert processing.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from config import (
@@ -67,20 +68,51 @@ class AlertHandler:
         else:
             # Legacy behavior
             self._process_legacy_alerts(high_latency_triggered, packet_loss_triggered)
-    
+            
+    def _is_quiet_hours(self) -> bool:
+        """Check if current time is within quiet hours."""
+        from config import ENABLE_QUIET_HOURS, QUIET_HOURS_START, QUIET_HOURS_END
+        if not ENABLE_QUIET_HOURS:
+            return False
+            
+        try:
+            now = datetime.now()
+            current_minutes = now.hour * 60 + now.minute
+            
+            start_parts = QUIET_HOURS_START.split(':')
+            start_minutes = int(start_parts[0]) * 60 + int(start_parts[1])
+            
+            end_parts = QUIET_HOURS_END.split(':')
+            end_minutes = int(end_parts[0]) * 60 + int(end_parts[1])
+            
+            if start_minutes <= end_minutes:
+                # Normal range, e.g., 08:00 to 17:00
+                return start_minutes <= current_minutes <= end_minutes
+            else:
+                # Wraps around midnight, e.g., 23:00 to 08:00
+                return current_minutes >= start_minutes or current_minutes <= end_minutes
+        except Exception as e:
+            import logging
+            logging.error(f"Error evaluating quiet hours: {e}")
+            return False
+
     def _process_legacy_alerts(
         self,
         high_latency_triggered: bool,
         packet_loss_triggered: bool,
     ) -> None:
         """Legacy alert processing without smart features."""
+        is_quiet = self._is_quiet_hours()
+        
         # Handle high latency alert
         if high_latency_triggered:
-            self.stats_repo.trigger_alert_sound("high_latency")
+            if not is_quiet:
+                self.stats_repo.trigger_alert_sound("high_latency")
         
         # Handle packet loss alert
         if packet_loss_triggered:
-            self.stats_repo.trigger_alert_sound("loss")
+            if not is_quiet:
+                self.stats_repo.trigger_alert_sound("loss")
             self._check_auto_traceroute()
     
     def _process_smart_alerts(
@@ -113,10 +145,12 @@ class AlertHandler:
             
             if should_trigger and alert:
                 action, group = self.smart_alert_manager.process_alert(alert)
+                is_quiet = self._is_quiet_hours()
                 
                 # Only trigger sound/visual for non-suppressed alerts
                 if action == AlertAction.NOTIFY:
-                    self.stats_repo.trigger_alert_sound("high_latency")
+                    if not is_quiet:
+                        self.stats_repo.trigger_alert_sound("high_latency")
                     if group:
                         self.stats_repo.add_alert(f"[!] {group.get_summary()}", "warning")
                 elif action == AlertAction.GROUP and group and group.count == 1:
@@ -150,9 +184,11 @@ class AlertHandler:
             
             if should_trigger and alert:
                 action, group = self.smart_alert_manager.process_alert(alert)
+                is_quiet = self._is_quiet_hours()
                 
                 if action == AlertAction.NOTIFY or (action == AlertAction.GROUP and group and group.priority.value >= AlertPriority.HIGH.value):
-                    self.stats_repo.trigger_alert_sound("loss")
+                    if not is_quiet:
+                        self.stats_repo.trigger_alert_sound("loss")
                     if group:
                         self.stats_repo.add_alert(f"[!] {group.get_summary()}", "warning")
                     self._check_auto_traceroute()

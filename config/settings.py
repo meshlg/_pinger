@@ -63,6 +63,9 @@ ALERT_COOLDOWN = settings.ALERT_COOLDOWN
 ALERT_ON_PACKET_LOSS = settings.ALERT_ON_PACKET_LOSS
 ALERT_ON_HIGH_LATENCY = settings.ALERT_ON_HIGH_LATENCY
 HIGH_LATENCY_THRESHOLD = settings.HIGH_LATENCY_THRESHOLD
+ENABLE_QUIET_HOURS = settings.ENABLE_QUIET_HOURS
+QUIET_HOURS_START = settings.QUIET_HOURS_START
+QUIET_HOURS_END = settings.QUIET_HOURS_END
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Threshold Settings

@@ -140,6 +140,8 @@ Six real-time panels track your connection status — from edge latency to route
   - **Grouping** — combines related alerts into a single notification
   - **Adaptive Thresholds** — automatically learns normal network behavior
   - **Fatigue Prevention** — suppresses alerts during prolonged incidents
+  - **Quiet Hours** — schedule a maintenance window (`QUIET_HOURS_START` to `QUIET_HOURS_END`) when alert sounds are suppressed
+- **Adaptive Warm-up Status** — `WARM-UP: X/Y` UI indicator tracking the progress of adaptive thresholds learning
 - Alert feed with timestamps for problem correlation
 
 ### ✪ Problem Analysis and Prediction
@@ -268,6 +270,9 @@ ENABLE_ADAPTIVE_THRESHOLDS = True
 ADAPTIVE_BASELINE_WINDOW_HOURS = 24
 ENABLE_ALERT_DEDUPLICATION = True
 ENABLE_ALERT_GROUPING = True
+ENABLE_QUIET_HOURS = False
+QUIET_HOURS_START = "23:00"
+QUIET_HOURS_END = "08:00"
 ```
 ```
 

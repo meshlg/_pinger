@@ -140,6 +140,8 @@ python pinger.py
   - **Группировка** — объединяет связанные оповещения в одно
   - **Адаптивные пороги** — автоматически изучает нормальное поведение сети
   - **Защита от усталости** — подавляет шум во время длительных инцидентов
+  - **Тихие часы (Quiet Hours)** — расписание (`QUIET_HOURS_START` по `QUIET_HOURS_END`), когда звуки оповещений заглушаются
+- **Индикатор обучения (Warm-up)** — `ОБУЧЕНИЕ: X/Y` в UI показывает прогресс адаптации умных порогов
 - Лента оповещений с временными метками для корреляции проблем
 
 ### ✪ Анализ проблем и прогнозирование
@@ -268,6 +270,9 @@ ENABLE_ADAPTIVE_THRESHOLDS = True
 ADAPTIVE_BASELINE_WINDOW_HOURS = 24
 ENABLE_ALERT_DEDUPLICATION = True
 ENABLE_ALERT_GROUPING = True
+ENABLE_QUIET_HOURS = False
+QUIET_HOURS_START = "23:00"
+QUIET_HOURS_END = "08:00"
 ```
 ```
 

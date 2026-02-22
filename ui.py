@@ -376,11 +376,26 @@ class MonitorUI:
         lbl_ip = f"{t('ip_label').upper()}:"
         cc = f" [{snap['country_code']}]" if snap["country_code"] else ""
 
+        warmup = snap.get("threshold_warmup", {})
+        warmup_part = ""
+        warmup_part_compact = ""
+        if warmup:
+            max_req = 0
+            curr_samples = 0
+            for v in warmup.values():
+                if v["min_samples"] > max_req:
+                    max_req = v["min_samples"]
+                    curr_samples = v["samples"]
+            if max_req > 0:
+                warmup_part = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  [{_TEXT_DIM}]{t('warmup_status')}:[/{_TEXT_DIM}] [{_YELLOW}]{curr_samples}/{max_req}[/{_YELLOW}]"
+                warmup_part_compact = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  [{_YELLOW}]{t('warmup_compact')}:{curr_samples}/{max_req}[/{_YELLOW}]"
+
         if tier == "compact":
             parts = (
                 f"  [bold {color}]{icon} {label}[/bold {color}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
                 f"[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
                 f"[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
+                f"{warmup_part_compact}"
             )
             bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG
             return Panel(
@@ -396,6 +411,7 @@ class MonitorUI:
                 f"{sep}[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_up}[/{_TEXT_DIM}] [{_WHITE}]{uptime_txt}[/{_WHITE}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_ip}[/{_TEXT_DIM}] [{_WHITE}]{ip_val}{cc}[/{_WHITE}]"
+                f"{warmup_part}"
             )
             
             bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG
@@ -528,10 +544,13 @@ class MonitorUI:
                                tier: LayoutTier, h_tier: HeightTier) -> Panel:
         inner_w = max(20, width - 4)
         items: list[Table | Text] = []
+        connection_lost = bool(snap.get("threshold_states", {}).get("connection_lost", False))
 
         # ── Problem analysis ──
         items.append(self._section_header(t("problem_analysis"), inner_w))
         problem_type = snap.get("current_problem_type", t("problem_none"))
+        if connection_lost:
+            problem_type = t("problem_isp")
         if problem_type == t("problem_none"):
             pt_txt = f"[{_GREEN}]{problem_type}[/{_GREEN}]"
         elif problem_type in [t("problem_isp"), t("problem_dns")]:
@@ -542,6 +561,8 @@ class MonitorUI:
             pt_txt = f"[{_WHITE}]{problem_type}[/{_WHITE}]"
 
         prediction = snap.get("problem_prediction", t("prediction_stable"))
+        if connection_lost:
+            prediction = t("prediction_risk")
         pred_txt = (
             f"[{_GREEN}]{prediction}[/{_GREEN}]"
             if prediction == t("prediction_stable")
@@ -580,7 +601,16 @@ class MonitorUI:
         route_changed = snap.get("route_changed", False)
         problematic_hop = snap.get("route_problematic_hop")
 
-        rs_txt = f"[{_YELLOW}]{t('route_changed')}[/{_YELLOW}]" if route_changed else f"[{_GREEN}]{t('route_stable')}[/{_GREEN}]"
+        if connection_lost:
+            route_hops = []
+            hop_count = 0
+            route_changed = False
+            problematic_hop = None
+
+        if connection_lost:
+            rs_txt = f"[{_RED}]{t('status_disconnected')}[/{_RED}]"
+        else:
+            rs_txt = f"[{_YELLOW}]{t('route_changed')}[/{_YELLOW}]" if route_changed else f"[{_GREEN}]{t('route_stable')}[/{_GREEN}]"
         ph_txt = f"[{_RED}]{problematic_hop}[/{_RED}]" if problematic_hop else f"[{_GREEN}]{t('none_label')}[/{_GREEN}]"
         hc_txt = f"[{_WHITE}]{hop_count}[/{_WHITE}]" if hop_count > 0 else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
@@ -601,6 +631,10 @@ class MonitorUI:
             route_diff = snap.get("route_last_diff_count", 0)
             route_cons = snap.get("route_consecutive_changes", 0)
             route_last_change = snap.get("route_last_change_time")
+            if connection_lost:
+                route_diff = 0
+                route_cons = 0
+                route_last_change = None
             diff_txt = f"[{_TEXT_DIM}]{route_diff} {t('hops_unit')}[/{_TEXT_DIM}]" if route_diff else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
             cons_r_txt = f"[{_TEXT_DIM}]{route_cons} / {self._fmt_since(route_last_change)}[/{_TEXT_DIM}]" if route_cons else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
             route_tbl.add_row(f"{t('changed_hops')}:", diff_txt)
@@ -667,27 +701,34 @@ class MonitorUI:
 
         # ── Network (TTL, MTU, Traceroute) ──
         items.append(self._section_header(t("network"), inner_w))
-        ttl = snap["last_ttl"]
-        ttl_hops_val = snap["ttl_hops"]
-        ttl_txt = f"[{_WHITE}]{ttl}[/{_WHITE}]"
-        if ttl:
-            if ttl_hops_val:
-                ttl_txt += f" [{_TEXT_DIM}]({ttl_hops_val} {t('hop_unit')})[/{_TEXT_DIM}]"
-        else:
+        if connection_lost:
             ttl_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+        else:
+            ttl = snap["last_ttl"]
+            ttl_hops_val = snap["ttl_hops"]
+            ttl_txt = f"[{_WHITE}]{ttl}[/{_WHITE}]"
+            if ttl:
+                if ttl_hops_val:
+                    ttl_txt += f" [{_TEXT_DIM}]({ttl_hops_val} {t('hop_unit')})[/{_TEXT_DIM}]"
+            else:
+                ttl_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
 
         local_mtu = snap["local_mtu"]
         path_mtu = snap["path_mtu"]
-        mtu_val = f"[{_WHITE}]{local_mtu or '—'}[/{_WHITE}]/[{_WHITE}]{path_mtu or '—'}[/{_WHITE}]"
-        mtu_status = snap.get("mtu_status", "...")
-        if mtu_status == t("mtu_ok"):
-            mtu_s = f"[{_GREEN}]{mtu_status}[/{_GREEN}]"
-        elif mtu_status == t("mtu_low"):
-            mtu_s = f"[{_YELLOW}]{mtu_status}[/{_YELLOW}]"
-        elif mtu_status == t("mtu_fragmented"):
-            mtu_s = f"[{_RED}]{mtu_status}[/{_RED}]"
+        if connection_lost:
+            mtu_val = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]/[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+            mtu_s = f"[{_RED}]{t('status_disconnected')}[/{_RED}]"
         else:
-            mtu_s = f"[{_TEXT_DIM}]{mtu_status}[/{_TEXT_DIM}]"
+            mtu_val = f"[{_WHITE}]{local_mtu or '—'}[/{_WHITE}]/[{_WHITE}]{path_mtu or '—'}[/{_WHITE}]"
+            mtu_status = snap.get("mtu_status", "...")
+            if mtu_status == t("mtu_ok"):
+                mtu_s = f"[{_GREEN}]{mtu_status}[/{_GREEN}]"
+            elif mtu_status == t("mtu_low"):
+                mtu_s = f"[{_YELLOW}]{mtu_status}[/{_YELLOW}]"
+            elif mtu_status == t("mtu_fragmented"):
+                mtu_s = f"[{_RED}]{mtu_status}[/{_RED}]"
+            else:
+                mtu_s = f"[{_TEXT_DIM}]{mtu_status}[/{_TEXT_DIM}]"
 
         if snap["traceroute_running"]:
             tr_txt = f"[{_YELLOW}]{t('traceroute_running')}[/{_YELLOW}]"
@@ -733,11 +774,20 @@ class MonitorUI:
 
     def _render_hop_panel(self, snap: StatsSnapshot, width: int,
                           tier: LayoutTier, h_tier: HeightTier) -> Panel:
+        connection_lost = bool(snap.get("threshold_states", {}).get("connection_lost", False))
         hops = snap.get("hop_monitor_hops", [])
         discovering = snap.get("hop_monitor_discovering", False)
         panel_style = f"on {_BG}"
         title = f"[bold {_WHITE}]{t('hop_health')}[/bold {_WHITE}]"
         border = _ACCENT_DIM
+
+        if connection_lost:
+            return Panel(
+                Text.from_markup(f"  [{_RED}]{t('status_disconnected')}[/{_RED}]"),
+                title=title, title_align="left", border_style=border,
+                box=box.SIMPLE, width=width, style=f"on {_BG}",
+                padding=(0, 1),
+            )
 
         if discovering and not hops:
             return Panel(
@@ -925,7 +975,10 @@ class MonitorUI:
         dashboard_panel = self._render_dashboard(snap, w, tier)
         footer_panel = self._render_footer(snap, w, tier)
 
+        connection_lost = bool(snap.get("threshold_states", {}).get("connection_lost", False))
         hops = snap.get("hop_monitor_hops", [])
+        if connection_lost:
+            hops = []
         if h_tier == "minimal":
             hop_display_count = min(len(hops), 5)
         elif h_tier == "short":

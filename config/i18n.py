@@ -68,6 +68,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "latency_chart": "Задержка (последние значения):",
         "no_data": "нет данных",
         "waiting": "ожидание...",
+        "warmup_status": "Обучение",
+        "warmup_compact": "Обуч.",
         # ── Stats panel ──
         "sent": "Отправлено",
         "ok_count": "OK",
@@ -245,6 +247,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "latency_chart": "Latency (recent values):",
         "no_data": "no data",
         "waiting": "waiting...",
+        "warmup_status": "Warm-UP",
+        "warmup_compact": "WU",
         # ── Stats panel ──
         "sent": "Sent",
         "ok_count": "OK",
