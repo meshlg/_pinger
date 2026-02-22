@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
 
@@ -41,6 +42,14 @@ class IPService:
     def __init__(self) -> None:
         self._previous_ip: str | None = None
 
+    @staticmethod
+    def _normalize_ip(value: str) -> str | None:
+        """Validate and normalize IP string."""
+        try:
+            return str(ipaddress.ip_address(value.strip()))
+        except ValueError:
+            return None
+
     def get_public_ip_info(self) -> tuple[str, str, str | None]:
         """Get public IP, country, and country code via HTTP APIs.
 
@@ -56,26 +65,19 @@ class IPService:
                 if response.status_code == 200:
                     # Handle plain text responses
                     if provider["ip"] is None:
-                        ip = response.text.strip()
-                        if ip:
-                            return ip, "N/A", None
+                        clean_ip = self._normalize_ip(response.text)
+                        if clean_ip:
+                            return clean_ip, "N/A", None
+                        logging.warning(f"Invalid IP returned by {provider['url']}: {response.text.strip()}")
                     else:
                         data = response.json()
                         ip = data.get(provider["ip"], "")
                         country = data.get(provider["country"], "N/A") if provider["country"] else "N/A"
                         country_code = data.get(provider["country_code"]) if provider["country_code"] else None
-                        if ip:
-                            # Validate IP address
-                            try:
-                                import ipaddress
-                                # This will raise ValueError if invalid
-                                ip_obj = ipaddress.ip_address(ip)
-                                # Normalized string
-                                clean_ip = str(ip_obj)
-                                return clean_ip, country, country_code
-                            except ValueError:
-                                logging.warning(f"Invalid IP returned by {provider['url']}: {ip}")
-                                continue
+                        clean_ip = self._normalize_ip(ip)
+                        if clean_ip:
+                            return clean_ip, country, country_code
+                        logging.warning(f"Invalid IP returned by {provider['url']}: {ip}")
             except Exception as exc:
                 logging.debug(f"IP provider {provider['url']} failed: {exc}")
                 continue
@@ -84,19 +86,24 @@ class IPService:
 
     def check_ip_change(self, new_ip: str, country: str, code: str | None) -> dict | None:
         """Check if IP changed, return change info or None."""
-        if self._previous_ip is None or new_ip == "Error":
-            self._previous_ip = new_ip
+        normalized_new_ip = self._normalize_ip(new_ip)
+        if normalized_new_ip is None:
+            logging.debug(f"Skipping IP change check due to invalid provider response: {new_ip}")
+            return None
+
+        if self._previous_ip is None:
+            self._previous_ip = normalized_new_ip
             return None
         
-        if new_ip == self._previous_ip:
+        if normalized_new_ip == self._previous_ip:
             return None
         
         old_ip = self._previous_ip
-        self._previous_ip = new_ip
+        self._previous_ip = normalized_new_ip
         
         return {
             "old_ip": old_ip,
-            "new_ip": new_ip,
+            "new_ip": normalized_new_ip,
             "country": country,
             "country_code": code,
         }

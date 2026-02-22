@@ -488,6 +488,9 @@ export HEALTH_AUTH_PASS=secret
 # Token Auth
 export HEALTH_TOKEN=your-secret-token
 export HEALTH_TOKEN_HEADER=X-Health-Token
+
+# Доверенные прокси (для rate limit за reverse proxy)
+export HEALTH_TRUSTED_PROXIES="127.0.0.1,10.0.0.0/8"
 ```
 
 Подробнее см. [`SECURITY.md`](SECURITY.md).

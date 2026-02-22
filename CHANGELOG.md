@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.8.0351]
+### Security
+- **Timing Attack Prevention** — Replaced direct string comparison with `secrets.compare_digest` for metrics basic auth credentials to prevent timing attacks.
+- **IP Spoofing Protection** — Hardened health endpoint to only trust `X-Forwarded-For` headers from explicitly configured proxies via the `HEALTH_TRUSTED_PROXIES` environment variable, preventing IP spoofing and rate limit bypass.
+
+### Fixed
+- **Rate Limiter Deadlock** — Fixed a deadlock in `RateLimiter` used by the health endpoint by switching to `threading.RLock`.
+- **Event Loop Blocking** — Prevented event loop blocking during synchronous version checks by executing them in a thread pool executor.
+- **False IP Change Alerts** — Improved IP change detection to ignore invalid IP strings returned by providers during temporary failures, reducing false positive alerts.
+- **Hard Startup Failure** — Made the `traceroute/tracert` command check conditional, allowing the app to start if traceroute-dependent features (`ENABLE_AUTO_TRACEROUTE`, `ENABLE_HOP_MONITORING`, `ENABLE_ROUTE_ANALYSIS`) are disabled.
+- **Adaptive Thresholds Warm-up** — Fixed an issue where adaptive thresholds acted like static thresholds for too long by improving the baseline warm-up logic with running averages and expanding windows.
+
 ## [2.4.7.1611]
 ### Added
 - **Multi-color UI themes** — Added support for UI themes (`orange`, `catppuccin`, `matrix`, `minimal`, `monochrome`, `purple`) via the `UI_THEME` setting to reduce eye strain.

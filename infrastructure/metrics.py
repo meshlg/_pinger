@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import TYPE_CHECKING
@@ -107,7 +108,10 @@ def _check_basic_auth(auth_header: str | None, credentials: tuple[str, str]) -> 
             return False
         decoded = base64.b64decode(encoded).decode("utf-8")
         username, password = decoded.split(":", 1)
-        return username == credentials[0] and password == credentials[1]
+        return (
+            secrets.compare_digest(username, credentials[0])
+            and secrets.compare_digest(password, credentials[1])
+        )
     except Exception:
         return False
 

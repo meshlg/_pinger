@@ -8,6 +8,7 @@ import secrets
 import threading
 import time
 import base64
+import ipaddress
 import os
 from collections import defaultdict
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -55,7 +56,7 @@ class RateLimiter:
         # Blocked IPs with block expiry time: {ip: expiry_timestamp}
         self._blocked: dict[str, float] = {}
         
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
     
     def _cleanup_old_entries(self, entries: list[float], window_seconds: float) -> list[float]:
         """Remove entries older than the window."""
@@ -147,6 +148,46 @@ def _read_secret(name: str) -> str | None:
     
     # Fallback to direct env var
     return os.environ.get(name)
+
+
+def _is_valid_ip(value: str) -> bool:
+    """Return True if value is a valid IPv4/IPv6 literal."""
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_trusted_proxy(client_ip: str) -> bool:
+    """Return True if direct client IP is explicitly configured as trusted proxy.
+
+    HEALTH_TRUSTED_PROXIES supports comma-separated IPs and CIDRs.
+    Example: "127.0.0.1,10.0.0.0/8,192.168.1.10"
+    """
+    trusted_raw = os.environ.get("HEALTH_TRUSTED_PROXIES", "").strip()
+    if not trusted_raw:
+        return False
+
+    try:
+        client_addr = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+
+    for entry in trusted_raw.split(","):
+        candidate = entry.strip()
+        if not candidate:
+            continue
+        try:
+            if "/" in candidate:
+                if client_addr in ipaddress.ip_network(candidate, strict=False):
+                    return True
+            elif client_addr == ipaddress.ip_address(candidate):
+                return True
+        except ValueError:
+            logging.warning(f"Invalid HEALTH_TRUSTED_PROXIES entry ignored: {candidate}")
+
+    return False
 
 def _load_security_config() -> dict:
     """Load and cache security configuration from environment.
@@ -260,13 +301,23 @@ class HealthHandler(BaseHTTPRequestHandler):
     
     def _get_client_ip(self) -> str:
         """Get client IP address from request."""
-        # Check X-Forwarded-For header (for reverse proxy setups)
+        direct_ip = self.client_address[0] if self.client_address else "unknown"
+
+        # Only trust X-Forwarded-For from explicitly configured proxies.
         forwarded = self.headers.get("X-Forwarded-For")
-        if forwarded:
-            # Take the first IP (original client)
-            return forwarded.split(",")[0].strip()
-        # Fall back to direct connection
-        return self.client_address[0] if self.client_address else "unknown"
+        if not forwarded:
+            return direct_ip
+
+        if not _is_trusted_proxy(direct_ip):
+            return direct_ip
+
+        # Take the first IP (original client) and validate it.
+        forwarded_ip = forwarded.split(",")[0].strip()
+        if _is_valid_ip(forwarded_ip):
+            return forwarded_ip
+
+        logging.debug(f"Ignoring invalid X-Forwarded-For value from trusted proxy {direct_ip}: {forwarded_ip}")
+        return direct_ip
     
     def _check_rate_limit(self) -> bool:
         """Check if request is allowed by rate limiter.
@@ -279,12 +330,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             return True  # Rate limiting disabled
         
         ip = self._get_client_ip()
-        
-        # Check if blocked
-        if limiter.is_blocked(ip):
-            self._send_rate_limit_response("IP blocked due to too many failed auth attempts")
-            return False
-        
+
         # Check rate limit
         allowed, reason = limiter.check_request(ip)
         if not allowed:
@@ -558,6 +604,7 @@ def start_health_server(
     Security:
         - Default binds to 127.0.0.1 (localhost only)
         - Set addr="0.0.0.0" for pod network (Kubernetes)
+        - X-Forwarded-For is ignored unless HEALTH_TRUSTED_PROXIES is configured
         - Authentication via environment variables:
             - Basic Auth: HEALTH_AUTH_USER + HEALTH_AUTH_PASS
             - Token Auth: HEALTH_TOKEN [+ HEALTH_TOKEN_HEADER]

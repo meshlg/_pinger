@@ -22,7 +22,7 @@ class VersionCheckerTask(BackgroundTask):
     async def execute(self) -> None:
         from services.version_service import check_update_available
 
-        update_available, current, latest = check_update_available()
+        update_available, current, latest = await self.run_blocking(check_update_available)
 
         if latest:
             if update_available:

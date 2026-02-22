@@ -15,6 +15,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+from config import ADAPTIVE_ANOMALY_SIGMA, ADAPTIVE_BASELINE_WINDOW_HOURS, ADAPTIVE_UPDATE_INTERVAL_MINUTES
 from core.adaptive_thresholds import AdaptiveThresholds
 from core.alert_deduplicator import AlertDeduplicator
 from core.alert_grouper import AlertGrouper
@@ -117,6 +118,9 @@ class SmartAlertManager:
         
         self.adaptive_thresholds = AdaptiveThresholds(
             stats_repo=stats_repo,
+            baseline_window_hours=ADAPTIVE_BASELINE_WINDOW_HOURS,
+            update_interval_minutes=ADAPTIVE_UPDATE_INTERVAL_MINUTES,
+            anomaly_sigma=ADAPTIVE_ANOMALY_SIGMA,
         )
         
         # Alert history

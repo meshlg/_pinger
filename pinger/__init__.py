@@ -109,7 +109,18 @@ def main() -> None:
     if args.interval is not None:
         os.environ["INTERVAL"] = str(args.interval)
 
-    from config import t, LOG_FILE, LOG_LEVEL, LOG_TRUNCATE_ON_START, LOG_DIR, TARGET_IP, INTERVAL
+    from config import (
+        t,
+        LOG_FILE,
+        LOG_LEVEL,
+        LOG_TRUNCATE_ON_START,
+        LOG_DIR,
+        TARGET_IP,
+        INTERVAL,
+        ENABLE_AUTO_TRACEROUTE,
+        ENABLE_HOP_MONITORING,
+        ENABLE_ROUTE_ANALYSIS,
+    )
 
     # Check single instance BEFORE anything else
     instance_lock = enforce_single_instance()
@@ -120,7 +131,13 @@ def main() -> None:
     missing_commands = []
     if shutil.which("ping") is None:
         missing_commands.append("ping")
-    if not (shutil.which("traceroute") or shutil.which("tracert")):
+
+    traceroute_required = any((
+        ENABLE_AUTO_TRACEROUTE,
+        ENABLE_HOP_MONITORING,
+        ENABLE_ROUTE_ANALYSIS,
+    ))
+    if traceroute_required and not (shutil.which("traceroute") or shutil.which("tracert")):
         missing_commands.append("traceroute/tracert")
 
     if missing_commands:

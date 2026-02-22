@@ -373,6 +373,7 @@ class MonitorUI:
         lbl_ping = f"{t('ping').upper()}:"
         lbl_loss = f"{t('loss').upper()}:"
         lbl_up = f"{t('uptime').upper()}:"
+        lbl_ip = f"{t('ip_label').upper()}:"
         cc = f" [{snap['country_code']}]" if snap["country_code"] else ""
 
         if tier == "compact":
@@ -394,7 +395,7 @@ class MonitorUI:
                 f"{sep}[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}] [{_TEXT_DIM}]{t('ms')}[/{_TEXT_DIM}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_up}[/{_TEXT_DIM}] [{_WHITE}]{uptime_txt}[/{_WHITE}]"
-                f"{sep}{ip_val}{cc}"
+                f"{sep}[{_TEXT_DIM}]{lbl_ip}[/{_TEXT_DIM}] [{_WHITE}]{ip_val}{cc}[/{_WHITE}]"
             )
             
             bg_col = _CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else _BG

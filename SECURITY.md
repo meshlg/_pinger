@@ -68,6 +68,7 @@ Health endpoints (`/health`, `/ready`) are configured with security best practic
 | `HEALTH_AUTH_PASS` | (optional) | Basic Auth password | With `HEALTH_AUTH_USER` |
 | `HEALTH_TOKEN` | (optional) | Token for `X-Health-Token` header | Non-localhost (alternative to Basic) |
 | `HEALTH_TOKEN_HEADER` | `X-Health-Token` | Custom header name | Optional |
+| `HEALTH_TRUSTED_PROXIES` | (optional) | Comma-separated IPs/CIDRs to trust for `X-Forwarded-For` | Behind proxy |
 
 ### Authentication Methods
 

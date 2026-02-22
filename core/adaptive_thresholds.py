@@ -106,6 +106,12 @@ class AdaptiveThresholds:
         
         # Threshold configurations
         self._configs = self._build_threshold_configs()
+        self._minimum_samples = {
+            "latency": 5,
+            "avg_latency": 5,
+            "packet_loss": 3,
+            "jitter": 1,
+        }
         
         # Initialize baselines
         self._initialize_baselines()
@@ -123,7 +129,7 @@ class AdaptiveThresholds:
                 default_value=100.0,
                 min_value=20.0,
                 max_value=500.0,
-                sigma_multiplier=2.0,
+                sigma_multiplier=self.anomaly_sigma,
                 use_percentile=False,
             ),
             "avg_latency": ThresholdConfig(
@@ -131,7 +137,7 @@ class AdaptiveThresholds:
                 default_value=100.0,
                 min_value=20.0,
                 max_value=300.0,
-                sigma_multiplier=2.0,
+                sigma_multiplier=self.anomaly_sigma,
                 use_percentile=False,
             ),
             "packet_loss": ThresholdConfig(
@@ -147,7 +153,7 @@ class AdaptiveThresholds:
                 default_value=30.0,
                 min_value=10.0,
                 max_value=100.0,
-                sigma_multiplier=2.0,
+                sigma_multiplier=self.anomaly_sigma,
                 use_percentile=False,
             ),
         }
@@ -243,8 +249,9 @@ class AdaptiveThresholds:
         """
         # Get historical data from stats repository
         data = self._get_historical_data(metric)
-        
-        if not data or len(data) < 10:
+
+        min_samples = self._minimum_samples.get(metric, 5)
+        if not data or len(data) < min_samples:
             # Not enough data, keep defaults
             return
         
@@ -276,38 +283,40 @@ class AdaptiveThresholds:
             return list(latencies) if latencies else []
         
         elif metric == "avg_latency":
-            # Calculate from total/success
+            # Build running average from latency history for richer baseline sample.
             with self.stats_repo.lock:
                 stats = self.stats_repo.get_stats()
-                success = stats.get("success", 0)
-                total_latency = stats.get("total_latency_sum", 0.0)
-            
-            if success > 0:
-                avg = total_latency / success
-                return [avg]  # Single value for now
-            return []
+                latencies = stats.get("latencies", [])
+
+            latency_values = [float(v) for v in latencies] if latencies else []
+            if not latency_values:
+                return []
+
+            running_averages: list[float] = []
+            total = 0.0
+            for i, latency in enumerate(latency_values, start=1):
+                total += latency
+                running_averages.append(total / i)
+            return running_averages
         
         elif metric == "packet_loss":
-            # Calculate from recent results using proper accessor
+            # Calculate rolling packet-loss percentages with expanding windows.
             recent_results = self.stats_repo.get_recent_results()
             with self.stats_repo.lock:
                 results = list(recent_results)
             
-            if not results:
+            if len(results) < 3:
                 return []
             
-            # Calculate rolling packet loss %
-            window_size = min(30, len(results))
-            if len(results) < window_size:
-                return []
-                
             loss_values = []
-            for i in range(len(results) - window_size + 1):
-                window = results[i:i + window_size]
+            max_window_size = min(30, len(results))
+            for end in range(3, len(results) + 1):
+                start = max(0, end - max_window_size)
+                window = results[start:end]
                 loss_pct = (window.count(False) / len(window)) * 100
                 loss_values.append(loss_pct)
             
-            return loss_values if loss_values else [0.0]
+            return loss_values
         
         elif metric == "jitter":
             with self.stats_repo.lock:
