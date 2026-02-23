@@ -88,7 +88,6 @@ _BAR_FULL = "━"
 _BAR_EMPTY = "╌"
 _DOT_OK = "●"
 _DOT_WARN = "▲"
-_DOT_ERR = "✖"
 _DOT_WAIT = "○"
 
 # Layout tier types
@@ -204,13 +203,22 @@ class MonitorUI:
         data = values[-width:]
         if len(data) < 2:
             return f"[{_TEXT_DIM}]{t('waiting')}[/{_TEXT_DIM}]"
-        mn, mx = min(data), max(data)
+        # removing zero values for more accurate scaling
+        valid_data = [v for v in data if v > 0]
+        if not valid_data:
+            return f"[{_TEXT_DIM}]{t('waiting')}[/{_TEXT_DIM}]"
+            
+        mn, mx = min(valid_data), max(valid_data)
         rng = mx - mn if mx != mn else 1.0
         chars = []
         for i, v in enumerate(data):
-            idx = int((v - mn) / rng * (len(_SPARK_CHARS) - 1))
+            if v == 0:
+                # for zero values, we use the lowest symbol
+                idx = 0
+            else:
+                idx = int((v - mn) / rng * (len(_SPARK_CHARS) - 1))
             idx = max(0, min(idx, len(_SPARK_CHARS) - 1))
-            rel = (v - mn) / rng
+            rel = (v - mn) / rng if v > 0 else 0
 
             if rel < 0.4:
                 color = _GREEN
@@ -253,14 +261,14 @@ class MonitorUI:
 
     def _get_connection_state(self, snap: StatsSnapshot) -> tuple[str, str, str]:
         if snap["threshold_states"]["connection_lost"]:
-            return t("status_disconnected"), _RED, _DOT_ERR
+            return t("status_disconnected"), _RED, _DOT_WARN
         recent = snap["recent_results"]
         if recent:
             loss30 = recent.count(False) / len(recent) * 100
             if loss30 > 5:
                 return t("status_degraded"), _YELLOW, _DOT_WARN
         if snap["last_status"] == t("status_timeout"):
-            return t("status_timeout_bar"), _RED, _DOT_ERR
+            return t("status_timeout_bar"), _RED, _DOT_WARN
         if snap["last_status"] == t("status_ok"):
             return t("status_connected"), _GREEN, _DOT_OK
         return t("status_waiting"), _TEXT_DIM, _DOT_WAIT
@@ -347,7 +355,7 @@ class MonitorUI:
             return None
         
         alert = snap["active_alerts"][0]
-        a_icon = {"warning": _DOT_WARN, "critical": _DOT_ERR, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
+        a_icon = {"warning": _DOT_WARN, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
         bg_col = {"warning": _YELLOW, "critical": _RED, "info": _TEXT_DIM, "success": _GREEN}.get(alert["type"], _TEXT_DIM)
         fg_col = _BG
 
@@ -392,7 +400,7 @@ class MonitorUI:
 
         if tier == "compact":
             parts = (
-                f"  [bold {color}]{icon} {label}[/bold {color}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
+                f"  [bold {color}]{label}[/bold {color}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
                 f"[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}]  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
                 f"[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
                 f"{warmup_part_compact}"
@@ -406,7 +414,7 @@ class MonitorUI:
         else:
             sep = f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  "
             parts = (
-                f"  [bold {color}]{icon} {label}[/bold {color}]"
+                f"  [bold {color}]{label}[/bold {color}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_ping}[/{_TEXT_DIM}] [bold {_WHITE}]{ping_txt}[/bold {_WHITE}] [{_TEXT_DIM}]{t('ms')}[/{_TEXT_DIM}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_loss}[/{_TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
                 f"{sep}[{_TEXT_DIM}]{lbl_up}[/{_TEXT_DIM}] [{_WHITE}]{uptime_txt}[/{_WHITE}]"
@@ -467,8 +475,18 @@ class MonitorUI:
         if h_tier in ("short", "standard", "full") and tier != "compact":
             spark_w = max(20, width - 6)
             items.append(Text(""))
-            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')} ›[/{_TEXT_DIM}]  {self._sparkline(list(latencies), width=spark_w)}"))
-            items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')} ›[/{_TEXT_DIM}]  {self._sparkline(list(jitter_hist) or [jit], width=spark_w)}"))
+            
+            # Latency sparkline
+            if latencies:
+                items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')} ›[/{_TEXT_DIM}]  {self._sparkline(list(latencies), width=spark_w)}"))
+            else:
+                items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('latency_chart')} ›[/{_TEXT_DIM}]  [{_TEXT_DIM}]{t('no_data')}[/{_TEXT_DIM}]"))
+                
+            # Jitter sparkline
+            if jitter_hist:
+                items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')} ›[/{_TEXT_DIM}]  {self._sparkline(list(jitter_hist), width=spark_w)}"))
+            else:
+                items.append(Text.from_markup(f"  [{_TEXT_DIM}]{t('jitter')} ›[/{_TEXT_DIM}]  [{_TEXT_DIM}]{t('no_data')}[/{_TEXT_DIM}]"))
 
         # ── Stats section ──
         items.append(self._section_header(t("stats"), inner_w))
@@ -747,7 +765,7 @@ class MonitorUI:
         alert_lines: list[str] = []
         if SHOW_VISUAL_ALERTS and snap["active_alerts"]:
             for alert in snap["active_alerts"]:
-                a_icon = {"warning": _DOT_WARN, "critical": _DOT_ERR, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
+                a_icon = {"warning": _DOT_WARN, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
                 a_color = {"warning": _YELLOW, "critical": _RED, "info": _WHITE, "success": _GREEN}.get(alert["type"], _WHITE)
                 alert_lines.append(f"  [{a_color}]{a_icon} {alert['message']}[/{a_color}]")
         else:

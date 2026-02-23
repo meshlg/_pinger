@@ -221,6 +221,8 @@ class StatsRepository:
                         self._stats["jitter"] = old_jitter + alpha * (diff - old_jitter)
                         self._stats["jitter_history"].append(self._stats["jitter"])
                     elif len(self._stats["latencies"]) == 1:
+                        # For first latency, jitter is 0.0
+                        self._stats["jitter"] = 0.0
                         self._stats["jitter_history"].append(self._stats["jitter"])
                 else:
                     self._stats["last_latency_ms"] = t("na")

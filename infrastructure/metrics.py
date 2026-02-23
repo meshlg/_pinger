@@ -53,15 +53,22 @@ try:
     HEALTH_BLOCKED_IPS_TOTAL = Counter("pinger_health_blocked_ips_total", "IPs blocked by rate limiter")
     HEALTH_RATE_LIMITED_TOTAL = Counter("pinger_health_rate_limited_total", "Requests rejected due to rate limiting")
     
+    # Version check metrics
+    VERSION_CHECK_TOTAL = Counter("pinger_version_check_total", "Total version checks", ["status"])
+    VERSION_CHECK_LATENCY_MS = Histogram("pinger_version_check_latency_ms", "Version check request latency in ms")
+    
 except ImportError:
     METRICS_AVAILABLE = False
     # Create dummy classes for when prometheus is not available
     class _DummyCounter:
+        def labels(self, *args, **kwargs): return self
         def inc(self, *args, **kwargs): pass
     class _DummyGauge:
+        def labels(self, *args, **kwargs): return self
         def set(self, *args, **kwargs): pass
         def inc(self, *args, **kwargs): pass
     class _DummyHistogram:
+        def labels(self, *args, **kwargs): return self
         def observe(self, *args, **kwargs): pass
     
     PING_TOTAL = _DummyCounter()
@@ -84,6 +91,8 @@ except ImportError:
     HEALTH_AUTH_FAILURES_TOTAL = _DummyCounter()
     HEALTH_BLOCKED_IPS_TOTAL = _DummyCounter()
     HEALTH_RATE_LIMITED_TOTAL = _DummyCounter()
+    VERSION_CHECK_TOTAL = _DummyCounter()
+    VERSION_CHECK_LATENCY_MS = _DummyHistogram()
     
     def start_http_server(*args, **kwargs):  # type: ignore
         pass

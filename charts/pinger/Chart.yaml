@@ -3,4 +3,4 @@ name: pinger
 description: Helm chart for Pinger app with metrics & health
 type: application
 version: 0.1.0
-appVersion: "2.4.8.2154"
+appVersion: "2.4.9.0830"

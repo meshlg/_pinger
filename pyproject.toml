@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "network-pinger"
-version = "2.4.8.2154"
+version = "2.4.9.0830"
 description = "Async network monitoring tool with real-time terminal UI, alerts, and connection quality analysis"
 authors = ["meshlg <meshlgfox@gmail.com>"]
 readme = "README.md"
@@ -52,6 +52,8 @@ pythonping = "^1.1.0"
 prometheus-client = "^0.16.0"
 dnspython = "^2.4.0"
 psutil = { version = "^5.9.0", optional = true }
+pydantic = "^2.12.5"
+pydantic-settings = "^2.13.1"
 
 [tool.poetry.scripts]
 pinger = "pinger:main"

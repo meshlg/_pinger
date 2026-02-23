@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.9.0830]
+### Changed
+- **Version Service Refactoring** — Completely refactored `services/version_service.py` for better maintainability and reliability:
+  - Introduced `VersionService` class with dependency injection for cache TTL, timeout, and retry settings.
+  - Added `VersionInfo` dataclass for structured version information with `current`, `latest`, and `update_available` fields.
+  - Implemented retry logic with exponential backoff (3 attempts, starting at 0.5s) for transient network failures.
+  - Added Prometheus metrics (`pinger_version_check_total`, `pinger_version_check_latency_ms`) for monitoring version check operations.
+  - Added proper `User-Agent` header and GitHub API versioning (`Accept: application/vnd.github.v3+json`).
+  - Improved HTTP error handling with distinction between retryable (5xx, network) and non-retryable (4xx) errors.
+  - Used `Final` type hints for constants and improved type annotations throughout.
+  - Maintained full backward compatibility with existing module-level functions (`get_latest_version()`, `check_update_available()`, `clear_cache()`).
+
+### Fixed
+- **Main Loop Crash on Disconnect** — Fixed a bug where `ui.py`'s `_get_connection_state` occasionally returned 2 elements instead of 3 when ping timed out or connection was lost, causing a "not enough values to unpack" error in the main loop.
+
 ## [2.4.8.2154]
 ### Added
 - **MTU Discovery Optimization** — Added fast-fail timeouts to the `ping` utility used for Path MTU discovery, reducing the time required from minutes to seconds. Additionally, initial MTU status now ignores the hysteresis delay, meaning it displays immediately on startup.
