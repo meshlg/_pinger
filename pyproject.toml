@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "network-pinger"
-version = "2.4.9.0830"
+version = "2.5.0.1825"
 description = "Async network monitoring tool with real-time terminal UI, alerts, and connection quality analysis"
 authors = ["meshlg <meshlgfox@gmail.com>"]
 readme = "README.md"

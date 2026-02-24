@@ -10,7 +10,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, MAX_TRACEROUTE_FILES, t
 from infrastructure import get_process_manager
 

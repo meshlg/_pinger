@@ -12,7 +12,8 @@ import time
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from config import (
     TARGET_IP,
@@ -72,6 +73,65 @@ class HopStatus:
             "country_code": self.country_code,
             "asn": self.asn,
         }
+
+
+# Type alias for route health status
+RouteHealth = Literal["healthy", "degraded", "critical", "unknown"]
+
+
+@dataclass(frozen=True)
+class RouteStats:
+    """Aggregated statistics for the entire route.
+    
+    Provides a summary of route health and performance metrics,
+    useful for dashboards, alerts, and logging.
+    
+    Attributes:
+        hop_count: Total number of discovered hops.
+        total_loss_pct: Average packet loss percentage across all hops.
+        avg_latency: Average latency across all responding hops (ms).
+        max_latency: Maximum latency observed on any hop (ms).
+        worst_hop: Hop number with the highest packet loss.
+        worst_hop_loss: Packet loss percentage on the worst hop.
+        route_health: Overall route health status.
+        problem_hops: List of hop numbers with significant issues.
+        responding_hops: Number of hops that respond to pings.
+        last_updated: Timestamp of the last statistics update.
+    
+    Example:
+        stats = hop_monitor.get_route_stats()
+        if stats.route_health == "critical":
+            logging.warning(f"Route degraded: {stats.problem_hops}")
+    """
+    hop_count: int
+    total_loss_pct: float
+    avg_latency: float
+    max_latency: float
+    worst_hop: int
+    worst_hop_loss: float
+    route_health: RouteHealth
+    problem_hops: Tuple[int, ...]
+    responding_hops: int
+    last_updated: datetime
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "hop_count": self.hop_count,
+            "total_loss_pct": round(self.total_loss_pct, 2),
+            "avg_latency": round(self.avg_latency, 2) if self.avg_latency else None,
+            "max_latency": round(self.max_latency, 2) if self.max_latency else None,
+            "worst_hop": self.worst_hop,
+            "worst_hop_loss": round(self.worst_hop_loss, 2),
+            "route_health": self.route_health,
+            "problem_hops": list(self.problem_hops),
+            "responding_hops": self.responding_hops,
+            "last_updated": self.last_updated.isoformat(),
+        }
+    
+    def __bool__(self) -> bool:
+        """Return True if route has any discovered hops."""
+        return self.hop_count > 0
 
 
 class HopMonitorService:
@@ -443,3 +503,95 @@ class HopMonitorService:
     def hop_count(self) -> int:
         with self._lock:
             return len(self._hops)
+    
+    def get_route_stats(self) -> RouteStats:
+        """Get aggregated statistics for the entire route.
+        
+        Calculates summary metrics across all discovered hops including
+        overall health status, average latency, packet loss, and identifies
+        problematic hops.
+        
+        Returns:
+            RouteStats with aggregated route metrics.
+        
+        Example:
+            stats = hop_monitor.get_route_stats()
+            print(f"Route: {stats.hop_count} hops, health: {stats.route_health}")
+            if stats.problem_hops:
+                print(f"Problem hops: {stats.problem_hops}")
+        """
+        with self._lock:
+            hops = list(self._hops)
+        
+        now = datetime.now(timezone.utc)
+        
+        # No hops discovered yet
+        if not hops:
+            return RouteStats(
+                hop_count=0,
+                total_loss_pct=0.0,
+                avg_latency=0.0,
+                max_latency=0.0,
+                worst_hop=0,
+                worst_hop_loss=0.0,
+                route_health="unknown",
+                problem_hops=(),
+                responding_hops=0,
+                last_updated=now,
+            )
+        
+        # Calculate aggregated metrics
+        total_loss = 0.0
+        total_latency = 0.0
+        max_latency = 0.0
+        responding_hops = 0
+        worst_hop = 0
+        worst_hop_loss = 0.0
+        problem_hops: list[int] = []
+        
+        for hop in hops:
+            loss_pct = hop.loss_pct
+            total_loss += loss_pct
+            
+            if hop.avg_latency > 0:
+                total_latency += hop.avg_latency
+                responding_hops += 1
+            
+            if hop.max_latency > max_latency:
+                max_latency = hop.max_latency
+            
+            # Track worst hop by loss percentage
+            if loss_pct > worst_hop_loss:
+                worst_hop_loss = loss_pct
+                worst_hop = hop.hop_number
+            
+            # Mark as problem hop if loss > 5%
+            if loss_pct > 5.0:
+                problem_hops.append(hop.hop_number)
+        
+        # Calculate averages
+        avg_loss = total_loss / len(hops) if hops else 0.0
+        avg_latency = total_latency / responding_hops if responding_hops else 0.0
+        
+        # Determine route health
+        if responding_hops == 0:
+            health: RouteHealth = "unknown"
+        elif avg_loss < 1.0 and not problem_hops:
+            health = "healthy"
+        elif avg_loss < 5.0 and len(problem_hops) <= 1:
+            health = "degraded"
+        else:
+            health = "critical"
+        
+        return RouteStats(
+            hop_count=len(hops),
+            total_loss_pct=avg_loss,
+            avg_latency=avg_latency,
+            max_latency=max_latency,
+            worst_hop=worst_hop,
+            worst_hop_loss=worst_hop_loss,
+            route_health=health,
+            problem_hops=tuple(problem_hops),
+            responding_hops=responding_hops,
+            last_updated=now,
+        )

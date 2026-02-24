@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0.1825]
+
+- **Traceroute Service Enhancement** — Enhanced `services/traceroute_service.py` with new features:
+  - Added structured result types: `HopInfo` and `TracerouteResult` dataclasses with parsed hop data, latency stats, timeout tracking, and metadata.
+  - Integrated comprehensive Prometheus metrics: `pinger_traceroute_runs_total` (with status label), `pinger_traceroute_latency_ms`, `pinger_traceroute_hops_count`, `pinger_traceroute_timeouts_total`.
+  - Added target validation (`is_valid_target()`) to prevent argument injection and invalid inputs.
+  - Added IPv6 support detection (`is_ipv6_target()`, `is_ipv6_available()`) with `traceroute6` command support.
+  - Added `parse_hops()` method for extracting structured hop information from raw traceroute output.
+  - Added `get_capabilities()` method for querying available traceroute features.
+  - Refactored command building into `_build_command()` method to eliminate code duplication between sync and async versions.
+  - Improved error handling with proper metric recording for different failure modes (timeout, error, cancelled).
+  - Maintained full backward compatibility with existing API (`run_traceroute()`, `run_traceroute_async()`, `trigger_traceroute()`).
+
+- **Hop Monitor Service Enhancement** — Added route statistics API to `services/hop_monitor_service.py`:
+  - Added `RouteStats` frozen dataclass with aggregated route metrics: hop count, average/max latency, packet loss, route health status, and problem hop identification.
+  - Added `get_route_stats()` method for quick route health assessment without iterating through all hops.
+  - Route health classification: "healthy" (<1% loss, no problems), "degraded" (<5% loss, ≤1 problem hop), "critical" (otherwise), or "unknown" (no hops).
+  - Useful for dashboards, alerts, and logging with `to_dict()` serialization support.
+
 ## [2.4.9.0830]
 ### Changed
 - **Version Service Refactoring** — Completely refactored `services/version_service.py` for better maintainability and reliability:
