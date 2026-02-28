@@ -144,6 +144,7 @@ LANG: Dict[str, Dict[str, str]] = {
         "alerts_off": "ВЫКЛ",
         "no_alerts": "Нет уведомлений.",
         "more_hops": "еще {count}...",
+        "more_alerts": "ещё",
         "avg_ms": "ср",
         "ip_label": "IP",
         # ── Footer ──
@@ -191,6 +192,18 @@ LANG: Dict[str, Dict[str, str]] = {
         "dns": "DNS",
         "network": "Сеть",
         "ok_label": "OK",
+        # ── DNS Health ──
+        "dns_score": "Score",
+        "dns_reliability": "Надёжность",
+        "dns_reliability_short": "Надёжность",
+        "dns_jitter": "Джиттер",
+        "dns_jitter_short": "Джиттер",
+        "dns_status_excellent": "Отлично",
+        "dns_status_good": "Хорошо",
+        "dns_status_fair": "Удовл",
+        "dns_status_poor": "Плохо",
+        "dns_status_critical": "Критично",
+        "avg_short": "Средний",
     },
     "en": {
         # ── General ──
@@ -324,6 +337,7 @@ LANG: Dict[str, Dict[str, str]] = {
         "alerts_off": "OFF",
         "no_alerts": "No notifications.",
         "more_hops": "{count} more...",
+        "more_alerts": "more",
         "avg_ms": "avg",
         "ip_label": "IP",
         # ── Footer ──
@@ -370,6 +384,18 @@ LANG: Dict[str, Dict[str, str]] = {
         "traceroute_starting": "Traceroute: starting...",
         "traceroute_saved": "Traceroute saved: {file}",
         "traceroute_save_failed": "Failed to save traceroute",
+        # ── DNS Health ──
+        "dns_score": "Score",
+        "dns_reliability": "Reliability",
+        "dns_reliability_short": "Reliability",
+        "dns_jitter": "Jitter",
+        "dns_jitter_short": "Jitter",
+        "dns_status_excellent": "Excellent",
+        "dns_status_good": "Good",
+        "dns_status_fair": "Fair",
+        "dns_status_poor": "Poor",
+        "dns_status_critical": "Critical",
+        "avg_short": "Average",
     },
 }
 

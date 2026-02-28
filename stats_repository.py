@@ -54,6 +54,7 @@ class StatsSnapshot(TypedDict):
     dns_status: str
     dns_results: dict[str, Any] | None  # Per-record-type DNS results
     dns_benchmark: dict[str, Any]
+    dns_health: dict[str, Any]  # Aggregated DNS health metrics
     last_traceroute_time: datetime | None
     traceroute_running: bool
     jitter: float
@@ -148,6 +149,7 @@ class StatsRepository:
                 "dns_status": self._stats["dns_status"],
                 "dns_results": dict(self._stats.get("dns_results", {})),
                 "dns_benchmark": dict(self._stats.get("dns_benchmark", {})),
+                "dns_health": dict(self._stats.get("dns_health", {})),
                 "last_traceroute_time": self._stats["last_traceroute_time"],
                 "traceroute_running": self._stats["traceroute_running"],
                 "jitter": self._stats["jitter"],
@@ -335,6 +337,23 @@ class StatsRepository:
                 }
                 for r in benchmark_results
             }
+
+    def update_dns_health(self, dns_health: dict[str, Any]) -> None:
+        """Update aggregated DNS health metrics.
+        
+        Args:
+            dns_health: Dict containing:
+                - score: int (0-100)
+                - reliability: float (0-100)
+                - avg_latency: float | None
+                - jitter: float | None
+                - records_ok: int
+                - records_total: int
+                - cache_efficiency: float | None (0-100)
+                - status: str ("excellent", "good", "fair", "poor", "critical")
+        """
+        with self._lock:
+            self._stats["dns_health"] = dict(dns_health)
 
     def update_mtu(self, local_mtu: int | None, path_mtu: int | None, status: str) -> None:
         """Update MTU info."""

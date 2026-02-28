@@ -14,7 +14,7 @@ def _clear_cache():
 def test_parse_version():
     """Test version string parsing."""
     assert version_service._parse_version("1.2.3") == (1, 2, 3)
-    assert version_service._parse_version("v2.5.0.1825") == (2, 5, 0, 1825)
+    assert version_service._parse_version("v2.5.1.0030") == (2, 5, 1, 30)
     assert version_service._parse_version("2.5") == (2, 5)
     assert version_service._parse_version("1.0-alpha") == (1, 0)
 

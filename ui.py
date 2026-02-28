@@ -351,17 +351,82 @@ class MonitorUI:
         )
 
     def _render_toast(self, snap: StatsSnapshot, width: int) -> Panel | None:
+        """Render toast notification panel with improved visual design."""
         if not SHOW_VISUAL_ALERTS or not snap.get("active_alerts"):
             return None
         
-        alert = snap["active_alerts"][0]
-        a_icon = {"warning": _DOT_WARN, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
-        bg_col = {"warning": _YELLOW, "critical": _RED, "info": _TEXT_DIM, "success": _GREEN}.get(alert["type"], _TEXT_DIM)
-        fg_col = _BG
-
-        txt = f"[bold {fg_col}]{a_icon} {alert['message']}[/bold {fg_col}]"
+        alerts = snap["active_alerts"]
+        
+        # Map alert types to visual styles
+        type_styles = {
+            "critical": {
+                "icon": "⚠",
+                "bg": _RED,
+                "fg": _WHITE,
+                "prefix": "║ CRITICAL ║",
+            },
+            "warning": {
+                "icon": "⚡",
+                "bg": _YELLOW,
+                "fg": _BG,
+                "prefix": "│",
+            },
+            "info": {
+                "icon": "●",
+                "bg": _ACCENT,
+                "fg": _BG,
+                "prefix": "│",
+            },
+            "success": {
+                "icon": "✓",
+                "bg": _GREEN,
+                "fg": _BG,
+                "prefix": "│",
+            },
+        }
+        
+        # Get primary alert style
+        primary = alerts[0]
+        style = type_styles.get(primary["type"], type_styles["info"])
+        
+        # Build toast content
+        parts: list[str] = []
+        
+        # Primary alert with bold styling
+        icon = style["icon"]
+        bg_col = style["bg"]
+        fg_col = style["fg"]
+        
+        # Truncate message if too long
+        max_msg_len = width - 8
+        msg = self._truncate(primary["message"], max_msg_len)
+        
+        # Main toast line with visual emphasis
+        if primary["type"] == "critical":
+            # Critical alerts get extra visual weight
+            txt = f"[bold {fg_col}]  {icon} {msg}  [/bold {fg_col}]"
+        else:
+            txt = f"[bold {fg_col}]{icon} {msg}[/bold {fg_col}]"
+        
+        parts.append(txt)
+        
+        # Show count if multiple alerts
+        if len(alerts) > 1:
+            more_count = len(alerts) - 1
+            more_txt = f"  [{fg_col}]+{more_count} {t('more_alerts')}[/{fg_col}]"
+            parts.append(more_txt)
+        
+        content = "\n".join(parts)
+        
+        # Use themed border for visual distinction
+        border_style = bg_col
+        box_style = box.HEAVY if primary["type"] == "critical" else box.ROUNDED
+        
         return Panel(
-            txt, border_style=bg_col, box=box.SIMPLE, width=width,
+            content,
+            border_style=border_style,
+            box=box_style,
+            width=width,
             style=f"on {bg_col}",
             padding=(0, 1),
         )
@@ -661,29 +726,53 @@ class MonitorUI:
 
         # ── DNS ──
         items.append(self._section_header(t("dns"), inner_w))
+        
+        # DNS Health (Score, Reliability, Jitter)
+        dns_health = snap.get("dns_health", {})
         dns_results = snap.get("dns_results", {})
-        if dns_results:
-            type_parts = []
-            total_time = 0
-            time_count = 0
-            for rt, res in sorted(dns_results.items()):
-                dns_st = res.get("status", t("failed"))
-                ms_v = res.get("response_time_ms")
-                if ms_v:
-                    total_time += ms_v
-                    time_count += 1
-                if dns_st == t("ok"):
-                    type_parts.append(f"[{_GREEN}]{rt}✓[/{_GREEN}]")
-                elif dns_st == t("slow"):
-                    type_parts.append(f"[{_YELLOW}]{rt}~[/{_YELLOW}]")
-                else:
-                    type_parts.append(f"[{_RED}]{rt}✗[/{_RED}]")
-            avg_dns = total_time / time_count if time_count > 0 else 0
-            items.append(Text.from_markup(f"  {' '.join(type_parts)}  [{_TEXT_DIM}]{avg_dns:.0f}ms[/{_TEXT_DIM}]"))
-        elif snap["dns_resolve_time"] is None:
+        dns_benchmark = snap.get("dns_benchmark", {})
+        
+        # Score color based on status
+        if dns_health:
+            status = dns_health.get("status", "critical")
+            if status == "excellent":
+                score_color = _GREEN
+            elif status == "good":
+                score_color = _GREEN
+            elif status == "fair":
+                score_color = _YELLOW
+            elif status == "poor":
+                score_color = _RED
+            else:
+                score_color = _RED
+        else:
+            score_color = _TEXT_DIM
+        
+        # Line 1: Score + Reliability + Jitter (compact header)
+        if dns_health:
+            score = dns_health.get("score", 0)
+            reliability = dns_health.get("reliability", 0)
+            jitter = dns_health.get("jitter")
+            
+            # Mini score bar (5 chars)
+            bar_filled = int(score / 100 * 5)
+            bar_empty = 5 - bar_filled
+            score_bar = f"[{score_color}]{_BAR_FULL * bar_filled}[/{score_color}][{_ACCENT_DIM}]{_BAR_EMPTY * bar_empty}[/{_ACCENT_DIM}]"
+            
+            # Compact stats line: Score:85 ━━━━━╌  Rel:98%  Jit:12ms
+            score_txt = f"[bold {score_color}]{score}[/bold {score_color}]"
+            rel_txt = f"[{_WHITE}]{reliability:.0f}%[/{_WHITE}]"
+            jitter_txt = f"[{_WHITE}]{jitter:.1f}[/{_WHITE}]" if jitter else f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+            
+            items.append(Text.from_markup(
+                f"  [{_TEXT_DIM}]{t('dns_score')}:[/{_TEXT_DIM}]{score_txt} {score_bar}  "
+                f"[{_TEXT_DIM}]{t('dns_reliability_short')}:[/{_TEXT_DIM}]{rel_txt}  "
+                f"[{_TEXT_DIM}]{t('dns_jitter_short')}:[/{_TEXT_DIM}]{jitter_txt}{t('ms')}"
+            ))
+        elif snap["dns_resolve_time"] is None and not dns_health:
             dns_fallback = f"  [{_RED}]{t('error')}[/{_RED}]" if SHOW_VISUAL_ALERTS else f"  [{_TEXT_DIM}]—[/{_TEXT_DIM}]"
             items.append(Text.from_markup(dns_fallback))
-        else:
+        elif not dns_health:
             ms_dns = snap["dns_resolve_time"]
             if snap["dns_status"] == t("ok"):
                 items.append(Text.from_markup(f"  [{_GREEN}]{t('ok_label')}[/{_GREEN}] [{_TEXT_DIM}]({ms_dns:.0f}{t('ms')})[/{_TEXT_DIM}]"))
@@ -691,13 +780,80 @@ class MonitorUI:
                 items.append(Text.from_markup(f"  [{_YELLOW}]{t('slow')}[/{_YELLOW}] [{_TEXT_DIM}]({ms_dns:.0f}{t('ms')})[/{_TEXT_DIM}]"))
             else:
                 items.append(Text.from_markup(f"  [{_RED}]{t('error')}[/{_RED}]"))
-
-        # DNS Benchmark
-        dns_benchmark = snap.get("dns_benchmark", {})
-        if dns_benchmark and h_tier not in ("minimal", "short"):
+        
+        # Line 2: Detailed DNS table by record type (in standard/full height)
+        if dns_results and h_tier not in ("minimal", "short"):
+            # Create a compact table for DNS record types
+            dns_tbl = Table(
+                show_header=True, 
+                header_style=f"bold {_TEXT_DIM}",
+                box=None, 
+                padding=(0, 1), 
+                width=inner_w,
+            )
+            dns_tbl.add_column(t("hop_col_num"), width=5, justify="left", no_wrap=True)  # Тип
+            dns_tbl.add_column(t("status_ok"), width=6, justify="center", no_wrap=True)  # Статус
+            dns_tbl.add_column(t("avg_short"), width=6, justify="right", no_wrap=True)   # Время
+            dns_tbl.add_column(t("ttl"), width=5, justify="right", no_wrap=True)         # TTL
+            dns_tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True, overflow="ellipsis")  # Значение
+            
+            for rt in ["A", "AAAA", "NS", "MX", "CNAME", "TXT"]:
+                res = dns_results.get(rt)
+                if not res:
+                    continue
+                    
+                success = res.get("success", False)
+                ms_v = res.get("response_time_ms")
+                ttl_v = res.get("ttl")
+                record_count = res.get("record_count", 0)
+                dns_st = res.get("status", t("failed"))
+                
+                # Status icon
+                if success:
+                    if dns_st == t("slow"):
+                        st_txt = f"[{_YELLOW}] ~ [/{_YELLOW}]"
+                    else:
+                        st_txt = f"[{_GREEN}] ✓ [/{_GREEN}]"
+                else:
+                    st_txt = f"[{_RED}] ✗ [/{_RED}]"
+                
+                # Response time
+                if ms_v is not None:
+                    ms_color = _GREEN if ms_v < 50 else (_YELLOW if ms_v < 150 else _RED)
+                    ms_txt = f"[{ms_color}]{ms_v:.0f}[/{ms_color}]"
+                else:
+                    ms_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+                
+                # TTL
+                if ttl_v is not None:
+                    ttl_txt = f"[{_TEXT_DIM}]{ttl_v}[/{_TEXT_DIM}]"
+                else:
+                    ttl_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+                
+                # Value preview (count or error)
+                if success and record_count > 0:
+                    val_txt = f"[{_TEXT_DIM}]{record_count} {t('checks_unit')}[/{_TEXT_DIM}]"
+                elif not success:
+                    err = res.get("error", "")
+                    val_txt = f"[{_RED}]{self._truncate(err or t('failed'), 20)}[/{_RED}]"
+                else:
+                    val_txt = f"[{_TEXT_DIM}]—[/{_TEXT_DIM}]"
+                
+                dns_tbl.add_row(
+                    f"[{_ACCENT}]{rt}[/{_ACCENT}]",
+                    st_txt,
+                    ms_txt,
+                    ttl_txt,
+                    val_txt,
+                )
+            
+            items.append(Text(""))
+            items.append(dns_tbl)
+        
+        # Line 3: Benchmark (C:cached U:uncached D:dotcom) - compact format
+        if dns_benchmark and h_tier not in ("minimal", ):
             bench_parts = []
             all_avg: list[float] = []
-            bench_queries = 0
             for tt in ["cached", "uncached", "dotcom"]:
                 r = dns_benchmark.get(tt, {})
                 lbl = tt[0].upper()
@@ -709,12 +865,14 @@ class MonitorUI:
                     st = r.get("status", "failed")
                     c = _GREEN if st == t("ok") else (_YELLOW if st == t("slow") else _RED)
                     bench_parts.append(f"[{c}]{lbl}:{v_str}[/{c}]")
-                bench_queries = max(bench_queries, r.get("queries", 0))
                 if r.get("avg_ms") is not None:
                     all_avg.append(r["avg_ms"])
-            bench_line = "  " + "  ".join(bench_parts)
-            if bench_queries > 1 and all_avg:
-                bench_line += f"  [{_TEXT_DIM}]│ {t('avg_ms')}:{sum(all_avg)/len(all_avg):.0f}{t('ms')}[/{_TEXT_DIM}]"
+            
+            # Compact: C:18  U:114  D:18  │ ср:55мс
+            items.append(Text(""))  # Add empty line before benchmark
+            bench_line = f"  {' '.join(bench_parts)}"
+            if all_avg:
+                bench_line += f"  [{_ACCENT_DIM}]│[/{_ACCENT_DIM}]  [{_TEXT_DIM}]{t('avg_short')}:{sum(all_avg)/len(all_avg):.0f}{t('ms')}[/{_TEXT_DIM}]"
             items.append(Text.from_markup(bench_line))
 
         # ── Network (TTL, MTU, Traceroute) ──
@@ -759,24 +917,6 @@ class MonitorUI:
         net_tbl.add_row(f"{t('ttl')}:", ttl_txt, f"{t('mtu')}:", mtu_val)
         net_tbl.add_row(f"{t('mtu_status_label')}:", mtu_s, f"{t('traceroute')}:", tr_txt)
         items.append(net_tbl)
-
-        # ── Alerts ──
-        items.append(self._section_header(t("notifications"), inner_w))
-        alert_lines: list[str] = []
-        if SHOW_VISUAL_ALERTS and snap["active_alerts"]:
-            for alert in snap["active_alerts"]:
-                a_icon = {"warning": _DOT_WARN, "info": _DOT_OK, "success": "✔"}.get(alert["type"], _DOT_OK)
-                a_color = {"warning": _YELLOW, "critical": _RED, "info": _WHITE, "success": _GREEN}.get(alert["type"], _WHITE)
-                alert_lines.append(f"  [{a_color}]{a_icon} {alert['message']}[/{a_color}]")
-        else:
-            alert_lines.append(f"  [{_TEXT_DIM}]{t('no_alerts')}[/{_TEXT_DIM}]")
-
-        max_alerts = 2 if h_tier in ("minimal", "short") else ALERT_PANEL_LINES
-        while len(alert_lines) < max_alerts:
-            alert_lines.append(" ")
-        alert_lines = alert_lines[:max_alerts]
-        for line in alert_lines:
-            items.append(Text.from_markup(line))
 
         return Panel(
             Group(*items),

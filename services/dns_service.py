@@ -16,6 +16,11 @@ import asyncio
 
 from config import DNS_SLOW_THRESHOLD, DNS_TEST_DOMAIN, DNS_BENCHMARK_HISTORY_SIZE, t
 
+# DNS Score thresholds
+DNS_SCORE_LATENCY_GOOD = 50.0  # ms - excellent latency
+DNS_SCORE_LATENCY_OK = 100.0   # ms - acceptable latency
+DNS_SCORE_LATENCY_BAD = 200.0  # ms - poor latency
+
 
 @dataclass
 class DNSQueryResult:
@@ -441,6 +446,123 @@ class DNSService:
             status=status,
             error=error_msg,
         )
+
+    def calculate_dns_health(
+        self,
+        dns_results: list[dict],
+        benchmark_results: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Calculate comprehensive DNS health metrics.
+        
+        Args:
+            dns_results: List of DNS query results per record type
+            benchmark_results: Optional list of benchmark results
+            
+        Returns:
+            Dict with:
+                - score: int (0-100)
+                - reliability: float (0-100)
+                - avg_latency: float | None
+                - jitter: float | None
+                - records_ok: int
+                - records_total: int
+                - cache_efficiency: float | None (0-100)
+                - status: str ("excellent", "good", "fair", "poor", "critical")
+        """
+        # Calculate record success rate
+        records_ok = sum(1 for r in dns_results if r.get("success", False))
+        records_total = len(dns_results)
+        record_success_rate = (records_ok / records_total * 100) if records_total > 0 else 0
+        
+        # Calculate average latency from successful queries
+        successful_times = [
+            r.get("response_time_ms") 
+            for r in dns_results 
+            if r.get("success") and r.get("response_time_ms") is not None
+        ]
+        avg_latency = statistics.mean(successful_times) if successful_times else None
+        
+        # Calculate reliability from benchmark history
+        reliability = 100.0
+        cache_efficiency = None
+        
+        if benchmark_results:
+            # Get reliability from cached benchmark (most representative)
+            for br in benchmark_results:
+                if br.get("test_type") == "cached":
+                    reliability = br.get("reliability", 100.0)
+                    break
+            
+            # Calculate cache efficiency: how much faster cached is vs uncached
+            cached_avg = None
+            uncached_avg = None
+            for br in benchmark_results:
+                if br.get("test_type") == "cached" and br.get("avg_ms"):
+                    cached_avg = br["avg_ms"]
+                elif br.get("test_type") == "uncached" and br.get("avg_ms"):
+                    uncached_avg = br["avg_ms"]
+            
+            if cached_avg and uncached_avg and uncached_avg > 0:
+                cache_efficiency = max(0, (uncached_avg - cached_avg) / uncached_avg * 100)
+        
+        # Calculate jitter from benchmark std_dev
+        jitter = None
+        if benchmark_results:
+            std_devs = [br.get("std_dev") for br in benchmark_results if br.get("std_dev") is not None]
+            if std_devs:
+                jitter = statistics.mean(std_devs)
+        
+        # Calculate overall DNS score (0-100)
+        score = 0.0
+        
+        # Component 1: Record success rate (40% weight)
+        score += record_success_rate * 0.4
+        
+        # Component 2: Reliability (30% weight)
+        score += reliability * 0.3
+        
+        # Component 3: Latency score (30% weight)
+        if avg_latency is not None:
+            if avg_latency <= DNS_SCORE_LATENCY_GOOD:
+                latency_score = 100
+            elif avg_latency <= DNS_SCORE_LATENCY_OK:
+                # Linear interpolation between good and ok
+                latency_score = 100 - (avg_latency - DNS_SCORE_LATENCY_GOOD) / (DNS_SCORE_LATENCY_OK - DNS_SCORE_LATENCY_GOOD) * 30
+            elif avg_latency <= DNS_SCORE_LATENCY_BAD:
+                # Linear interpolation between ok and bad
+                latency_score = 70 - (avg_latency - DNS_SCORE_LATENCY_OK) / (DNS_SCORE_LATENCY_BAD - DNS_SCORE_LATENCY_OK) * 50
+            else:
+                latency_score = max(0, 20 - (avg_latency - DNS_SCORE_LATENCY_BAD) / 100 * 20)
+            score += latency_score * 0.3
+        else:
+            # No latency data - give partial score
+            score += 15  # 50% of 30%
+        
+        score = max(0, min(100, score))
+        
+        # Determine status
+        if score >= 90:
+            status = "excellent"
+        elif score >= 75:
+            status = "good"
+        elif score >= 50:
+            status = "fair"
+        elif score >= 25:
+            status = "poor"
+        else:
+            status = "critical"
+        
+        return {
+            "score": round(score),
+            "reliability": round(reliability, 1),
+            "avg_latency": round(avg_latency, 1) if avg_latency else None,
+            "jitter": round(jitter, 1) if jitter else None,
+            "records_ok": records_ok,
+            "records_total": records_total,
+            "cache_efficiency": round(cache_efficiency, 1) if cache_efficiency else None,
+            "status": status,
+        }
 
     # Legacy method for backward compatibility
     def check_dns_resolve_simple(

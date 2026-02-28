@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1.0030]
+
+### Added
+- **DNS Health Dashboard** — Comprehensive DNS monitoring with health scoring:
+  - **DNS Score (0-100)** — Weighted score based on record success rate (40%), reliability (30%), and latency (30%)
+  - **DNS Jitter** — Variability of DNS response times (standard deviation)
+  - **Status classification** — excellent (≥90), good (≥75), fair (≥50), poor (≥25), critical (<25)
+  - **Detailed record table** — Per-record-type monitoring (A, AAAA, NS, MX, CNAME, TXT) with status, response time, TTL, and record count
+  - **Compact benchmark line** — C:cached U:uncached D:dotcom format with average response time
+
+### Changed
+- **DNS UI Section Redesign** — Restructured DNS panel with improved visual hierarchy:
+  - Score bar indicator (5-char mini progress bar)
+  - Reliability and jitter inline display
+  - Record type table with status icons (✓/✗/~)
+  - TTL values shown for each record type
+- **Toast Notifications Enhancement** — Improved visual design with:
+  - Alert type-specific icons (⚠/⚡/●/✓)
+  - Color-coded backgrounds (critical=red, warning=yellow, info=accent, success=green)
+  - Heavy border for critical alerts
+  - Localized "more alerts" counter
+
+### Removed
+- **Duplicate Notifications Section** — Removed redundant "NOTIFICATIONS" subsection from Analysis panel; toast notifications remain the single source for alerts
+
+### Localization
+- Added translations: `dns_score`, `dns_reliability_short`, `dns_jitter_short`, `more_alerts`
+
 ## [2.5.0.1825]
 
 - **Traceroute Service Enhancement** — Enhanced `services/traceroute_service.py` with new features:

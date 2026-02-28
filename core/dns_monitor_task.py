@@ -83,6 +83,13 @@ class DNSMonitorTask(BackgroundTask):
 
                 self.stats_repo.update_dns_benchmark(benchmark_dict)
 
+            # Calculate and store DNS health metrics
+            dns_health = self.dns_service.calculate_dns_health(
+                results_dict,
+                benchmark_dict if ENABLE_DNS_BENCHMARK else None,
+            )
+            self.stats_repo.update_dns_health(dns_health)
+
         except Exception as exc:
             logging.error(f"DNS monitor failed: {exc}")
             # Set status to failed on exception
