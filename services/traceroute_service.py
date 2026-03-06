@@ -49,6 +49,7 @@ class TracerouteService:
         self._executor = executor
         self._traceroute_available: bool | None = None
         self.process_manager = get_process_manager()
+        self._trigger_lock = threading.Lock()
 
     def _check_traceroute_available(self) -> bool:
         """Check if traceroute/tracert command is available."""
@@ -153,8 +154,6 @@ class TracerouteService:
         """Async worker to run traceroute and save to file."""
         loop = asyncio.get_running_loop()
         
-        self._stats_repo.set_traceroute_running(True)
-        
         self._stats_repo.add_alert(f"[i] {t('traceroute_starting')}", "info")
         logging.info(f"Starting traceroute to {target}")
         
@@ -207,16 +206,23 @@ class TracerouteService:
 
     def trigger_traceroute(self, target: str) -> bool:
         """Trigger traceroute if not running and cooldown passed."""
-        if self._stats_repo.is_traceroute_running():
-            return False
-        
-        last = self._stats_repo.get_last_traceroute_time()
-        last = _ensure_utc(last)
-        if last and (datetime.now(timezone.utc) - last).total_seconds() < TRACEROUTE_COOLDOWN:
-            return False
-        
-        asyncio.create_task(self.traceroute_worker(target))
-        return True
+        with self._trigger_lock:
+            if self._stats_repo.is_traceroute_running():
+                return False
+
+            last = self._stats_repo.get_last_traceroute_time()
+            last = _ensure_utc(last)
+            if last and (datetime.now(timezone.utc) - last).total_seconds() < TRACEROUTE_COOLDOWN:
+                return False
+
+            # Reserve single-flight slot atomically before scheduling task.
+            self._stats_repo.set_traceroute_running(True)
+            try:
+                asyncio.create_task(self.traceroute_worker(target))
+            except Exception:
+                self._stats_repo.set_traceroute_running(False)
+                raise
+            return True
 
     def is_available(self) -> bool:
         """Check if traceroute is available."""

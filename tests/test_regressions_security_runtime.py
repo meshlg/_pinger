@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import io
+import os
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from rich.console import Console
@@ -14,12 +17,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.adaptive_thresholds import AdaptiveThresholds
 from config import t
-from infrastructure.health import HealthHandler, RateLimiter
+from infrastructure.health import HealthHandler, HealthServer, RateLimiter
+from infrastructure.metrics import MetricsServer
 from monitor import Monitor
 from problem_analyzer import ProblemAnalyzer
 from services.ip_service import IPService
+from services.traceroute_service import TracerouteService
 from stats_repository import StatsRepository
 from ui import MonitorUI
+import single_instance_notifications as sin
 
 
 def test_rate_limiter_check_request_does_not_deadlock() -> None:
@@ -185,3 +191,64 @@ def test_monitor_refresh_problem_analysis_updates_snapshot_immediately() -> None
     snap = stats_repo.get_snapshot()
     assert snap["current_problem_type"] == t("problem_isp")
     assert snap["problem_prediction"] == t("prediction_risk")
+
+
+def test_health_server_stop_releases_server_and_thread() -> None:
+    server = HealthServer(addr="127.0.0.1", port=0, stats_repo=StatsRepository(), rate_limit_enabled=False)
+    server.start()
+
+    assert server.server is not None
+    assert server.thread is not None
+
+    server.stop()
+
+    assert server.server is None
+    assert server.thread is None
+
+
+def test_metrics_server_stop_releases_server_and_thread() -> None:
+    server = MetricsServer(addr="127.0.0.1", port=0)
+    server.start()
+
+    assert server.server is not None
+    assert server.thread is not None
+
+    server.stop()
+
+    assert server.server is None
+    assert server.thread is None
+
+
+def test_traceroute_trigger_is_single_flight(monkeypatch) -> None:
+    stats_repo = StatsRepository()
+    service = TracerouteService(stats_repo=stats_repo, executor=ThreadPoolExecutor(max_workers=1))
+
+    def _fake_create_task(coro):
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(asyncio, "create_task", _fake_create_task)
+
+    first = service.trigger_traceroute("1.1.1.1")
+    second = service.trigger_traceroute("1.1.1.1")
+
+    assert first is True
+    assert second is False
+
+
+def test_instance_notification_ignores_non_regular_path(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sin.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    notif_dir = sin._notification_dir()
+    notif_path = notif_dir / "notification.txt"
+    notif_path.mkdir()
+
+    assert sin.check_instance_notification() is None
+
+
+def test_instance_notification_roundtrip(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(sin.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    assert sin._notify_running_instance("hello") is True
+    assert sin.check_instance_notification() == "hello"
+    assert sin.check_instance_notification() is None

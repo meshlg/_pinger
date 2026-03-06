@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2.0506]
+
+### Security
+- **Hardened inter-process notification file handling** in [`single_instance_notifications.py`](single_instance_notifications.py):
+  - Replaced direct write to predictable temp file with atomic temp-file write + [`os.replace`](single_instance_notifications.py) semantics.
+  - Introduced per-user notification directory under temp with restricted permissions.
+  - Added defensive checks to ignore unsafe notification paths (e.g. symlink/non-regular path).
+
+### Fixed
+- **Graceful shutdown reliability for HTTP endpoints**:
+  - Updated health and metrics servers to run with `serve_forever()` and stop via `shutdown()` + `server_close()` + thread join.
+  - Prevents occasional shutdown hangs and improves container/process termination behavior.
+  - Affected modules: [`infrastructure/health.py`](infrastructure/health.py), [`infrastructure/metrics.py`](infrastructure/metrics.py).
+
+- **Race condition in traceroute trigger (single-flight)**:
+  - Made trigger path atomic with lock-protected reservation before task scheduling.
+  - Prevents duplicate concurrent traceroutes under near-simultaneous trigger calls.
+  - Affected module: [`services/traceroute_service.py`](services/traceroute_service.py).
+
+### Tests
+- Added regression coverage in [`tests/test_regressions_security_runtime.py`](tests/test_regressions_security_runtime.py):
+  - Health/Metrics server stop lifecycle cleanup.
+  - Single-flight traceroute trigger behavior.
+  - Secure notification path handling and roundtrip checks.
+
 ## [2.5.1.0030]
 
 ### Added

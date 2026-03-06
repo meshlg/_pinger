@@ -247,17 +247,36 @@ class MetricsServer:
     
     def _serve(self) -> None:
         """Server loop."""
-        while self._running and self.server:
-            try:
-                self.server.handle_request()
-            except Exception as exc:
-                logging.debug(f"Metrics server request error: {exc}")
+        if not self.server:
+            return
+        try:
+            self.server.serve_forever(poll_interval=0.5)
+        except Exception as exc:
+            logging.debug(f"Metrics server request error: {exc}")
     
     def stop(self) -> None:
         """Stop metrics server."""
         self._running = False
-        if self.server:
-            self.server.shutdown()
+
+        server = self.server
+        thread = self.thread
+
+        if server:
+            try:
+                server.shutdown()
+            except Exception as exc:
+                logging.debug(f"Metrics server shutdown error: {exc}")
+            finally:
+                try:
+                    server.server_close()
+                except Exception as exc:
+                    logging.debug(f"Metrics server close error: {exc}")
+
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+
+        self.server = None
+        self.thread = None
 
 
 def start_metrics_server(addr: str = "127.0.0.1", port: int = 8000) -> MetricsServer | None:
