@@ -20,16 +20,19 @@ try:  # pragma: no cover - fallback when run outside package context
     from .config import INTERVAL, TARGET_IP, t, SHUTDOWN_TIMEOUT_SECONDS
     from .monitor import Monitor
     from .ui import MonitorUI
+    from .ui.helpers import fmt_uptime
 except ImportError:  # pragma: no cover
     from config import INTERVAL, TARGET_IP, t, SHUTDOWN_TIMEOUT_SECONDS
     from monitor import Monitor
     from ui import MonitorUI
+    from ui.helpers import fmt_uptime
 
 
 class PingerApp:
     def __init__(self) -> None:
         self.console = Console()
         self.monitor: Monitor = Monitor()
+        self.monitor.start_servers()
         self.ui: MonitorUI = MonitorUI(self.console, self.monitor)
         self._shutdown_called = False
 
@@ -38,7 +41,7 @@ class PingerApp:
             self.console.print(f"\n[bold red]{t('stop')}[/bold red]")
             snap = self.monitor.get_stats_snapshot()
             if snap["start_time"]:
-                uptime_txt = self.ui._fmt_uptime(snap["start_time"])
+                uptime_txt = fmt_uptime(snap["start_time"])
                 self.console.print(f"[dim]{t('uptime_label')}: {uptime_txt}[/dim]")
             # Signal the event loop to stop — let the finally block handle cleanup
             self.monitor.stop_event.set()

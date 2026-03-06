@@ -11,21 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, TypeVar
-from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, MAX_TRACEROUTE_FILES, t
+from config import TARGET_IP, TRACEROUTE_COOLDOWN, TRACEROUTE_MAX_HOPS, MAX_TRACEROUTE_FILES, ensure_utc, t
 from infrastructure import get_process_manager
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from stats_repository import StatsRepository
 
-
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
 
 try:
     from prometheus_client import Counter  # type: ignore
@@ -153,24 +145,33 @@ class TracerouteService:
     async def traceroute_worker(self, target: str) -> None:
         """Async worker to run traceroute and save to file."""
         loop = asyncio.get_running_loop()
-        
+
+        # Capture start time *before* the traceroute runs so that both the
+        # filename and the file header use the same consistent timestamp.
+        # Previously the timestamp was sampled twice: once for the filename
+        # and once inside _write_and_cleanup(), creating a mismatch when the
+        # traceroute took several minutes to complete.
+        start_time = datetime.now(timezone.utc)
+
         self._stats_repo.add_alert(f"[i] {t('traceroute_starting')}", "info")
         logging.info(f"Starting traceroute to {target}")
-        
+
         try:
             data = await self.run_traceroute_async(target)
-            
+
+            end_time = datetime.now(timezone.utc)
+
             traceroutes_dir = Path("traceroutes")
             traceroutes_dir.mkdir(exist_ok=True)
-            filename = traceroutes_dir / f"traceroute_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt"
-            
+            filename = traceroutes_dir / f"traceroute_{start_time.strftime('%Y%m%d_%H%M%S')}.txt"
+
             # File I/O in executor to avoid blocking event loop
             def _write_and_cleanup():
                 # Write new file
                 with open(filename, "w", encoding="utf-8") as handle:
-                    handle.write(
-                        f"Traceroute to {target}\nTime: {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}\n"
-                    )
+                    handle.write(f"Traceroute to {target}\n")
+                    handle.write(f"Started:  {start_time:%Y-%m-%d %H:%M:%S} UTC\n")
+                    handle.write(f"Finished: {end_time:%Y-%m-%d %H:%M:%S} UTC\n")
                     handle.write("=" * 70 + "\n")
                     handle.write(data)
                 
@@ -211,7 +212,7 @@ class TracerouteService:
                 return False
 
             last = self._stats_repo.get_last_traceroute_time()
-            last = _ensure_utc(last)
+            last = ensure_utc(last)
             if last and (datetime.now(timezone.utc) - last).total_seconds() < TRACEROUTE_COOLDOWN:
                 return False
 

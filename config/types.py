@@ -13,6 +13,19 @@ from .i18n import t
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Datetime utilities
+# ─────────────────────────────────────────────────────────────────────────────
+
+def ensure_utc(dt: datetime | None) -> datetime | None:
+    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.astimezone()
+    return dt
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TypedDict Classes
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -89,7 +102,16 @@ class StatsDict(TypedDict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def create_stats() -> StatsDict:
-    """Create a new statistics dictionary with default values."""
+    """Create a new statistics dictionary with default values.
+
+    NOTE: Some default values use ``t()`` (i18n) for display strings like
+    ``last_status``, ``dns_status``, ``mtu_status``, ``current_problem_type``,
+    and ``problem_prediction``.  This couples data to the locale resolved at
+    creation time.  Because the application reads the locale from an
+    environment variable at startup and never changes it at runtime, this is
+    acceptable.  A future refactor could store locale-neutral sentinel keys
+    and translate only in the UI layer.
+    """
     return {
         "total": 0,
         "success": 0,

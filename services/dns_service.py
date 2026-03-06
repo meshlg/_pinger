@@ -569,11 +569,24 @@ class DNSService:
         self,
         domain: str | None = None
     ) -> tuple[bool, Optional[float], str]:
-        """Simple A record check (backward compatible)."""
-        # This is strictly blocking legacy, we can leave it or use asyncio.run
-        # But since we changed check_dns_resolve to be async, we must update this.
+        """Simple A record check (backward compatible).
+
+        Handles both cases: called from within a running event loop
+        (uses thread pool) and without one (uses asyncio.run).
+        """
         try:
-            results = asyncio.run(self.check_dns_resolve(domain, ["A"]))
+            try:
+                asyncio.get_running_loop()
+                # Already inside event loop — run in a separate thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    results = pool.submit(
+                        asyncio.run, self.check_dns_resolve(domain, ["A"])
+                    ).result(timeout=10)
+            except RuntimeError:
+                # No event loop running — safe to use asyncio.run()
+                results = asyncio.run(self.check_dns_resolve(domain, ["A"]))
+
             if results:
                 r = results[0]
                 return r.success, r.response_time_ms, r.status

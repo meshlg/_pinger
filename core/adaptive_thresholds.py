@@ -12,14 +12,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
+from config import ensure_utc
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -232,7 +225,7 @@ class AdaptiveThresholds:
         Returns:
             True if update is needed
         """
-        last_update = _ensure_utc(self._last_update.get(metric))
+        last_update = ensure_utc(self._last_update.get(metric))
         
         if not last_update:
             return True

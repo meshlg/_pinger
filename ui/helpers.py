@@ -27,12 +27,14 @@ try:
     from config import (
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
+        ensure_utc,
         t,
     )
 except ImportError:
     from ..config import (  # type: ignore[no-redef]
         HOP_LATENCY_GOOD,
         HOP_LATENCY_WARN,
+        ensure_utc,
         t,
     )
 
@@ -43,14 +45,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════════
 # Utility
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

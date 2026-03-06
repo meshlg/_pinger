@@ -24,9 +24,13 @@ if TYPE_CHECKING:
     from stats_repository import StatsRepository
 
 
-# Module-level cached credentials/tokens (loaded once)
+# Module-level credentials cache with TTL to support secret rotation
+# (e.g. Docker Secrets SIGHUP-reload, env-var changes in tests).
 _cached_config: dict = {}
-_credentials_loaded: bool = False
+_config_lock: threading.Lock = threading.Lock()
+_config_loaded_at: float = 0.0
+# Re-read credentials every 5 minutes; set to 0 to disable TTL (load once).
+_CONFIG_CACHE_TTL: float = 300.0
 
 
 class RateLimiter:
@@ -54,6 +58,7 @@ class RateLimiter:
         self._max_requests = max_requests_per_minute
         self._max_failed_auth = max_failed_auth_per_minute
         self._block_duration = block_duration_seconds
+        self._max_tracked_ips = 10000  # Prevent unbounded growth from spoofed IPs
         
         # Request timestamps per IP: {ip: [timestamp1, timestamp2, ...]}
         self._requests: dict[str, list[float]] = defaultdict(list)
@@ -63,11 +68,45 @@ class RateLimiter:
         self._blocked: dict[str, float] = {}
         
         self._lock = threading.RLock()
+        self._last_full_cleanup = time.time()
+        self._full_cleanup_interval = 300.0  # Purge stale IPs every 5 minutes
     
     def _cleanup_old_entries(self, entries: list[float], window_seconds: float) -> list[float]:
         """Remove entries older than the window."""
         cutoff = time.time() - window_seconds
         return [ts for ts in entries if ts > cutoff]
+    
+    def _maybe_purge_stale_ips(self) -> None:
+        """Periodically remove IPs with no recent activity to bound memory usage.
+        
+        Must be called while holding self._lock.
+        """
+        now = time.time()
+        if now - self._last_full_cleanup < self._full_cleanup_interval:
+            return
+        self._last_full_cleanup = now
+        
+        cutoff = now - 60  # Entries older than 1 minute window
+        
+        # Purge stale request entries
+        stale_ips = [ip for ip, ts_list in self._requests.items()
+                     if not ts_list or ts_list[-1] < cutoff]
+        for ip in stale_ips:
+            del self._requests[ip]
+        
+        # Purge stale failed auth entries
+        stale_ips = [ip for ip, ts_list in self._failed_auth.items()
+                     if not ts_list or ts_list[-1] < cutoff]
+        for ip in stale_ips:
+            del self._failed_auth[ip]
+        
+        # Purge expired blocks
+        expired = [ip for ip, exp in self._blocked.items() if exp < now]
+        for ip in expired:
+            del self._blocked[ip]
+        
+        if stale_ips or expired:
+            logging.debug(f"RateLimiter purged stale entries, tracking {len(self._requests)} IPs")
     
     def is_blocked(self, ip: str) -> bool:
         """Check if IP is currently blocked."""
@@ -88,6 +127,9 @@ class RateLimiter:
         now = time.time()
         
         with self._lock:
+            # Periodically purge stale IP entries to bound memory
+            self._maybe_purge_stale_ips()
+            
             # Check if blocked
             if self.is_blocked(ip):
                 remaining = int(self._blocked[ip] - now)
@@ -200,46 +242,62 @@ def _is_trusted_proxy(client_ip: str) -> bool:
 
 def _load_security_config() -> dict:
     """Load and cache security configuration from environment.
-    
+
+    Credentials are re-read every _CONFIG_CACHE_TTL seconds so that
+    Docker Secrets rotation or env-var changes take effect without a
+    full process restart.  Access is guarded by a threading.Lock so the
+    cache is initialised exactly once per TTL window even under concurrent
+    requests.
+
     Returns:
         Dict with:
         - auth_type: "basic", "token", "both", or "none"
         - basic_user: str | None
         - basic_pass: str | None
         - token: str | None
+        - token_header: str
     """
-    global _cached_config, _credentials_loaded
-    
-    if _credentials_loaded:
+    global _cached_config, _config_loaded_at
+
+    now = time.monotonic()
+
+    # Fast path: return cached value without acquiring lock when still fresh.
+    if _cached_config and (now - _config_loaded_at) < _CONFIG_CACHE_TTL:
         return _cached_config
-    
-    basic_user = _read_secret("HEALTH_AUTH_USER")
-    basic_pass = _read_secret("HEALTH_AUTH_PASS")
-    token = _read_secret("HEALTH_TOKEN")
-    token_header = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
-    
-    # Determine auth type
-    has_basic = bool(basic_user and basic_pass)
-    has_token = bool(token)
-    
-    if has_basic and has_token:
-        auth_type = "both"
-    elif has_basic:
-        auth_type = "basic"
-    elif has_token:
-        auth_type = "token"
-    else:
-        auth_type = "none"
-    
-    _cached_config = {
-        "auth_type": auth_type,
-        "basic_user": basic_user,
-        "basic_pass": basic_pass,
-        "token": token,
-        "token_header": token_header,
-    }
-    
-    _credentials_loaded = True
+
+    with _config_lock:
+        # Re-check inside the lock (double-checked locking pattern).
+        now = time.monotonic()
+        if _cached_config and (now - _config_loaded_at) < _CONFIG_CACHE_TTL:
+            return _cached_config
+
+        basic_user = _read_secret("HEALTH_AUTH_USER")
+        basic_pass = _read_secret("HEALTH_AUTH_PASS")
+        token = _read_secret("HEALTH_TOKEN")
+        token_header = os.environ.get("HEALTH_TOKEN_HEADER", "X-Health-Token")
+
+        # Determine auth type
+        has_basic = bool(basic_user and basic_pass)
+        has_token = bool(token)
+
+        if has_basic and has_token:
+            auth_type = "both"
+        elif has_basic:
+            auth_type = "basic"
+        elif has_token:
+            auth_type = "token"
+        else:
+            auth_type = "none"
+
+        _cached_config = {
+            "auth_type": auth_type,
+            "basic_user": basic_user,
+            "basic_pass": basic_pass,
+            "token": token,
+            "token_header": token_header,
+        }
+        _config_loaded_at = time.monotonic()
+
     return _cached_config
 
 
@@ -570,7 +628,7 @@ class HealthServer:
             
             if self.addr in ("127.0.0.1", "localhost"):
                 rate_desc = "rate limiting enabled" if _rate_limiter else "no rate limiting"
-                logging.info(f"Health server started on http://127.0.0.1:{self.port} (localhost-only, {rate_desc})")
+                logging.info(f"Health server started on http://127.0.0.1:{self.port} (localhost-only, {rate_desc})") # do not delete!
             else:
                 auth_desc = {
                     "none": "NO AUTH (INSECURE!)",
@@ -579,7 +637,7 @@ class HealthServer:
                     "both": "Basic or Token",
                 }.get(auth_type, "Unknown")
                 rate_desc = "rate limiting enabled" if _rate_limiter else "no rate limiting"
-                logging.info(f"Health server started on http://{self.addr}:{self.port} ({auth_desc}, {rate_desc})")
+                logging.info(f"Health server started on http://{self.addr}:{self.port} ({auth_desc}, {rate_desc})") # do not delete!
                 
         except Exception as exc:
             logging.error(f"Failed to start health server: {exc}")

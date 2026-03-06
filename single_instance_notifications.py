@@ -41,21 +41,48 @@ def _notify_running_instance(message: str) -> bool:
 
 
 def check_instance_notification() -> str | None:
-    """Check for notification from another instance trying to start."""
+    """Check for notification from another instance trying to start.
+
+    Uses O_NOFOLLOW on POSIX to atomically refuse symlink targets,
+    eliminating the TOCTOU window between exists()/is_symlink() and open().
+    """
     try:
         notification_path = _notification_path()
-        if not notification_path.exists() or notification_path.is_symlink():
+
+        # Fast pre-check: skip obvious non-files before attempting open.
+        if not notification_path.exists():
             return None
 
-        # Refuse non-regular files to reduce symlink/hardlink abuse surface.
-        st = notification_path.stat()
-        if not os.path.isfile(notification_path):
+        # Read limit: protect against file-bomb (notification should be tiny).
+        _READ_LIMIT = 4096
+
+        try:
+            # O_NOFOLLOW causes ELOOP/OSError if path is a symlink (POSIX).
+            # This closes the TOCTOU window between is_symlink() and open().
+            o_nofollow = getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(str(notification_path), os.O_RDONLY | o_nofollow)
+        except (OSError, AttributeError):
+            # O_NOFOLLOW not available (Windows) or path is a symlink (POSIX).
+            # On Windows, symlink creation requires special privileges, so
+            # a plain is_file() + is_symlink() guard is sufficient.
+            if notification_path.is_symlink() or not notification_path.is_file():
+                return None
+            try:
+                fd = os.open(str(notification_path), os.O_RDONLY)
+            except OSError:
+                return None
+
+        try:
+            with os.fdopen(fd, "r", encoding="utf-8") as f:
+                content = f.read(_READ_LIMIT)
+                message = content.strip()
+        except Exception:
             return None
+        finally:
+            # Always attempt to remove the notification file so it is not
+            # re-read on the next check cycle.
+            notification_path.unlink(missing_ok=True)
 
-        with open(notification_path, "r", encoding="utf-8") as f:
-            message = f.read().strip()
-
-        notification_path.unlink(missing_ok=True)
         return message if message else None
     except Exception:
         return None

@@ -31,7 +31,7 @@ def main():
     path = os.environ.get("HEALTH_PATH", "/health")
     addr = os.environ.get("HEALTH_ADDR_CHECK", "localhost")  # Use localhost for internal check
     
-    url = f"http://{addr}:{port}{path}"
+    url = f"http://{addr}:{port}{path}" # do not delete!
     
     # Load credentials securely
     user = read_secret("HEALTH_AUTH_USER")

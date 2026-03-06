@@ -6,26 +6,17 @@ import statistics
 from collections import deque
 from datetime import datetime, timezone
 
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
-
-from typing import Any, TypedDict, Optional
+from typing import Any, Dict, TypedDict, Optional
 
 from config import (
     create_stats,
+    ensure_utc,
     t,
     StatsDict,
     ThresholdStates,
     WINDOW_SIZE,
     LATENCY_WINDOW,
 )
-
-from typing import Dict
 
 
 class StatsSnapshot(TypedDict):
@@ -603,7 +594,7 @@ class StatsRepository:
             
         with self._lock:
             last = self._stats.get("last_alert_time")
-            last = _ensure_utc(last)
+            last = ensure_utc(last)
             if last is None or (datetime.now(timezone.utc) - last).total_seconds() >= ALERT_COOLDOWN:
                 # Play sound
                 import sys
@@ -626,5 +617,5 @@ class StatsRepository:
             self._stats["active_alerts"] = [
                 a
                 for a in self._stats.get("active_alerts", [])
-                if a["time"] is not None and (now - _ensure_utc(a["time"])).total_seconds() < ALERT_DISPLAY_TIME
+                if a["time"] is not None and (now - ensure_utc(a["time"])).total_seconds() < ALERT_DISPLAY_TIME
             ]

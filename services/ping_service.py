@@ -239,9 +239,10 @@ class PingService:
         if match_avg:
             return True, float(match_avg.group(1))
         
-        # If we got output but couldn't parse latency, assume success
+        # If we got output but couldn't parse latency, treat as failure
+        # to avoid false-positive success with zero latency.
         if stdout.strip():
-            return True, 0.0
+            logging.debug("Ping returned output but latency could not be parsed: %s", stdout[:200])
         return False, None
 
 

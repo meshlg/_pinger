@@ -185,9 +185,9 @@ def render_analysis_panel(
         jitter_txt = f"[{WHITE}]{jitter:.1f}[/{WHITE}]" if jitter else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
 
         items.append(Text.from_markup(
-            f"  [{TEXT_DIM}]{t('dns_score')}:[/{TEXT_DIM}] {score_gauge}  "
-            f"[{TEXT_DIM}]{t('dns_reliability_short')}:[/{TEXT_DIM}]{rel_txt}  "
-            f"[{TEXT_DIM}]{t('dns_jitter_short')}:[/{TEXT_DIM}]{jitter_txt}{t('ms')}"
+            f"  [{TEXT_DIM}]{t('dns_score')}: [/{TEXT_DIM}] {score_gauge}  "
+            f"[{TEXT_DIM}]{t('dns_reliability_short')}: [/{TEXT_DIM}]{rel_txt}  "
+            f"[{TEXT_DIM}]{t('dns_jitter_short')}: [/{TEXT_DIM}]{jitter_txt}{t('ms')}"
         ))
     elif snap["dns_resolve_time"] is None and not dns_health:
         dns_fallback = f"  [{RED}]{t('error')}[/{RED}]" if SHOW_VISUAL_ALERTS else f"  [{TEXT_DIM}]—[/{TEXT_DIM}]"

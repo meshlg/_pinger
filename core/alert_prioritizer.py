@@ -11,13 +11,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
+from config import ensure_utc
 
 from typing import Dict, List, Optional
 
@@ -201,7 +195,7 @@ class AlertPrioritizer:
         Returns:
             Time factor score 0-1
         """
-        alert_timestamp = _ensure_utc(alert.timestamp)
+        alert_timestamp = ensure_utc(alert.timestamp)
         age_seconds = (datetime.now(timezone.utc) - alert_timestamp).total_seconds()
         
         # Normalize to 0-1 based on escalation threshold

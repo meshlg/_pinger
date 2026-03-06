@@ -55,6 +55,7 @@ class DNSMonitorTask(BackgroundTask):
             self.stats_repo.update_dns_detailed(results_dict)
 
             # Run benchmark tests (Cached/Uncached/DotCom)
+            benchmark_dict = None  # Initialized before conditional for clarity
             if ENABLE_DNS_BENCHMARK:
                 benchmark_results = await self.dns_service.run_benchmark_tests(
                     DNS_BENCHMARK_DOTCOM_DOMAIN,
@@ -86,7 +87,7 @@ class DNSMonitorTask(BackgroundTask):
             # Calculate and store DNS health metrics
             dns_health = self.dns_service.calculate_dns_health(
                 results_dict,
-                benchmark_dict if ENABLE_DNS_BENCHMARK else None,
+                benchmark_dict,
             )
             self.stats_repo.update_dns_health(dns_health)
 

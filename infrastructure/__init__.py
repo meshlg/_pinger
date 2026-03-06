@@ -35,7 +35,6 @@ __all__ = [
     # Health
     "HealthServer",
     "start_health_server",
-    "start_health_server",
     # Process Manager
     "ProcessManager",
     "get_process_manager",

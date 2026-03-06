@@ -266,17 +266,28 @@ class VersionService:
         )
 
 
-# Module-level cache variables for backward compatibility
+# Module-level singleton and cache for backward compatibility
+_service_instance: VersionService | None = None
 _LATEST_VERSION_CACHE: str | None = None
 _LAST_CHECK_TIME: float = 0
+
+
+def _get_service() -> VersionService:
+    """Get or create the singleton VersionService instance."""
+    global _service_instance
+    if _service_instance is None:
+        _service_instance = VersionService()
+    return _service_instance
 
 
 # Backward-compatible module-level functions
 def clear_cache() -> None:
     """Clear the version cache (useful for testing)."""
-    global _LATEST_VERSION_CACHE, _LAST_CHECK_TIME
+    global _LATEST_VERSION_CACHE, _LAST_CHECK_TIME, _service_instance
     _LATEST_VERSION_CACHE = None
     _LAST_CHECK_TIME = 0
+    if _service_instance is not None:
+        _service_instance.clear_cache()
 
 
 def _parse_version(version_str: str) -> tuple[int, ...]:
@@ -291,6 +302,7 @@ def get_latest_version() -> str | None:
     """Fetch latest version from GitHub tags with caching.
     
     This is a backward-compatible module-level function.
+    Uses singleton VersionService instance to avoid redundant object creation.
     """
     global _LATEST_VERSION_CACHE, _LAST_CHECK_TIME
     
@@ -300,8 +312,8 @@ def get_latest_version() -> str | None:
     if _LATEST_VERSION_CACHE and (current_time - _LAST_CHECK_TIME) < DEFAULT_CACHE_TTL:
         return _LATEST_VERSION_CACHE
     
-    # Create a temporary service instance to fetch
-    service = VersionService()
+    # Use singleton service instance
+    service = _get_service()
     latest = service._fetch_with_retry()
     
     if latest:

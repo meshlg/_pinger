@@ -202,7 +202,10 @@ from .settings import UI_COMPACT_THRESHOLD, UI_WIDE_THRESHOLD, UI_THEME
 from .settings import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_TRUNCATE_ON_START
 
 # Import i18n (translations)
-from .i18n import LANG, t, CURRENT_LANGUAGE, SUPPORTED_LANGUAGES
+# NOTE: CURRENT_LANGUAGE and SUPPORTED_LANGUAGES are already imported from .settings above (line 17).
+# Importing them again from .i18n (which re-exports from .settings) would silently shadow
+# the earlier binding. Only import LANG and t() from i18n.
+from .i18n import LANG, t
 
 # Import types (TypedDict classes and factory functions)
 from .types import (
@@ -210,6 +213,7 @@ from .types import (
     StatsDict,
     create_stats,
     create_recent_results,
+    ensure_utc,
 )
 
 # Build __all__ for clean exports
@@ -374,4 +378,5 @@ __all__ = [
     "StatsDict",
     "create_stats",
     "create_recent_results",
+    "ensure_utc",
 ]

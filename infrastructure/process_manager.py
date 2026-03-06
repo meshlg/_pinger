@@ -133,8 +133,15 @@ class ProcessManager:
         Synchronously terminate all tracked processes.
         Use this for atexit or signal handlers where async execution is not possible.
         """
-        # We can't use the lock here.
-        processes = list(self._active_processes)
+        # Safely snapshot the process set, handling potential concurrent modification.
+        try:
+            processes = list(self._active_processes)
+        except RuntimeError:
+            # Set changed size during iteration — retry with copy
+            try:
+                processes = list(self._active_processes.copy())
+            except Exception:
+                processes = []
         
         if processes:
             logging.info(f"Sync cleanup: terminating {len(processes)} active subprocesses...")

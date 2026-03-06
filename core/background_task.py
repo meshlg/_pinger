@@ -11,6 +11,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ class BackgroundTask(ABC):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             self.executor,
-            lambda: func(*args, **kwargs),
+            partial(func, *args, **kwargs),
         )
 
     # ── lifecycle ────────────────────────────────────────────────────────

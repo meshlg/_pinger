@@ -5,6 +5,160 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3.0109]
+
+### Added
+
+- **Intelligent Problem Analysis System** in [`problem_analyzer.py`](problem_analyzer.py):
+  - Complete rewrite with multi-layered architecture for comprehensive problem analysis.
+  - **Layer 1 - Data Collection**: Ingests and preprocesses metrics from multiple sources.
+  - **Layer 2 - Deep Analysis Engine**: Detects anomalies, correlations, and hidden patterns using statistical analysis (sigma deviation, Pearson correlation, trend detection, oscillation/periodicity analysis).
+  - **Layer 3 - Causal Analysis**: Multi-factor root cause detection with contribution weights and evidence tracking.
+  - **Layer 4 - Classification Engine**: Automatic problem type, severity (CRITICAL/HIGH/MEDIUM/LOW/INFO), and priority (URGENT/HIGH/MEDIUM/LOW) determination with confidence scoring.
+  - **Layer 5 - Learning System**: Experience accumulation with solution outcome tracking, historical success rates, and pattern memory for continuous improvement.
+  - **Layer 6 - Solution Generator**: Actionable recommendations with effectiveness estimation, risk assessment, resource cost, and historical success probability.
+  - **Layer 7 - Predictive Analytics**: Trend-based, pattern-based, and historical frequency predictions with preventive action suggestions.
+  - **Layer 8 - Reporting**: Comprehensive reports with health scores, trend analysis, and visualization data.
+  - **External Integration Layer**: Pluggable handlers for logging, metrics, and alert systems.
+  - **Configurable Rules**: Custom thresholds, analysis rules, and behavior settings.
+  - Full backward compatibility with existing `analyze_current_problem()`, `predict_problems()`, `identify_pattern()`, and `get_problem_summary()` APIs.
+  - New APIs: `generate_report()`, `get_detailed_analysis()`, `get_predictions()`, `record_solution_feedback()`, `configure_threshold()`, `configure_rule()`.
+
+### Fixed
+- **Fixed `AttributeError` on shutdown** in [`main.py`](main.py):
+  - `self.ui._fmt_uptime()` was calling a method that no longer exists on `MonitorUI` (moved to `ui/helpers.py` as `fmt_uptime()`). Pressing Ctrl+C would crash instead of printing uptime.
+  - Now imports `fmt_uptime` from `ui.helpers` and calls it directly.
+
+- **Initialized `benchmark_dict` before conditional block** in [`core/dns_monitor_task.py`](core/dns_monitor_task.py):
+  - `benchmark_dict` was only defined inside `if ENABLE_DNS_BENCHMARK:` block but referenced outside it. While Python's ternary evaluates lazily, this was fragile and hard to read.
+  - Added `benchmark_dict = None` initialization before the conditional, and simplified the `calculate_dns_health()` call.
+
+### Security
+- **IP providers prefer HTTPS with automatic HTTP fallback** in [`services/ip_service.py`](services/ip_service.py):
+  - HTTPS is now the primary transport for all four IP-lookup providers (MITM-resistant).
+  - Replaced `http://ifconfig.me/ip` with `https://api.ipify.org/?format=json` (JSON response, more reliable).
+  - Added automatic HTTP fallback: if HTTPS fails due to `SSLError`, `ConnectionError`, or `ProxyError`
+    (e.g. blocked hosts in regions with network restrictions), the plain HTTP URL is tried and a security
+    warning is logged to inform the user that the connection is unencrypted.
+  - Timeout failures do **not** trigger HTTP fallback (they indicate a slow/overloaded provider, not a
+    protocol block), so the next provider in the list is tried instead.
+  - Extracted `_try_provider()` helper to avoid duplicating response-parsing logic between HTTPS and HTTP attempts.
+
+- **TOCTOU race condition fixed** in [`single_instance_notifications.py`](single_instance_notifications.py):
+  - Replaced multi-step `exists()` → `is_symlink()` → `isfile()` → `open()` sequence with an atomic `O_NOFOLLOW` open.
+  - On POSIX systems, `os.open(O_RDONLY | O_NOFOLLOW)` atomically refuses symlink targets (ELOOP/OSError).
+  - On Windows (no O_NOFOLLOW), falls back to a guarded `is_symlink()` + `is_file()` check before opening.
+  - Added 4 KB read limit to protect against file-bomb attacks on the notification file.
+
+- **Health endpoint credentials now use TTL cache with threading.Lock** in [`infrastructure/health.py`](infrastructure/health.py):
+  - Replaced permanent `_credentials_loaded: bool` flag with a time-based TTL cache (`_CONFIG_CACHE_TTL = 300 s`).
+  - Credentials are re-read every 5 minutes, allowing Docker Secrets rotation to take effect without restart.
+  - Added `threading.Lock` (`_config_lock`) with double-checked locking to prevent concurrent re-initialization.
+
+### Fixed
+- **Average latency threshold now uses sliding window** in [`monitor.py`](monitor.py):
+  - `_check_avg_latency_threshold()` previously computed `total_latency_sum / success_count`, which used
+    the all-time average and rendered the threshold ineffective after extended uptime.
+  - Now uses the bounded `latencies` deque (size `LATENCY_WINDOW`) for an accurate rolling average.
+
+- **Traceroute file timestamp consistency** in [`services/traceroute_service.py`](services/traceroute_service.py):
+  - `start_time` is now captured once *before* the traceroute command runs.
+  - Both the output filename and the file header (`Started:` / `Finished:` lines) use this single timestamp.
+  - Eliminates the previous mismatch where a long traceroute produced a header time minutes after the filename time.
+
+- **GeoIP service now prefers HTTPS with automatic HTTP fallback** in [`services/geo_service.py`](services/geo_service.py):
+  - Primary URL changed from `http://ip-api.com/json/` to `https://ip-api.com/json/`.
+  - On `SSLError`, `ConnectionError`, or `ProxyError`, falls back to HTTP and logs a one-time security warning.
+  - Extracted `_try_fetch()` helper to deduplicate HTTPS/HTTP fetch logic.
+
+- **GeoIP cache bounded with LRU eviction and TTL** in [`services/geo_service.py`](services/geo_service.py):
+  - Replaced unbounded `dict` cache with `OrderedDict`-based LRU cache.
+  - Added `_MAX_CACHE_SIZE = 500` limit; oldest entries evicted via `popitem(last=False)`.
+  - Cache entries expire after `_CACHE_TTL = 86400` seconds (24 hours).
+
+- **RateLimiter now purges stale tracked IPs** in [`infrastructure/health.py`](infrastructure/health.py):
+  - Added `_maybe_purge_stale_ips()` method that runs every 5 minutes to clean expired entries from `_requests`, `_failed_auth`, and `_blocked` dicts.
+  - Added `_max_tracked_ips = 10000` cap to prevent memory exhaustion from IP-scanning attacks.
+
+- **`cleanup_sync()` race condition hardened** in [`infrastructure/process_manager.py`](infrastructure/process_manager.py):
+  - Wrapped `list(self._active_processes)` in `try/except RuntimeError` with `.copy()` retry to handle concurrent set modification in atexit/signal handlers.
+
+- **Removed duplicate import shadowing in config package** in [`config/__init__.py`](config/__init__.py):
+  - `CURRENT_LANGUAGE` and `SUPPORTED_LANGUAGES` were imported from `.settings` (line 17) and then re-imported from `.i18n` (line 205), silently shadowing the first binding.
+  - Removed the redundant re-import from `.i18n`; only `LANG` and `t()` are now imported from there.
+
+- **Removed duplicate entry in `__all__`** in [`infrastructure/__init__.py`](infrastructure/__init__.py):
+  - `"start_health_server"` appeared twice in the `__all__` list. Removed the duplicate.
+
+### Changed (Code Quality & Architecture)
+
+- **DRY — centralized `ensure_utc()` function** in [`config/types.py`](config/types.py):
+  - Moved the duplicated `_ensure_utc()` helper (found in 7+ files) into `config/types.py` as the single canonical implementation.
+  - Updated all consumers (`core/adaptive_thresholds.py`, `core/alert_types.py`, `core/alert_prioritizer.py`, `problem_analyzer.py`, `stats_repository.py`, `services/traceroute_service.py`, `ui/helpers.py`) to import from `config`.
+  - Exported via `config/__init__.py` and `__all__`.
+
+- **Fixed naive timestamp in `AlertEntity`** in [`core/alert_types.py`](core/alert_types.py):
+  - Changed `timestamp` default from `datetime.now` (naive, local) to `datetime.now(timezone.utc)` (timezone-aware UTC).
+
+- **Replaced `list` with `deque(maxlen=30)` for hop latency history** in [`services/hop_monitor_service.py`](services/hop_monitor_service.py):
+  - `HopStatus.latency_history` now uses `deque(maxlen=30)` for automatic eviction.
+  - Removed manual `self.latency_history = self.latency_history[-30:]` truncation.
+  - Updated `to_dict()` to convert deque to list for serialization.
+
+- **Singleton pattern for `VersionService`** in [`services/version_service.py`](services/version_service.py):
+  - Module-level `get_latest_version()` and `clear_cache()` functions now reuse a single `VersionService` instance instead of creating a new one on each call.
+
+- **Fixed incorrect indentation** in [`problem_analyzer.py`](problem_analyzer.py):
+  - Lines 170-173 were indented at 16 spaces (inside a non-existent block); corrected to 12 spaces to align with the enclosing `for` loop.
+
+- **Added `reload_theme()` function** in [`ui/theme.py`](ui/theme.py):
+  - Added `reload_theme()` that re-reads `PINGER_THEME` and updates all module-level color constants for runtime theme switching.
+  - Added docstring note explaining import-time resolution behavior.
+
+- **Documented O(n) rate limiter as acceptable** in [`core/smart_alert_manager.py`](core/smart_alert_manager.py):
+  - Added comment noting that `sum()` over `deque(maxlen=~20)` is O(n) but acceptable for the bounded collection size.
+
+- **Fixed `asyncio.run()` in active event loop** in [`services/dns_service.py`](services/dns_service.py):
+  - `check_dns_resolve_simple()` now detects if an event loop is already running and uses `ThreadPoolExecutor` fallback to avoid `RuntimeError`.
+
+- **Extracted server startup from `Monitor.__init__()`** in [`monitor.py`](monitor.py):
+  - Moved Prometheus and health server startup into a new `start_servers()` method, called from `main.py` after construction.
+  - Eliminates side effects (port binding) in `__init__`.
+
+- **Removed duplicate `self.monitor` reference** in [`ui/core.py`](ui/core.py):
+  - Eliminated redundant `self.monitor = data_provider` attribute; all access now goes through the Protocol-typed `self._data_provider`.
+  - Removed unused `TYPE_CHECKING` import of `Monitor`.
+
+- **Documented i18n coupling in `create_stats()`** in [`config/types.py`](config/types.py):
+  - Added docstring explaining that `t()` calls in default values bind to the locale at creation time.
+  - Acceptable for current architecture (env-var locale set once at startup). Full decoupling deferred to future refactor.
+
+### Improved (Polish & Hardening)
+
+- **Fixed false-positive ping success on unparseable output** in [`services/ping_service.py`](services/ping_service.py):
+  - When ping returned output but latency could not be parsed from it, the function incorrectly reported `(True, 0.0)` — pretending 0 ms latency. Now returns `(False, None)` and logs the raw output at DEBUG level.
+
+- **Added missing `dec()` method to `_DummyGauge`** in [`infrastructure/metrics.py`](infrastructure/metrics.py):
+  - Prometheus `Gauge` supports `inc()`, `dec()`, and `set()`. The no-op fallback class was missing `dec()`, which would raise `AttributeError` if ever called without `prometheus_client` installed.
+
+- **Consolidated duplicate `from typing import Dict`** in [`stats_repository.py`](stats_repository.py):
+  - `Dict` was imported separately on line 21 while the rest of `typing` was already imported on line 9. Merged into a single import statement.
+
+- **Applied `ensure_utc()` to timestamp comparison** in [`problem_analyzer.py`](problem_analyzer.py):
+  - `p["timestamp"].hour` was compared to `datetime.now(timezone.utc).hour` without normalizing the timestamp to UTC first. If the timestamp was naive (local time), the hour comparison could be wrong by several hours.
+
+- **Replaced `lambda` with `functools.partial`** in [`core/background_task.py`](core/background_task.py):
+  - `run_in_executor(executor, lambda: func(*args, **kwargs))` replaced with `run_in_executor(executor, partial(func, *args, **kwargs))`. `partial` is more debuggable (has `.func`, `.args` attributes), picklable, and avoids late-binding closure issues.
+
+- **Windows lock file now writes PID** in [`single_instance.py`](single_instance.py):
+  - Unix path already wrote PID to the lock file for debugging stale locks. Windows path (`CreateFileW`) did not. Now uses `WriteFile` + `FlushFileBuffers` to write the current PID after acquiring the exclusive handle.
+
+- **Replaced `sys.path.insert(0, ".")` with absolute path** in [`demo_mode.py`](demo_mode.py):
+  - `sys.path.insert(0, ".")` depends on the current working directory at launch time. Replaced with `Path(__file__).resolve().parent` for robustness when the script is invoked from any directory.
+
+- **Reduced dead `config.py` legacy wrapper to stub** in [`config.py`](config.py):
+  - The 325-line file re-exported every symbol from `config/` but was never actually imported (Python resolves `import config` to the `config/` package). Replaced with a minimal deprecation notice stub.
+
 ## [2.5.2.1648]
 
 ### Added

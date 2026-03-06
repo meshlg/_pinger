@@ -12,10 +12,13 @@ import time
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict
 
-# Add project to path FIRST
-sys.path.insert(0, ".")
+# Add project root to path FIRST (resolve to absolute path for robustness)
+_PROJECT_ROOT = str(Path(__file__).resolve().parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 # IMPORTANT: config/__init__.py loads i18n, which captures CURRENT_LANGUAGE value
 # So we must also patch the i18n module's copy

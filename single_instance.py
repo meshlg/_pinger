@@ -91,6 +91,19 @@ class SingleInstance:
                 return False
 
             self.lock_file = handle
+
+            # Write PID into lock file for debugging stale locks
+            pid_bytes = str(os.getpid()).encode()
+            written = wintypes.DWORD(0)
+            kernel32.WriteFile(
+                handle,
+                pid_bytes,
+                len(pid_bytes),
+                ctypes.byref(written),
+                None,
+            )
+            kernel32.FlushFileBuffers(handle)
+
             return True
         except Exception:
             return False

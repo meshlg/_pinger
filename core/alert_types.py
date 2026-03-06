@@ -11,14 +11,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-
-def _ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
+from config import ensure_utc
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -133,7 +126,7 @@ class AlertEntity:
     message: str
     priority: AlertPriority
     context: AlertContext
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     fingerprint: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
     suppressed: bool = False
@@ -236,7 +229,7 @@ class AlertGroup:
     
     def get_age_seconds(self) -> float:
         """Get age of group in seconds."""
-        created_at = _ensure_utc(self.created_at)
+        created_at = ensure_utc(self.created_at)
         return (datetime.now(timezone.utc) - created_at).total_seconds()
     
     def should_escalate(self, escalation_threshold_seconds: float) -> bool:
@@ -286,7 +279,7 @@ class AlertHistory:
         cutoff_time = now.timestamp() - self.retention_seconds
         self.entries = [
             e for e in self.entries
-            if _ensure_utc(e.timestamp) is not None and _ensure_utc(e.timestamp).timestamp() >= cutoff_time
+            if ensure_utc(e.timestamp) is not None and ensure_utc(e.timestamp).timestamp() >= cutoff_time
         ]
         
         # Remove by size (keep most recent)
@@ -305,7 +298,7 @@ class AlertHistory:
         """Get alerts from last N seconds."""
         now = datetime.now(timezone.utc)
         cutoff = now.timestamp() - seconds
-        return [e for e in self.entries if _ensure_utc(e.timestamp) is not None and _ensure_utc(e.timestamp).timestamp() >= cutoff]
+        return [e for e in self.entries if ensure_utc(e.timestamp) is not None and ensure_utc(e.timestamp).timestamp() >= cutoff]
     
     def get_count_by_priority(self) -> Dict[AlertPriority, int]:
         """Get counts by priority level."""

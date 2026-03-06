@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from rich.console import Console
 from rich.layout import Layout
 
@@ -23,9 +21,6 @@ except ImportError:
 
 # Import Protocol for DIP-compliant design
 from ui_protocols.protocols import StatsDataProvider
-
-if TYPE_CHECKING:
-    from monitor import Monitor
 
 
 class MonitorUI:
@@ -47,7 +42,6 @@ class MonitorUI:
     def __init__(self, console: Console, data_provider: StatsDataProvider) -> None:
         self.console = console
         self._data_provider = data_provider
-        self.monitor = data_provider
         self._cached_jitter: float = 0.0
         self._last_jitter_update: float = 0.0
         self._jitter_cache_interval: float = 5.0
@@ -90,7 +84,7 @@ class MonitorUI:
         inner = w - 2
 
         # Single snapshot for entire render cycle
-        snap = self.monitor.get_stats_snapshot()
+        snap = self._data_provider.get_stats_snapshot()
 
         layout = Layout(name="root")
 

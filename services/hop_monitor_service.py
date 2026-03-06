@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import asyncio
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -37,7 +38,7 @@ class HopStatus:
     loss_count: int = 0
     total_pings: int = 0
     last_ok: bool = True
-    latency_history: list = field(default_factory=list)
+    latency_history: deque = field(default_factory=lambda: deque(maxlen=30))
     # new fields for stage 1
     jitter: float = 0.0
     prev_latency: Optional[float] = None
@@ -67,7 +68,7 @@ class HopStatus:
             "jitter": self.jitter,
             "latency_delta": self.latency_delta,
             # for sparkline rendering - last 10 values
-            "latency_history": self.latency_history[-10:] if self.latency_history else [],
+            "latency_history": list(self.latency_history)[-10:] if self.latency_history else [],
             # geolocation fields
             "country": self.country,
             "country_code": self.country_code,
@@ -441,10 +442,8 @@ class HopMonitorService:
                     hop.latency_delta = latency - hop.prev_latency
                 hop.prev_latency = latency
                 
-                # Add to history and maintain size limit
+                # Add to history (deque maxlen auto-evicts oldest)
                 hop.latency_history.append(latency)
-                if len(hop.latency_history) > self.LATENCY_HISTORY_SIZE:
-                    hop.latency_history = hop.latency_history[-self.LATENCY_HISTORY_SIZE:]
                 
                 # Update min/max
                 hop.min_latency = min(hop.min_latency, latency)

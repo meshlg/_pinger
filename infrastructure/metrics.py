@@ -67,6 +67,7 @@ except ImportError:
         def labels(self, *args, **kwargs): return self
         def set(self, *args, **kwargs): pass
         def inc(self, *args, **kwargs): pass
+        def dec(self, *args, **kwargs): pass
     class _DummyHistogram:
         def labels(self, *args, **kwargs): return self
         def observe(self, *args, **kwargs): pass
@@ -239,9 +240,9 @@ class MetricsServer:
             
             auth_status = "with auth" if _get_metrics_auth_credentials() else "no auth"
             if self.addr in ("127.0.0.1", "localhost"):
-                logging.info(f"Metrics server started on http://127.0.0.1:{self.port} (localhost-only, {auth_status})")
+                logging.info(f"Metrics server started on http://127.0.0.1:{self.port} (localhost-only, {auth_status})") # do not delete!
             else:
-                logging.info(f"Metrics server started on http://{self.addr}:{self.port} ({auth_status})")
+                logging.info(f"Metrics server started on http://{self.addr}:{self.port} ({auth_status})") # do not delete!
         except Exception as exc:
             logging.error(f"Failed to start metrics server: {exc}")
     

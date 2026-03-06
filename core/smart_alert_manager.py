@@ -254,6 +254,7 @@ class SmartAlertManager:
         """
         now = time.time()
         
+        # O(n) scan over bounded deque (maxlen ~20); acceptable for this scale.
         # Check burst limit (last 10 seconds)
         burst_count = sum(
             1 for ts in self._alert_timestamps

@@ -158,13 +158,9 @@ class Monitor:
         )
         self._metrics_handler = MetricsHandler(self.stats_repo)
         
-        # Infrastructure
+        # Infrastructure (servers started lazily via start_servers())
         self.metrics_server = None
-        if ENABLE_METRICS:
-            self.metrics_server = start_metrics_server(addr=METRICS_ADDR, port=METRICS_PORT)
         self.health_server = None
-        if ENABLE_HEALTH_ENDPOINT:
-            self.health_server = start_health_server(addr=HEALTH_ADDR, port=HEALTH_PORT, stats_repo=self.stats_repo)
         
         # ── Background Task Orchestrator ────────────────────────────────
         self._orchestrator = TaskOrchestrator()
@@ -191,6 +187,18 @@ class Monitor:
             ),
             VersionCheckerTask(**common),
         ])
+
+    def start_servers(self) -> None:
+        """Start infrastructure servers (metrics, health).
+
+        Separated from __init__ to allow testability and controlled startup.
+        """
+        if ENABLE_METRICS and self.metrics_server is None:
+            self.metrics_server = start_metrics_server(addr=METRICS_ADDR, port=METRICS_PORT)
+        if ENABLE_HEALTH_ENDPOINT and self.health_server is None:
+            self.health_server = start_health_server(
+                addr=HEALTH_ADDR, port=HEALTH_PORT, stats_repo=self.stats_repo,
+            )
 
     @property
     def stats_lock(self):
@@ -471,11 +479,20 @@ class Monitor:
                 self.stats_repo.add_alert(f"[+] {t('alert_loss_normalized')}", "info")
 
     def _check_avg_latency_threshold(self, snap: StatsSnapshot) -> None:
-        """Check average latency threshold."""
-        success = snap["success"]
-        avg = (snap["total_latency_sum"] / success) if success else 0.0
+        """Check average latency threshold using the sliding LATENCY_WINDOW.
+
+        Previously this divided total_latency_sum by the all-time success
+        counter, which meant the threshold would never trigger after the
+        monitor had been running long enough — old "good" samples diluted
+        the average permanently.  Now we use the bounded latencies deque
+        (limited to LATENCY_WINDOW samples) for an accurate rolling average.
+        """
+        latencies = snap["latencies"]
+        if not latencies:
+            return
+        avg = sum(latencies) / len(latencies)
         was_high = self.stats_repo.get_threshold_state("high_avg_latency")
-        
+
         if avg > AVG_LATENCY_THRESHOLD:
             if not was_high:
                 self.stats_repo.update_threshold_state("high_avg_latency", True)
