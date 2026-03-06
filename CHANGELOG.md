@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2.1648]
+
+### Added
+- **Visual UI improvements**:
+  - [`sparkline_double()`](ui/helpers.py:270) — two-row sparkline with 16 vertical levels (upper/lower half-blocks) for higher-resolution latency charts.
+  - [`mini_gauge()`](ui/helpers.py:310) — compact gauge widget with status icon (◉/◎/◗), percentage, and color-coded bar for success rate and DNS score.
+  - [`dns_mini_bar()`](ui/helpers.py:340) — tiny horizontal bar chart for DNS response time visualization in record-type table.
+  - **Compact inline metrics** in [`ui/panels/metrics.py`](ui/panels/metrics.py) — single-line `Cur:X Avg:Y Best:Z…` format for compact tier.
+  - **Two-row sparklines** in [`ui/panels/metrics.py`](ui/panels/metrics.py) — replaced single-row with `sparkline_double` for standard/full height tiers.
+  - **Mini gauge for success rate** in [`ui/panels/metrics.py`](ui/panels/metrics.py) — replaces plain progress bar with icon-based gauge.
+  - **DNS mini bar column** in [`ui/panels/analysis.py`](ui/panels/analysis.py) — horizontal latency bars next to response time in DNS record table.
+  - **Mini gauge for DNS score** in [`ui/panels/analysis.py`](ui/panels/analysis.py) — replaces plain bar with `mini_gauge()` widget.
+  - **Hop table sparkline column** in [`ui/panels/hops.py`](ui/panels/hops.py) — per-hop latency trend sparkline from history data.
+  - **Dashboard visual enhancements** in [`ui/panels/dashboard.py`](ui/panels/dashboard.py):
+    - Trend direction indicator (▲/▼/►) for latency.
+    - Colored dots (●) showing recent ping results (last 20).
+    - Connection state icon shown alongside status label.
+    - Globe icon (🌐) for public IP display.
+
+### Refactored
+- **Decomposed monolithic `ui.py` (~1203 lines) into modular `ui/` package** :
+  - [`ui/theme.py`](ui/theme.py) — style constants, Unicode elements, color palette, layout tier types.
+  - [`ui/helpers.py`](ui/helpers.py) — standalone helper functions (`fmt_uptime`, `sparkline`, `progress_bar`, `kv_table`, etc.).
+  - [`ui/panels/header.py`](ui/panels/header.py) — `render_header()` standalone function.
+  - [`ui/panels/toast.py`](ui/panels/toast.py) — `render_toast()` standalone function.
+  - [`ui/panels/dashboard.py`](ui/panels/dashboard.py) — `render_dashboard()` standalone function.
+  - [`ui/panels/metrics.py`](ui/panels/metrics.py) — `render_metrics_panel()` standalone function.
+  - [`ui/panels/analysis.py`](ui/panels/analysis.py) — `render_analysis_panel()` standalone function.
+  - [`ui/panels/hops.py`](ui/panels/hops.py) — `render_hop_panel()` standalone function.
+  - [`ui/panels/footer.py`](ui/panels/footer.py) — `render_footer()` standalone function.
+  - [`ui/core.py`](ui/core.py) — `MonitorUI` class (constructor, tier detection, layout generation).
+  - [`ui/__init__.py`](ui/__init__.py) — re-exports `MonitorUI` for backward compatibility.
+  - Updated [`pyproject.toml`](pyproject.toml) packages from `ui.py` to `ui` directory.
+  - Updated [`tests/test_regressions_security_runtime.py`](tests/test_regressions_security_runtime.py) to call standalone panel functions.
+
 ## [2.5.2.0506]
 
 ### Security

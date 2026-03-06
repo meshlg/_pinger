@@ -25,6 +25,8 @@ from services.ip_service import IPService
 from services.traceroute_service import TracerouteService
 from stats_repository import StatsRepository
 from ui import MonitorUI
+from ui.panels.analysis import render_analysis_panel
+from ui.panels.hops import render_hop_panel
 import single_instance_notifications as sin
 
 
@@ -139,7 +141,7 @@ def test_ui_analysis_panel_masks_stale_route_and_mtu_on_disconnect() -> None:
 
     console = Console(record=True, width=120, file=io.StringIO())
     ui = MonitorUI(console, DummyProvider())
-    panel = ui._render_analysis_panel(snap, width=100, tier="standard", h_tier="standard")
+    panel = render_analysis_panel(snap, width=100, tier="standard", h_tier="standard")
 
     console.print(panel)
     rendered = console.export_text()
@@ -163,7 +165,7 @@ def test_ui_hop_panel_hides_stale_hops_on_disconnect() -> None:
 
     console = Console(record=True, width=120, file=io.StringIO())
     ui = MonitorUI(console, DummyProvider())
-    panel = ui._render_hop_panel(snap, width=100, tier="standard", h_tier="standard")
+    panel = render_hop_panel(snap, width=100, tier="standard", h_tier="standard")
 
     console.print(panel)
     rendered = console.export_text()

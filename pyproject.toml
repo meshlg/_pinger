@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "network-pinger"
-version = "2.5.2.0506"
+version = "2.5.2.1648"
 description = "Async network monitoring tool with real-time terminal UI, alerts, and connection quality analysis"
 authors = ["meshlg <meshlgfox@gmail.com>"]
 readme = "README.md"
@@ -30,7 +30,7 @@ packages = [
     { include = "config.py" },
     { include = "main.py" },
     { include = "monitor.py" },
-    { include = "ui.py" },
+    { include = "ui" },
     { include = "alerts.py" },
     { include = "stats_repository.py" },
     { include = "problem_analyzer.py" },
