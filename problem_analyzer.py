@@ -18,7 +18,7 @@ Architecture:
 
 from __future__ import annotations
 
-import json
+import copy
 import logging
 import math
 import statistics
@@ -27,14 +27,14 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from stats_repository import StatsRepository, StatsSnapshot
 
 from config import (
     CONSECUTIVE_LOSS_THRESHOLD,
-    PREDICTION_WINDOW,
+    INTERVAL,
     PROBLEM_HISTORY_SIZE,
     PROBLEM_LOG_SUPPRESSION_SECONDS,
     PROBLEM_LOSS_THRESHOLD,
@@ -162,25 +162,34 @@ class MetricAnomaly:
 
 @dataclass
 class CorrelationResult:
-    """Result of correlation analysis between metrics."""
+    """Result of correlation analysis between metrics.
+
+    Note: significance_score is a heuristic estimate based on correlation magnitude,
+    not a statistically rigorous p-value. It should be interpreted as an internal
+    confidence indicator rather than a formal statistical significance test.
+    """
 
     metric_a: str
     metric_b: str
     correlation_coefficient: float  # -1 to 1
-    p_value: float
-    significance: str  # "strong", "moderate", "weak", "none"
+    significance_score: float  # Heuristic confidence score (0.0-1.0), NOT a real p-value
+    significance: str  # "strong", "moderate", "weak", "none" - based on magnitude
     lag_seconds: float = 0.0  # Time lag if cross-correlation
 
     @property
     def is_significant(self) -> bool:
-        return abs(self.correlation_coefficient) > 0.5 and self.p_value < 0.05
+        """Check if correlation is considered significant based on heuristic criteria.
+
+        Warning: This uses internal heuristics, not formal statistical testing.
+        """
+        return abs(self.correlation_coefficient) > 0.5 and self.significance_score > 0.9
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "metric_a": self.metric_a,
             "metric_b": self.metric_b,
             "correlation_coefficient": self.correlation_coefficient,
-            "p_value": self.p_value,
+            "significance_score": self.significance_score,
             "significance": self.significance,
             "lag_seconds": self.lag_seconds,
         }
@@ -406,6 +415,7 @@ class AnalysisConfig:
         self.correlation_window_minutes: int = 30
         self.prediction_horizon_minutes: int = 60
         self.min_samples_for_analysis: int = 5
+        self.ping_interval_seconds: float = INTERVAL  # Real ping interval from config
         self._initialize_default_thresholds()
 
     def _initialize_default_thresholds(self) -> None:
@@ -453,6 +463,53 @@ class AnalysisConfig:
         """Add or update an analysis rule."""
         self.rules[rule.rule_id] = rule
 
+    def get_threshold(self, metric_name: str) -> Optional[ThresholdConfig]:
+        """Get threshold configuration for a metric."""
+        return self.thresholds.get(metric_name)
+
+    def is_threshold_breached(
+        self,
+        metric_name: str,
+        value: float,
+        level: str = "critical",
+    ) -> bool:
+        """Check whether a value breaches the configured threshold."""
+        threshold = self.get_threshold(metric_name)
+        if threshold is None:
+            return False
+
+        if threshold.comparison == "range":
+            low = min(threshold.warning_threshold, threshold.critical_threshold)
+            high = max(threshold.warning_threshold, threshold.critical_threshold)
+            return value < low or value > high
+
+        target = threshold.warning_threshold if level == "warning" else threshold.critical_threshold
+
+        if threshold.comparison == "greater":
+            return value >= target
+        if threshold.comparison == "less":
+            return value <= target
+
+        return False
+
+    def get_matching_rules(self, snapshot: Dict[str, Any]) -> List[AnalysisRule]:
+        """Return enabled analysis rules whose conditions match the snapshot."""
+        matched_rules: List[AnalysisRule] = []
+        for rule in self.rules.values():
+            if not rule.enabled:
+                continue
+            try:
+                if rule.condition(snapshot):
+                    matched_rules.append(rule)
+            except Exception as exc:
+                logging.debug(f"Analysis rule '{rule.rule_id}' evaluation error: {exc}")
+
+        return sorted(
+            matched_rules,
+            key=lambda rule: (rule.severity.value, rule.priority.value),
+            reverse=True,
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Export configuration as dictionary."""
         return {
@@ -495,21 +552,33 @@ class ExperienceStore:
         self._lock = threading.RLock()
 
     def record_experience(self, record: ProblemRecord) -> None:
-        """Record a problem occurrence and its resolution."""
+        """Record or update a problem occurrence and its resolution."""
         with self._lock:
-            self._experiences.append(record)
+            stored_record = copy.deepcopy(record)
 
-            # Update pattern memory
+            for index, existing_record in enumerate(self._experiences):
+                if existing_record.record_id == stored_record.record_id:
+                    self._experiences[index] = stored_record
+                    break
+            else:
+                self._experiences.append(stored_record)
+
+            self._rebuild_indexes()
+
+    def _rebuild_indexes(self) -> None:
+        """Rebuild derived indexes from stored experience snapshots."""
+        self._solution_outcomes = {}
+        self._pattern_memory = {}
+
+        for record in self._experiences:
             pattern_key = record.classification.problem_type.name
             self._pattern_memory[pattern_key] = self._pattern_memory.get(pattern_key, 0) + 1
 
-            # Update solution outcomes if resolved
-            if record.resolved and record.resolution_method:
+            if record.resolved and record.resolution_method and record.effectiveness_feedback is not None:
                 if record.resolution_method not in self._solution_outcomes:
                     self._solution_outcomes[record.resolution_method] = []
-                success = record.effectiveness_feedback is not None and record.effectiveness_feedback >= 0.7
-                effectiveness = record.effectiveness_feedback or 0.5
-                self._solution_outcomes[record.resolution_method].append((success, effectiveness))
+                success = record.effectiveness_feedback >= 0.7
+                self._solution_outcomes[record.resolution_method].append((success, record.effectiveness_feedback))
 
     def get_similar_problems(self, problem_type: ProblemType, limit: int = 10) -> List[ProblemRecord]:
         """Find similar historical problems."""
@@ -518,16 +587,23 @@ class ExperienceStore:
                 e for e in self._experiences
                 if e.classification.problem_type == problem_type
             ]
-            return sorted(similar, key=lambda x: x.classification.timestamp, reverse=True)[:limit]
+            ordered = sorted(similar, key=lambda x: x.classification.timestamp, reverse=True)[:limit]
+            return copy.deepcopy(ordered)
 
-    def get_solution_success_rate(self, solution_id: str) -> float:
-        """Calculate historical success rate for a solution."""
+    def get_solution_success_rate(self, solution_id: str) -> Optional[float]:
+        """
+        Calculate historical success rate for a solution.
+
+        Returns:
+            Float success rate (0.0-1.0) if solution has history,
+            None if no historical data exists (unknown solution).
+        """
         with self._lock:
             if solution_id not in self._solution_outcomes:
-                return 0.5  # Default neutral
+                return None  # No history - unknown solution
             outcomes = self._solution_outcomes[solution_id]
             if not outcomes:
-                return 0.5
+                return None  # Empty outcomes - no history
             successes = sum(1 for s, _ in outcomes if s)
             return successes / len(outcomes)
 
@@ -538,7 +614,8 @@ class ExperienceStore:
             solution_scores: Dict[str, List[float]] = {}
 
             for record in similar:
-                if record.resolved and record.resolution_method and record.effectiveness_feedback:
+                # Use 'is not None' to preserve effectiveness_feedback == 0.0
+                if record.resolved and record.resolution_method and record.effectiveness_feedback is not None:
                     if record.resolution_method not in solution_scores:
                         solution_scores[record.resolution_method] = []
                     solution_scores[record.resolution_method].append(record.effectiveness_feedback)
@@ -591,6 +668,76 @@ class ExperienceStore:
                 "severity_distribution": severity_counts,
                 "pattern_distribution": dict(self._pattern_memory),
             }
+
+    def get_records_in_time_range(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> List[ProblemRecord]:
+        """Get problem records within a specific time range."""
+        with self._lock:
+            records = []
+            for record in self._experiences:
+                ts = ensure_utc(record.classification.timestamp)
+                if ts is not None and start_time <= ts <= end_time:
+                    records.append(copy.deepcopy(record))
+            return sorted(records, key=lambda r: r.classification.timestamp, reverse=True)
+
+    def get_statistics_for_time_range(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Dict[str, Any]:
+        """Get statistics for a specific time range."""
+        with self._lock:
+            records = self.get_records_in_time_range(start_time, end_time)
+
+            total = len(records)
+            resolved = sum(1 for r in records if r.resolved)
+
+            severity_counts: Dict[str, int] = {}
+            pattern_counts: Dict[str, int] = {}
+
+            for record in records:
+                sev = record.classification.severity.name
+                severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+                pattern = record.classification.problem_type.name
+                pattern_counts[pattern] = pattern_counts.get(pattern, 0) + 1
+
+            return {
+                "total_problems": total,
+                "resolved_problems": resolved,
+                "resolution_rate": resolved / total if total > 0 else 0.0,
+                "severity_distribution": severity_counts,
+                "pattern_distribution": pattern_counts,
+            }
+
+    def get_hourly_distribution(
+        self,
+        problem_type: ProblemType,
+        days_back: int = 7,
+    ) -> Dict[int, int]:
+        """
+        Get hourly distribution of a problem type.
+
+        Returns a dictionary mapping hour (0-23) to count of problems
+        that occurred at that hour in the specified time range.
+        """
+        with self._lock:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+            hour_counts: Dict[int, int] = {}
+
+            for record in self._experiences:
+                if record.classification.problem_type != problem_type:
+                    continue
+                ts = ensure_utc(record.classification.timestamp)
+                if ts is None or ts < cutoff:
+                    continue
+                hour = ts.hour
+                hour_counts[hour] = hour_counts.get(hour, 0) + 1
+
+            return hour_counts
 
 
 # =============================================================================
@@ -658,7 +805,7 @@ class DeepAnalysisEngine:
                 }
 
     def detect_anomalies(self, snapshot: Dict[str, Any]) -> List[MetricAnomaly]:
-        """Detect anomalies in current metrics compared to baseline."""
+        """Detect anomalies in current metrics compared to baseline and thresholds."""
         anomalies: List[MetricAnomaly] = []
 
         with self._lock:
@@ -668,31 +815,109 @@ class DeepAnalysisEngine:
                     continue
 
                 baseline = self._baseline_stats.get(metric_name)
-                if not baseline or baseline["count"] < self.config.min_samples_for_analysis:
+                baseline_ready = (
+                    threshold_config.adaptive
+                    and baseline is not None
+                    and baseline["count"] >= self.config.min_samples_for_analysis
+                )
+                warning_triggered = self.config.is_threshold_breached(
+                    metric_name, current_value, level="warning"
+                )
+                critical_triggered = self.config.is_threshold_breached(
+                    metric_name, current_value, level="critical"
+                )
+
+                deviation_sigma = 0.0
+                sigma_triggered = False
+                expected_range = self._expected_range_from_threshold(
+                    threshold_config,
+                    level="warning",
+                )
+                context: Dict[str, Any] = {
+                    "adaptive": threshold_config.adaptive,
+                    "warning_triggered": warning_triggered,
+                    "critical_triggered": critical_triggered,
+                }
+                anomaly_type = self._threshold_anomaly_type(threshold_config, current_value)
+
+                if baseline_ready and baseline is not None:
+                    mean = baseline["mean"]
+                    std_dev = baseline["std_dev"] or 1.0
+                    deviation_sigma = abs(current_value - mean) / std_dev
+                    sigma_triggered = deviation_sigma > self.config.anomaly_sigma_threshold
+                    expected_range = (mean - 2 * std_dev, mean + 2 * std_dev)
+                    context.update({"baseline_mean": mean, "baseline_std": std_dev})
+
+                    if sigma_triggered:
+                        anomaly_type = self._determine_anomaly_type(metric_name, current_value, baseline)
+
+                if not warning_triggered and not sigma_triggered:
                     continue
 
-                # Calculate deviation
-                mean = baseline["mean"]
-                std_dev = baseline["std_dev"] or 1.0  # Avoid division by zero
-                deviation_sigma = abs(current_value - mean) / std_dev
+                if sigma_triggered and critical_triggered:
+                    context["trigger"] = "baseline_and_critical_threshold"
+                elif sigma_triggered and warning_triggered:
+                    context["trigger"] = "baseline_and_warning_threshold"
+                elif sigma_triggered:
+                    context["trigger"] = "baseline"
+                elif critical_triggered:
+                    context["trigger"] = "critical_threshold"
+                else:
+                    context["trigger"] = "warning_threshold"
 
-                # Check for anomaly
-                if deviation_sigma > self.config.anomaly_sigma_threshold:
-                    anomaly_type = self._determine_anomaly_type(metric_name, current_value, baseline)
-                    expected_range = (mean - 2 * std_dev, mean + 2 * std_dev)
-
-                    anomaly = MetricAnomaly(
-                        metric_name=metric_name,
-                        anomaly_type=anomaly_type,
-                        value=current_value,
-                        expected_range=expected_range,
-                        deviation_sigma=deviation_sigma,
-                        timestamp=datetime.now(timezone.utc),
-                        context={"baseline_mean": mean, "baseline_std": std_dev},
-                    )
-                    anomalies.append(anomaly)
+                anomaly = MetricAnomaly(
+                    metric_name=metric_name,
+                    anomaly_type=anomaly_type,
+                    value=current_value,
+                    expected_range=expected_range,
+                    deviation_sigma=deviation_sigma,
+                    timestamp=datetime.now(timezone.utc),
+                    context=context,
+                )
+                anomalies.append(anomaly)
 
         return anomalies
+
+    def _expected_range_from_threshold(
+        self,
+        threshold_config: ThresholdConfig,
+        level: str = "warning",
+    ) -> Tuple[float, float]:
+        """Build an expected range from a threshold configuration."""
+        if threshold_config.comparison == "range":
+            low = min(threshold_config.warning_threshold, threshold_config.critical_threshold)
+            high = max(threshold_config.warning_threshold, threshold_config.critical_threshold)
+            return (low, high)
+
+        threshold_value = (
+            threshold_config.warning_threshold
+            if level == "warning"
+            else threshold_config.critical_threshold
+        )
+
+        if threshold_config.comparison == "less":
+            return (threshold_value, math.inf)
+
+        return (-math.inf, threshold_value)
+
+    def _threshold_anomaly_type(
+        self,
+        threshold_config: ThresholdConfig,
+        current_value: float,
+    ) -> AnomalyType:
+        """Determine anomaly type from threshold semantics."""
+        if threshold_config.comparison == "less":
+            return AnomalyType.DROP
+
+        if threshold_config.comparison == "range":
+            low = min(threshold_config.warning_threshold, threshold_config.critical_threshold)
+            high = max(threshold_config.warning_threshold, threshold_config.critical_threshold)
+            if current_value < low:
+                return AnomalyType.DROP
+            if current_value > high:
+                return AnomalyType.SPIKE
+
+        return AnomalyType.SPIKE
 
     def _extract_metric_value(self, snapshot: Dict[str, Any], metric_name: str) -> Optional[float]:
         """Extract metric value from snapshot."""
@@ -787,7 +1012,7 @@ class DeepAnalysisEngine:
 
             correlation = covariance / (std_a * std_b)
 
-            # Determine significance
+            # Determine significance level based on correlation magnitude
             abs_corr = abs(correlation)
             if abs_corr > 0.7:
                 significance = "strong"
@@ -798,14 +1023,16 @@ class DeepAnalysisEngine:
             else:
                 significance = "none"
 
-            # Simplified p-value estimation
-            p_value = 0.01 if abs_corr > 0.5 else 0.1 if abs_corr > 0.3 else 0.5
+            # Heuristic confidence score (NOT a statistical p-value)
+            # Higher score = higher confidence in the correlation
+            # This is an internal metric for ranking correlations, not formal statistics
+            significance_score = 0.95 if abs_corr > 0.7 else 0.80 if abs_corr > 0.5 else 0.60 if abs_corr > 0.3 else 0.30
 
             return CorrelationResult(
                 metric_a=metric_a,
                 metric_b=metric_b,
                 correlation_coefficient=correlation,
-                p_value=p_value,
+                significance_score=significance_score,
                 significance=significance,
             )
 
@@ -957,7 +1184,7 @@ class CausalAnalysisEngine:
                     "name": "High Consecutive Packet Loss",
                     "weight": 0.8,
                     "metrics": ["consecutive_losses", "packet_loss"],
-                    "condition": lambda s: s.get("consecutive_losses", 0) >= CONSECUTIVE_LOSS_THRESHOLD,
+                    "condition": lambda s: self._check_consecutive_losses(s),
                 },
                 {
                     "factor_id": "connection_lost",
@@ -980,7 +1207,7 @@ class CausalAnalysisEngine:
                     "name": "High Jitter",
                     "weight": 0.5,
                     "metrics": ["jitter"],
-                    "condition": lambda s: s.get("jitter", 0) > PROBLEM_JITTER_THRESHOLD,
+                    "condition": lambda s: self._check_jitter(s),
                 },
             ],
             ProblemType.DNS_FAILURE.name: [
@@ -1026,14 +1253,37 @@ class CausalAnalysisEngine:
             ],
         }
 
+    def _check_consecutive_losses(self, snapshot: Dict[str, Any]) -> bool:
+        """Check if consecutive losses exceed configured threshold."""
+        return self.config.is_threshold_breached(
+            "consecutive_losses",
+            float(snapshot.get("consecutive_losses", 0)),
+            level="critical",
+        )
+
     def _check_latency(self, snapshot: Dict[str, Any]) -> bool:
         """Check if latency is elevated."""
         latency = snapshot.get("last_latency_ms")
         if latency and latency != t("na"):
             try:
-                return float(latency) > PROBLEM_LATENCY_THRESHOLD
+                return self.config.is_threshold_breached(
+                    "latency",
+                    float(latency),
+                    level="critical",
+                )
             except (ValueError, TypeError):
                 pass
+        return False
+
+    def _check_jitter(self, snapshot: Dict[str, Any]) -> bool:
+        """Check if jitter exceeds configured threshold."""
+        jitter = snapshot.get("jitter", 0)
+        if isinstance(jitter, (int, float)):
+            return self.config.is_threshold_breached(
+                "jitter",
+                float(jitter),
+                level="critical",
+            )
         return False
 
     def analyze_causes(
@@ -1145,20 +1395,35 @@ class ClassificationEngine:
         - Priority for resolution
         - Confidence in classification
         """
+        matched_rules = self.config.get_matching_rules(snapshot)
+        matched_rule = matched_rules[0] if matched_rules else None
+
         # Determine problem type
-        problem_type = self._determine_type(snapshot, anomalies)
+        problem_type = matched_rule.problem_type if matched_rule else self._determine_type(snapshot, anomalies)
 
         # Determine severity
-        severity = self._determine_severity(snapshot, anomalies, problem_type)
+        severity = (
+            matched_rule.severity
+            if matched_rule
+            else self._determine_severity(snapshot, anomalies, problem_type)
+        )
 
         # Determine priority
-        priority = self._determine_priority(problem_type, severity, causal_factors)
+        priority = (
+            matched_rule.priority
+            if matched_rule
+            else self._determine_priority(problem_type, severity, causal_factors)
+        )
 
         # Calculate confidence
         confidence = self._calculate_confidence(anomalies, causal_factors)
+        if matched_rule:
+            confidence = max(confidence, 0.85)
 
         # Build description
         description = self._build_description(problem_type, severity, causal_factors)
+        if matched_rule:
+            description = f"{description} (configured rule: {matched_rule.name})"
 
         # Identify affected components
         affected = self._identify_affected_components(snapshot, problem_type)
@@ -1180,9 +1445,13 @@ class ClassificationEngine:
         """Determine the type of problem."""
         # Check for connection loss first (highest priority)
         connection_lost = snapshot.get("threshold_states", {}).get("connection_lost", False)
-        consecutive_losses = snapshot.get("consecutive_losses", 0)
+        consecutive_losses = float(snapshot.get("consecutive_losses", 0))
 
-        if connection_lost or consecutive_losses >= CONSECUTIVE_LOSS_THRESHOLD:
+        if connection_lost or self.config.is_threshold_breached(
+            "consecutive_losses",
+            consecutive_losses,
+            level="critical",
+        ):
             return ProblemType.ISP_OUTAGE
 
         # Check DNS
@@ -1203,6 +1472,14 @@ class ClassificationEngine:
         if snapshot.get("route_changed", False):
             return ProblemType.ROUTE_CHANGE
 
+        latency = snapshot.get("last_latency_ms")
+        if latency and latency != t("na"):
+            try:
+                if self.config.is_threshold_breached("latency", float(latency), level="critical"):
+                    return ProblemType.HIGH_LATENCY
+            except (ValueError, TypeError):
+                pass
+
         # Check for high latency
         latency_anomaly = next(
             (a for a in anomalies if a.metric_name == "latency"),
@@ -1211,6 +1488,14 @@ class ClassificationEngine:
         if latency_anomaly:
             return ProblemType.HIGH_LATENCY
 
+        jitter = snapshot.get("jitter", 0)
+        if isinstance(jitter, (int, float)) and self.config.is_threshold_breached(
+            "jitter",
+            float(jitter),
+            level="critical",
+        ):
+            return ProblemType.HIGH_JITTER
+
         # Check for jitter
         jitter_anomaly = next(
             (a for a in anomalies if a.metric_name == "jitter"),
@@ -1218,6 +1503,17 @@ class ClassificationEngine:
         )
         if jitter_anomaly:
             return ProblemType.HIGH_JITTER
+
+        recent_results = snapshot.get("recent_results", [])
+        total = snapshot.get("total", 1)
+        failure = snapshot.get("failure", 0)
+        loss_pct = (
+            (recent_results.count(False) / len(recent_results)) * 100
+            if recent_results
+            else (failure / total) * 100 if total > 0 else 0.0
+        )
+        if self.config.is_threshold_breached("packet_loss", loss_pct, level="critical"):
+            return ProblemType.PACKET_LOSS
 
         # Check for packet loss
         loss_anomaly = next(
@@ -1554,10 +1850,11 @@ class SolutionGenerator:
 
             # Adjust effectiveness based on historical data
             base_effectiveness = template["effectiveness"]
-            if historical_rate > 0:
-                # Weight towards historical data
+            if historical_rate is not None:
+                # Weight towards historical data when we have it
                 adjusted_effectiveness = (base_effectiveness * 0.3) + (historical_rate * 0.7)
             else:
+                # No history - use template's base effectiveness score
                 adjusted_effectiveness = base_effectiveness
 
             solution = SolutionRecommendation(
@@ -1570,7 +1867,7 @@ class SolutionGenerator:
                 resource_cost=template["cost"],
                 estimated_time_minutes=template["time"],
                 success_probability=adjusted_effectiveness,
-                historical_success_rate=historical_rate,
+                historical_success_rate=historical_rate if historical_rate is not None else 0.0,
             )
             solutions.append(solution)
 
@@ -1659,8 +1956,16 @@ class PredictiveEngine:
         self,
         snapshot: Dict[str, Any],
         anomalies: List[MetricAnomaly],
+        store_predictions: bool = True,
     ) -> List[PredictionResult]:
-        """Generate predictions about potential future problems."""
+        """Generate predictions about potential future problems.
+
+        Args:
+            snapshot: Current metrics snapshot
+            anomalies: Detected anomalies
+            store_predictions: If True, store predictions in history for accuracy tracking.
+                             Set to False for read-only queries like get_predictions().
+        """
         predictions: List[PredictionResult] = []
 
         # Trend-based predictions
@@ -1681,9 +1986,10 @@ class PredictiveEngine:
             if escalation_pred:
                 predictions.append(escalation_pred)
 
-        # Store predictions
-        for pred in predictions:
-            self._prediction_history.append(pred)
+        # Store predictions only when explicitly requested (e.g., during analysis)
+        if store_predictions:
+            for pred in predictions:
+                self._prediction_history.append(pred)
 
         return predictions
 
@@ -1752,17 +2058,23 @@ class PredictiveEngine:
         slope: float,
         threshold: float,
     ) -> Optional[float]:
-        """Estimate minutes until threshold is reached."""
+        """Estimate minutes until threshold is reached.
+
+        Uses the configured ping interval (INTERVAL) to convert
+        samples to real time, ensuring accurate predictions regardless
+        of the actual ping frequency.
+        """
         if slope <= 0:
             return None  # Not increasing
 
         if current >= threshold:
             return 0  # Already at threshold
 
-        # Simple linear extrapolation (assuming slope is per sample)
-        # Assuming 1 sample per second (ping interval)
+        # Linear extrapolation: slope is per sample
+        # Convert samples to seconds using the real ping interval
         samples_to_threshold = (threshold - current) / slope
-        return samples_to_threshold / 60  # Convert to minutes
+        seconds_to_threshold = samples_to_threshold * self.config.ping_interval_seconds
+        return seconds_to_threshold / 60  # Convert to minutes
 
     def _metric_to_problem_type(self, metric_name: str) -> ProblemType:
         """Map metric name to problem type."""
@@ -1795,7 +2107,7 @@ class PredictiveEngine:
         return actions.get(metric_name, ["Monitor the situation"])
 
     def _analyze_patterns(self, snapshot: Dict[str, Any]) -> List[PredictionResult]:
-        """Analyze patterns for predictions."""
+        """Analyze patterns for predictions using time-based seasonality."""
         predictions: List[PredictionResult] = []
 
         # Time-based pattern analysis
@@ -1803,18 +2115,76 @@ class PredictiveEngine:
 
         # Check for time-based patterns from history
         for problem_type in ProblemType:
-            frequency = self.experience_store.get_problem_frequency(problem_type, hours=24)
-            if frequency >= 3:
-                # High frequency problem - likely to recur
+            # Get hourly distribution for this problem type
+            hourly_dist = self.experience_store.get_hourly_distribution(
+                problem_type, days_back=7
+            )
+
+            if not hourly_dist:
+                continue
+
+            # Calculate average hourly rate
+            total_problems = sum(hourly_dist.values())
+            if total_problems < 3:
+                continue  # Need at least 3 occurrences for pattern detection
+
+            avg_per_hour = total_problems / 24
+            current_hour_count = hourly_dist.get(current_hour, 0)
+
+            # Check if current hour has significantly higher rate than average
+            # Using a threshold of 2x average to detect "peak hours"
+            if avg_per_hour > 0 and current_hour_count >= avg_per_hour * 2:
+                # This is a peak hour for this problem type
+                probability = min(0.85, current_hour_count / (avg_per_hour * 3))
                 predictions.append(PredictionResult(
-                    prediction_type="pattern_based",
-                    probability=min(0.8, frequency / 10),
+                    prediction_type="time_based_seasonality",
+                    probability=probability,
                     time_horizon_minutes=60,
                     predicted_problem_type=problem_type,
-                    confidence=0.6,
-                    contributing_factors=[f"High frequency of {problem_type.name} in last 24h"],
-                    preventive_actions=["Monitor closely", "Prepare mitigation steps"],
+                    confidence=0.75,
+                    contributing_factors=[
+                        f"Peak hour pattern: {current_hour_count} occurrences at hour {current_hour}:00",
+                        f"Average: {avg_per_hour:.1f}/hour, Current: {current_hour_count}",
+                    ],
+                    preventive_actions=[
+                        "Monitor closely during this hour",
+                        "Prepare mitigation steps",
+                        "Consider proactive measures",
+                    ],
                 ))
+            elif current_hour_count >= 2 and current_hour_count > avg_per_hour:
+                # Moderate increase at this hour
+                probability = min(0.65, current_hour_count / (avg_per_hour * 2 + 1))
+                predictions.append(PredictionResult(
+                    prediction_type="time_based_pattern",
+                    probability=probability,
+                    time_horizon_minutes=60,
+                    predicted_problem_type=problem_type,
+                    confidence=0.55,
+                    contributing_factors=[
+                        f"Elevated occurrence at hour {current_hour}:00 ({current_hour_count} times)",
+                    ],
+                    preventive_actions=["Monitor closely"],
+                ))
+
+            # Also check for upcoming peak hours (within next 2 hours)
+            for next_hour_offset in range(1, 3):
+                next_hour = (current_hour + next_hour_offset) % 24
+                next_hour_count = hourly_dist.get(next_hour, 0)
+                if avg_per_hour > 0 and next_hour_count >= avg_per_hour * 2:
+                    predictions.append(PredictionResult(
+                        prediction_type="upcoming_peak_hour",
+                        probability=min(0.70, next_hour_count / (avg_per_hour * 3)),
+                        time_horizon_minutes=next_hour_offset * 60,
+                        predicted_problem_type=problem_type,
+                        confidence=0.60,
+                        contributing_factors=[
+                            f"Upcoming peak hour: {next_hour}:00 ({next_hour_count} historical occurrences)",
+                        ],
+                        preventive_actions=[
+                            f"Prepare for increased {problem_type.name.lower()} risk at {next_hour}:00",
+                        ],
+                    ))
 
         return predictions
 
@@ -1905,45 +2275,60 @@ class ReportGenerator:
     data and actionable recommendations.
     """
 
-    def __init__(self, config: AnalysisConfig, experience_store: ExperienceStore) -> None:
+    def __init__(
+        self,
+        config: AnalysisConfig,
+        experience_store: ExperienceStore,
+        deep_analyzer: Optional[DeepAnalysisEngine] = None,
+        predictive_engine: Optional[PredictiveEngine] = None,
+    ) -> None:
         self.config = config
         self.experience_store = experience_store
+        self._deep_analyzer = deep_analyzer
+        self._predictive_engine = predictive_engine
 
     def generate_report(
         self,
         time_range: Tuple[datetime, datetime],
         include_predictions: bool = True,
     ) -> AnalysisReport:
-        """Generate a comprehensive analysis report."""
+        """Generate a comprehensive analysis report.
+
+        The report filters data by the specified time_range to provide
+        accurate period-specific analysis.
+        """
         start_time, end_time = time_range
 
-        # Get statistics
-        stats = self.experience_store.get_statistics()
+        # Get statistics filtered by time range
+        stats = self.experience_store.get_statistics_for_time_range(start_time, end_time)
 
-        # Generate summary
-        summary = self._generate_summary(stats)
+        # Get records for the time range
+        records = self.experience_store.get_records_in_time_range(start_time, end_time)
 
-        # Problem statistics
+        # Generate summary with time-filtered data
+        summary = self._generate_summary(stats, start_time, end_time)
+
+        # Problem statistics with time-filtered data
         problem_stats = self._generate_problem_statistics(stats)
 
-        # Trend analysis
+        # Trend analysis using deep analyzer
         trend_analysis = self._generate_trend_analysis()
 
-        # Patterns detected
-        patterns = self._generate_patterns_section()
+        # Patterns from time-filtered records
+        patterns = self._generate_patterns_section(stats, records)
 
-        # Recommendations
-        recommendations = self._generate_recommendations()
+        # Recommendations based on time-filtered data
+        recommendations = self._generate_recommendations(stats)
 
-        # Predictions
+        # Predictions using predictive engine
         predictions: List[PredictionResult] = []
-        if include_predictions:
+        if include_predictions and self._predictive_engine:
             predictions = self._generate_predictions_section()
 
-        # Metrics summary
-        metrics_summary = self._generate_metrics_summary()
+        # Metrics summary from deep analyzer
+        metrics_summary = self._generate_metrics_summary(start_time, end_time)
 
-        # Health score
+        # Health score based on time-filtered stats
         health_score = self._calculate_health_score(stats)
 
         return AnalysisReport(
@@ -1960,23 +2345,36 @@ class ReportGenerator:
             health_score=health_score,
         )
 
-    def _generate_summary(self, stats: Dict[str, Any]) -> str:
-        """Generate executive summary."""
+    def _generate_summary(
+        self,
+        stats: Dict[str, Any],
+        start_time: datetime,
+        end_time: datetime,
+    ) -> str:
+        """Generate executive summary for the specified time range."""
         total = stats.get("total_problems", 0)
         resolved = stats.get("resolved_problems", 0)
         rate = stats.get("resolution_rate", 0.0)
 
+        duration_hours = (end_time - start_time).total_seconds() / 3600
+
         if total == 0:
-            return "No problems detected in the analysis period. System is operating normally."
+            return (
+                f"No problems detected in the last {duration_hours:.1f} hours. "
+                "System is operating normally."
+            )
+
+        health_status = "good" if rate > 0.8 else "needs attention"
 
         return (
-            f"Analyzed {total} problem(s) with {rate:.0%} resolution rate. "
+            f"Analyzed {total} problem(s) over {duration_hours:.1f} hours "
+            f"with {rate:.0%} resolution rate. "
             f"{resolved} problem(s) were successfully resolved. "
-            f"System health is {'good' if rate > 0.8 else 'needs attention'}."
+            f"System health is {health_status}."
         )
 
     def _generate_problem_statistics(self, stats: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate problem statistics section."""
+        """Generate problem statistics section from filtered stats."""
         return {
             "total_problems": stats.get("total_problems", 0),
             "resolved_problems": stats.get("resolved_problems", 0),
@@ -1986,21 +2384,70 @@ class ReportGenerator:
         }
 
     def _generate_trend_analysis(self) -> Dict[str, Any]:
-        """Generate trend analysis section."""
-        # Simplified - would analyze actual trends
-        return {
+        """Generate trend analysis section using deep analyzer data."""
+        trend_analysis: Dict[str, Any] = {
             "latency_trend": "stable",
             "packet_loss_trend": "stable",
             "jitter_trend": "stable",
             "overall_trend": "stable",
+            "details": {},
         }
 
-    def _generate_patterns_section(self) -> List[Dict[str, Any]]:
-        """Generate patterns detected section."""
-        patterns = []
+        if self._deep_analyzer is None:
+            return trend_analysis
 
-        # Get pattern distribution
-        stats = self.experience_store.get_statistics()
+        # Analyze trends for each metric
+        metrics_to_analyze = ["latency", "packet_loss", "jitter"]
+        trends_found: List[str] = []
+
+        for metric_name in metrics_to_analyze:
+            metric_stats = self._deep_analyzer.get_metric_statistics(metric_name)
+
+            if metric_stats is None or metric_stats.get("count", 0) < 10:
+                continue
+
+            # Get the trend from deep analyzer's pattern detection
+            values = list(self._deep_analyzer._metric_history.get(metric_name, []))
+            if len(values) < 10:
+                continue
+
+            trend = self._deep_analyzer._detect_trend(values)
+            if trend:
+                trend_analysis[f"{metric_name}_trend"] = trend
+                trends_found.append(trend)
+            else:
+                trend_analysis[f"{metric_name}_trend"] = "stable"
+
+            # Add detailed statistics
+            trend_analysis["details"][metric_name] = {
+                "mean": metric_stats.get("mean", 0),
+                "std_dev": metric_stats.get("std_dev", 0),
+                "min": metric_stats.get("min", 0),
+                "max": metric_stats.get("max", 0),
+                "sample_count": metric_stats.get("count", 0),
+            }
+
+        # Determine overall trend
+        if trends_found:
+            increasing_count = trends_found.count("increasing")
+            decreasing_count = trends_found.count("decreasing")
+
+            if increasing_count > decreasing_count and increasing_count > len(trends_found) // 2:
+                trend_analysis["overall_trend"] = "degrading"
+            elif decreasing_count > increasing_count and decreasing_count > len(trends_found) // 2:
+                trend_analysis["overall_trend"] = "improving"
+
+        return trend_analysis
+
+    def _generate_patterns_section(
+        self,
+        stats: Dict[str, Any],
+        records: List[ProblemRecord],
+    ) -> List[Dict[str, Any]]:
+        """Generate patterns detected section from filtered records."""
+        patterns: List[Dict[str, Any]] = []
+
+        # Frequency patterns from statistics
         pattern_dist = stats.get("pattern_distribution", {})
 
         for problem_name, count in pattern_dist.items():
@@ -2012,25 +2459,54 @@ class ReportGenerator:
                     "significance": "high" if count > 5 else "medium" if count > 2 else "low",
                 })
 
+        # Time-based patterns from records
+        if len(records) >= 5:
+            hour_counts: Dict[int, int] = {}
+            for record in records:
+                hour = record.classification.timestamp.hour
+                hour_counts[hour] = hour_counts.get(hour, 0) + 1
+
+            # Find peak hours
+            if hour_counts:
+                max_hour = max(hour_counts, key=hour_counts.get)
+                max_count = hour_counts[max_hour]
+                if max_count >= 3:
+                    patterns.append({
+                        "type": "temporal_pattern",
+                        "description": f"Peak problem hour: {max_hour}:00 ({max_count} occurrences)",
+                        "significance": "high" if max_count > 5 else "medium",
+                    })
+
+        # Metric patterns from deep analyzer
+        if self._deep_analyzer:
+            detected_patterns = self._deep_analyzer.detect_patterns()
+            for p in detected_patterns:
+                patterns.append({
+                    "type": p.get("type", "metric_pattern"),
+                    "metric": p.get("metric", "unknown"),
+                    "description": p.get("description", ""),
+                    "confidence": p.get("confidence", 0.5),
+                    "significance": "high" if p.get("confidence", 0) > 0.7 else "medium",
+                })
+
         return patterns
 
-    def _generate_recommendations(self) -> List[SolutionRecommendation]:
-        """Generate recommendations section."""
+    def _generate_recommendations(self, stats: Dict[str, Any]) -> List[SolutionRecommendation]:
+        """Generate recommendations based on filtered statistics."""
         recommendations: List[SolutionRecommendation] = []
 
-        # Get most common problems
-        stats = self.experience_store.get_statistics()
         pattern_dist = stats.get("pattern_distribution", {})
 
         for problem_name, count in sorted(pattern_dist.items(), key=lambda x: x[1], reverse=True)[:3]:
             try:
                 problem_type = ProblemType[problem_name]
                 effective = self.experience_store.get_effective_solutions(problem_type)
+
                 for solution_id, effectiveness in effective[:2]:
                     recommendations.append(SolutionRecommendation(
                         solution_id=solution_id,
                         title=f"Address {problem_name.replace('_', ' ').title()}",
-                        description=f"Based on {count} occurrences",
+                        description=f"Based on {count} occurrences in the analysis period",
                         steps=["See detailed solution documentation"],
                         effectiveness_score=effectiveness,
                         risk_level="low",
@@ -2043,22 +2519,57 @@ class ReportGenerator:
         return recommendations
 
     def _generate_predictions_section(self) -> List[PredictionResult]:
-        """Generate predictions section."""
-        # Would use PredictiveEngine for actual predictions
-        return []
+        """Generate predictions section using predictive engine."""
+        if self._predictive_engine is None:
+            return []
 
-    def _generate_metrics_summary(self) -> Dict[str, Any]:
-        """Generate metrics summary section."""
-        return {
-            "monitoring_duration_hours": 24,
-            "total_pings": "N/A",
+        # Get recent predictions from predictive engine
+        predictions = list(self._predictive_engine._prediction_history)
+
+        # Return only recent predictions (last hour)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        recent_predictions = [
+            p for p in predictions
+            if p.timestamp >= cutoff
+        ]
+
+        return recent_predictions
+
+    def _generate_metrics_summary(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> Dict[str, Any]:
+        """Generate metrics summary from deep analyzer data."""
+        duration_hours = (end_time - start_time).total_seconds() / 3600
+
+        metrics_summary: Dict[str, Any] = {
+            "monitoring_duration_hours": duration_hours,
+            "total_pings": 0,
             "average_latency_ms": "N/A",
             "packet_loss_percent": "N/A",
             "average_jitter_ms": "N/A",
         }
 
+        if self._deep_analyzer is None:
+            return metrics_summary
+
+        # Get statistics from deep analyzer
+        for metric_name in ["latency", "jitter", "packet_loss"]:
+            metric_stats = self._deep_analyzer.get_metric_statistics(metric_name)
+            if metric_stats:
+                if metric_name == "latency":
+                    metrics_summary["average_latency_ms"] = round(metric_stats.get("mean", 0), 2)
+                    metrics_summary["total_pings"] = metric_stats.get("count", 0)
+                elif metric_name == "jitter":
+                    metrics_summary["average_jitter_ms"] = round(metric_stats.get("mean", 0), 2)
+                elif metric_name == "packet_loss":
+                    metrics_summary["packet_loss_percent"] = round(metric_stats.get("mean", 0), 2)
+
+        return metrics_summary
+
     def _calculate_health_score(self, stats: Dict[str, Any]) -> float:
-        """Calculate overall health score (0-100)."""
+        """Calculate overall health score (0-100) from filtered stats."""
         resolution_rate = stats.get("resolution_rate", 1.0)
         total_problems = stats.get("total_problems", 0)
 
@@ -2164,7 +2675,9 @@ class ProblemAnalyzer:
         self.classifier = ClassificationEngine(self.config, self.experience_store)
         self.solution_generator = SolutionGenerator(self.config, self.experience_store)
         self.predictive_engine = PredictiveEngine(self.config, self.experience_store)
-        self.report_generator = ReportGenerator(self.config, self.experience_store)
+        self.report_generator = ReportGenerator(
+            self.config, self.experience_store, self.deep_analyzer, self.predictive_engine
+        )
         self.external_integration = ExternalIntegration()
 
         # Problem tracking
@@ -2216,7 +2729,7 @@ class ProblemAnalyzer:
             return t("problem_none")
 
         # Layer 3: Analyze causes
-        preliminary_type = self._determine_preliminary_type(snapshot_dict)
+        preliminary_type = self._determine_preliminary_type(snapshot_dict, anomalies)
         causal_factors = self.causal_analyzer.analyze_causes(
             preliminary_type, snapshot_dict, anomalies, correlations
         )
@@ -2239,9 +2752,12 @@ class ProblemAnalyzer:
 
         # Store record
         with self._lock:
+            self._resolve_current_problem_locked()
             self.problem_history.append(record)
             self._current_problem = record
-            self.experience_store.record_experience(record)
+            # Only record experience if learning is enabled
+            if self.config.learning_enabled:
+                self.experience_store.record_experience(record)
 
         # Layer 8: External integration
         self.external_integration.emit_alert(record)
@@ -2258,14 +2774,42 @@ class ProblemAnalyzer:
         """Convert StatsSnapshot to dictionary."""
         return dict(snapshot)
 
+    def _get_latency_value(self, snapshot: Dict[str, Any]) -> Optional[float]:
+        """Extract numeric latency from snapshot if available."""
+        latency = snapshot.get("last_latency_ms")
+        if latency and latency != t("na"):
+            try:
+                return float(latency)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _get_packet_loss_percentage(self, snapshot: Dict[str, Any]) -> float:
+        """Calculate packet loss percentage from snapshot data."""
+        recent_results = snapshot.get("recent_results", [])
+        if recent_results:
+            return (recent_results.count(False) / len(recent_results)) * 100
+
+        total = snapshot.get("total", 1)
+        failure = snapshot.get("failure", 0)
+        return (failure / total) * 100 if total > 0 else 0.0
+
     def _has_problem(self, snapshot: Dict[str, Any], anomalies: List[MetricAnomaly]) -> bool:
         """Check if there's an actual problem."""
         # Check connection lost
         if snapshot.get("threshold_states", {}).get("connection_lost", False):
             return True
 
+        # Check custom analysis rules
+        if self.config.get_matching_rules(snapshot):
+            return True
+
         # Check consecutive losses
-        if snapshot.get("consecutive_losses", 0) >= CONSECUTIVE_LOSS_THRESHOLD:
+        if self.config.is_threshold_breached(
+            "consecutive_losses",
+            float(snapshot.get("consecutive_losses", 0)),
+            level="critical",
+        ):
             return True
 
         # Check DNS failure
@@ -2282,34 +2826,61 @@ class ProblemAnalyzer:
             return True
 
         # Check packet loss
-        recent_results = snapshot.get("recent_results", [])
-        if recent_results:
-            loss_count = recent_results.count(False)
-            loss_pct = (loss_count / len(recent_results)) * 100
-            if loss_pct > PROBLEM_LOSS_THRESHOLD:
-                return True
+        if self.config.is_threshold_breached(
+            "packet_loss",
+            self._get_packet_loss_percentage(snapshot),
+            level="critical",
+        ):
+            return True
 
         # Check latency
-        latency = snapshot.get("last_latency_ms")
-        if latency and latency != t("na"):
-            try:
-                if float(latency) > PROBLEM_LATENCY_THRESHOLD:
-                    return True
-            except (ValueError, TypeError):
-                pass
+        latency = self._get_latency_value(snapshot)
+        if latency is not None and self.config.is_threshold_breached(
+            "latency",
+            latency,
+            level="critical",
+        ):
+            return True
 
         # Check jitter
-        if snapshot.get("jitter", 0) > PROBLEM_JITTER_THRESHOLD:
+        jitter = snapshot.get("jitter", 0)
+        if isinstance(jitter, (int, float)) and self.config.is_threshold_breached(
+            "jitter",
+            float(jitter),
+            level="critical",
+        ):
             return True
 
         return False
 
-    def _determine_preliminary_type(self, snapshot: Dict[str, Any]) -> ProblemType:
+    def _anomaly_to_problem_type(self, anomaly: MetricAnomaly) -> ProblemType:
+        """Map an anomaly to the closest preliminary problem type."""
+        mapping = {
+            "latency": ProblemType.HIGH_LATENCY,
+            "jitter": ProblemType.HIGH_JITTER,
+            "packet_loss": ProblemType.PACKET_LOSS,
+            "consecutive_losses": ProblemType.ISP_OUTAGE,
+        }
+        return mapping.get(anomaly.metric_name, ProblemType.UNKNOWN)
+
+    def _determine_preliminary_type(
+        self,
+        snapshot: Dict[str, Any],
+        anomalies: List[MetricAnomaly],
+    ) -> ProblemType:
         """Determine preliminary problem type for causal analysis."""
+        matched_rules = self.config.get_matching_rules(snapshot)
+        if matched_rules:
+            return matched_rules[0].problem_type
+
         if snapshot.get("threshold_states", {}).get("connection_lost", False):
             return ProblemType.ISP_OUTAGE
 
-        if snapshot.get("consecutive_losses", 0) >= CONSECUTIVE_LOSS_THRESHOLD:
+        if self.config.is_threshold_breached(
+            "consecutive_losses",
+            float(snapshot.get("consecutive_losses", 0)),
+            level="critical",
+        ):
             return ProblemType.ISP_OUTAGE
 
         if snapshot.get("dns_status") == t("failed"):
@@ -2324,18 +2895,35 @@ class ProblemAnalyzer:
         if snapshot.get("route_changed", False):
             return ProblemType.ROUTE_CHANGE
 
-        latency = snapshot.get("last_latency_ms")
-        if latency and latency != t("na"):
-            try:
-                if float(latency) > PROBLEM_LATENCY_THRESHOLD:
-                    return ProblemType.HIGH_LATENCY
-            except (ValueError, TypeError):
-                pass
+        latency = self._get_latency_value(snapshot)
+        if latency is not None and self.config.is_threshold_breached(
+            "latency",
+            latency,
+            level="critical",
+        ):
+            return ProblemType.HIGH_LATENCY
 
-        if snapshot.get("jitter", 0) > PROBLEM_JITTER_THRESHOLD:
+        jitter = snapshot.get("jitter", 0)
+        if isinstance(jitter, (int, float)) and self.config.is_threshold_breached(
+            "jitter",
+            float(jitter),
+            level="critical",
+        ):
             return ProblemType.HIGH_JITTER
 
-        return ProblemType.PACKET_LOSS
+        if self.config.is_threshold_breached(
+            "packet_loss",
+            self._get_packet_loss_percentage(snapshot),
+            level="critical",
+        ):
+            return ProblemType.PACKET_LOSS
+
+        for anomaly in sorted(anomalies, key=lambda item: item.deviation_sigma, reverse=True):
+            problem_type = self._anomaly_to_problem_type(anomaly)
+            if problem_type != ProblemType.UNKNOWN:
+                return problem_type
+
+        return ProblemType.UNKNOWN
 
     def _create_problem_record(
         self,
@@ -2355,14 +2943,24 @@ class ProblemAnalyzer:
             snapshot_data=snapshot,
         )
 
+    def _resolve_current_problem_locked(self) -> None:
+        """Resolve and clear the current problem while holding the analyzer lock."""
+        if self._current_problem is None:
+            return
+
+        if not self._current_problem.resolved:
+            self._current_problem.resolved = True
+            self._current_problem.resolution_time = datetime.now(timezone.utc)
+            # Only record experience if learning is enabled
+            if self.config.learning_enabled:
+                self.experience_store.record_experience(self._current_problem)
+
+        self._current_problem = None
+
     def _record_no_problem(self) -> None:
         """Record that no problem was detected."""
         with self._lock:
-            if self._current_problem and not self._current_problem.resolved:
-                # Mark previous problem as resolved
-                self._current_problem.resolved = True
-                self._current_problem.resolution_time = datetime.now(timezone.utc)
-                self.experience_store.record_experience(self._current_problem)
+            self._resolve_current_problem_locked()
 
     def _update_trend_data(self, snapshot: Dict[str, Any]) -> None:
         """Update trend data for predictive analysis."""
@@ -2396,15 +2994,20 @@ class ProblemAnalyzer:
         mapping = {
             ProblemType.ISP_OUTAGE: t("problem_isp"),
             ProblemType.LOCAL_NETWORK: t("problem_local"),
+            ProblemType.CONNECTION_LOST: t("problem_connection_lost"),
             ProblemType.DNS_FAILURE: t("problem_dns"),
             ProblemType.DNS_SLOW: t("problem_dns"),
+            ProblemType.DNS_TIMEOUT: t("problem_dns_timeout"),
             ProblemType.MTU_LOW: t("problem_mtu"),
             ProblemType.MTU_FRAGMENTED: t("problem_mtu"),
-            ProblemType.HIGH_LATENCY: t("problem_isp"),
-            ProblemType.HIGH_JITTER: t("problem_isp"),
-            ProblemType.PACKET_LOSS: t("problem_isp"),
-            ProblemType.ROUTE_CHANGE: t("problem_isp"),
-            ProblemType.CONNECTION_LOST: t("problem_isp"),
+            ProblemType.HIGH_LATENCY: t("problem_high_latency"),
+            ProblemType.HIGH_JITTER: t("problem_high_jitter"),
+            ProblemType.PACKET_LOSS: t("problem_packet_loss"),
+            ProblemType.ROUTE_CHANGE: t("problem_route_change"),
+            ProblemType.ROUTE_DEGRADATION: t("problem_route_degradation"),
+            ProblemType.HOP_TIMEOUT: t("problem_hop_timeout"),
+            ProblemType.INTERMITTENT: t("problem_intermittent"),
+            ProblemType.CASCADING: t("problem_cascading"),
             ProblemType.UNKNOWN: t("problem_unknown"),
         }
         return mapping.get(problem_type, t("problem_unknown"))
@@ -2423,6 +3026,10 @@ class ProblemAnalyzer:
         Returns:
             Localized prediction string
         """
+        # Return stable if predictions are disabled
+        if not self.config.prediction_enabled:
+            return t("prediction_stable")
+
         if current_problem_type and current_problem_type != t("problem_none"):
             return t("prediction_risk")
 
@@ -2435,8 +3042,10 @@ class ProblemAnalyzer:
         # Get anomalies
         anomalies = self.deep_analyzer.detect_anomalies(snapshot_dict)
 
-        # Get predictions
-        predictions = self.predictive_engine.predict_problems(snapshot_dict, anomalies)
+        # Get predictions without storing (read-only query)
+        predictions = self.predictive_engine.predict_problems(
+            snapshot_dict, anomalies, store_predictions=False
+        )
 
         if not predictions:
             return t("prediction_stable")
@@ -2454,7 +3063,11 @@ class ProblemAnalyzer:
         return t("prediction_stable")
 
     def get_predictions(self) -> List[PredictionResult]:
-        """Get current predictions."""
+        """Get current predictions (read-only, does not modify prediction history)."""
+        # Return empty list if predictions are disabled
+        if not self.config.prediction_enabled:
+            return []
+
         if self._stats_repo is None:
             return []
 
@@ -2462,7 +3075,10 @@ class ProblemAnalyzer:
         snapshot_dict = self._convert_snapshot(snapshot)
         anomalies = self.deep_analyzer.detect_anomalies(snapshot_dict)
 
-        return self.predictive_engine.predict_problems(snapshot_dict, anomalies)
+        # Get predictions without storing (read-only query)
+        return self.predictive_engine.predict_problems(
+            snapshot_dict, anomalies, store_predictions=False
+        )
 
     # =========================================================================
     # Pattern Analysis
@@ -2602,6 +3218,13 @@ class ProblemAnalyzer:
         # Get statistics
         stats = self.experience_store.get_statistics()
 
+        with self._lock:
+            current_problem = (
+                self._current_problem.to_dict()
+                if self._current_problem and not self._current_problem.resolved
+                else None
+            )
+
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "anomalies": [a.to_dict() for a in anomalies],
@@ -2609,7 +3232,7 @@ class ProblemAnalyzer:
             "patterns": patterns,
             "predictions": [p.to_dict() for p in predictions],
             "experience_stats": stats,
-            "current_problem": self._current_problem.to_dict() if self._current_problem else None,
+            "current_problem": current_problem,
         }
 
     # =========================================================================
@@ -2618,7 +3241,9 @@ class ProblemAnalyzer:
 
     def configure_threshold(self, metric_name: str, config: ThresholdConfig) -> None:
         """Configure threshold for a metric."""
-        self.config.add_threshold(config)
+        normalized_config = copy.deepcopy(config)
+        normalized_config.metric_name = metric_name
+        self.config.add_threshold(normalized_config)
 
     def configure_rule(self, rule: AnalysisRule) -> None:
         """Add or update an analysis rule."""
@@ -2676,6 +3301,8 @@ class ProblemAnalyzer:
                     record.resolution_method = solution_id
                     record.effectiveness_feedback = effectiveness
                     self.experience_store.record_experience(record)
+                    if resolved and self._current_problem and self._current_problem.record_id == record_id:
+                        self._current_problem = None
                     logging.info(f"Solution feedback recorded: {solution_id} = {effectiveness}")
                     break
 

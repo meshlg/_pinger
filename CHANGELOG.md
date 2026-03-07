@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4.0134]
+
+### Fixed
+
+- **Stabilized experience storage for problem analysis** in [`problem_analyzer.py`](problem_analyzer.py):
+  - [`ExperienceStore.record_experience()`](problem_analyzer.py:498) now stores a deep-copied snapshot and updates an existing incident by `record_id` instead of appending duplicate mutable references.
+  - Added [`ExperienceStore._rebuild_indexes()`](problem_analyzer.py:512) so pattern counts and solution outcome statistics are recomputed from the canonical stored records after updates.
+  - [`ExperienceStore.get_similar_problems()`](problem_analyzer.py:532) now returns deep copies, preventing callers from mutating historical records in-place.
+  - Prevents duplicated incident counting when the same record is first created, then auto-resolved, and later updated via solution feedback.
+
+- **Fixed stale current-problem lifecycle handling** in [`problem_analyzer.py`](problem_analyzer.py):
+  - [`ProblemAnalyzer.analyze_current_problem()`](problem_analyzer.py:2204) now closes the previous active incident before promoting a newly detected one to [`ProblemAnalyzer._current_problem`](problem_analyzer.py:2191).
+  - Added [`ProblemAnalyzer._resolve_current_problem_locked()`](problem_analyzer.py:2378) to centralize active-incident resolution, persist the final state, and clear the in-memory pointer.
+  - [`ProblemAnalyzer._record_no_problem()`](problem_analyzer.py:2390) now clears the current incident after resolving it, preventing stale data from lingering between clean analysis cycles.
+  - [`ProblemAnalyzer.get_detailed_analysis()`](problem_analyzer.py:2614) now suppresses resolved incidents from the `current_problem` field, and [`ProblemAnalyzer.record_solution_feedback()`](problem_analyzer.py:2690) clears the active pointer when feedback resolves the tracked incident.
+
+- **Made configured thresholds and custom analysis rules effective** in [`problem_analyzer.py`](problem_analyzer.py):
+  - Added [`AnalysisConfig.get_threshold()`](problem_analyzer.py:457), [`AnalysisConfig.is_threshold_breached()`](problem_analyzer.py:461), and [`AnalysisConfig.get_matching_rules()`](problem_analyzer.py:486) so runtime configuration now participates directly in analysis decisions.
+  - [`DeepAnalysisEngine.detect_anomalies()`](problem_analyzer.py:726) now uses configured warning/critical thresholds and adaptive baseline logic instead of relying only on sigma deviation after baseline warmup.
+  - [`CausalAnalysisEngine._check_latency()`](problem_analyzer.py:1181), [`ClassificationEngine._determine_type()`](problem_analyzer.py:1326), [`ProblemAnalyzer._has_problem()`](problem_analyzer.py:2495), and [`ProblemAnalyzer._determine_preliminary_type()`](problem_analyzer.py:2564) now honor configured threshold values rather than hard-coded global constants.
+  - [`ClassificationEngine.classify_problem()`](problem_analyzer.py:1282) and [`ProblemAnalyzer._has_problem()`](problem_analyzer.py:2495) now apply enabled custom [`AnalysisRule`](problem_analyzer.py:368) instances.
+  - [`ProblemAnalyzer.configure_threshold()`](problem_analyzer.py:2810) now normalizes [`ThresholdConfig.metric_name`](problem_analyzer.py:388) to the explicit method argument, removing the misleading unused parameter behavior.
+
+- **Removed unsafe packet-loss fallback for preliminary causal typing** in [`problem_analyzer.py`](problem_analyzer.py):
+  - [`ProblemAnalyzer.analyze_current_problem()`](problem_analyzer.py:2408) now passes anomalies into [`ProblemAnalyzer._determine_preliminary_type()`](problem_analyzer.py:2564) so preliminary typing can use the same observed signal set as the rest of the pipeline.
+  - Added [`ProblemAnalyzer._anomaly_to_problem_type()`](problem_analyzer.py:2554) to map strong anomalies to a safe preliminary type when no threshold- or state-based condition matches.
+  - [`ProblemAnalyzer._determine_preliminary_type()`](problem_analyzer.py:2564) now falls back to the strongest mapped anomaly, and returns [`ProblemType.UNKNOWN`](problem_analyzer.py:83) when no evidence points to a concrete family, instead of incorrectly forcing [`ProblemType.PACKET_LOSS`](problem_analyzer.py:64).
+
 ## [2.5.3.0109]
 
 ### Added
