@@ -26,36 +26,45 @@ def render_toast(snap: StatsSnapshot, width: int) -> Panel | None:
 
     alerts = snap["active_alerts"]
 
-    # Map alert types to visual styles
+    # Map alert types to visual styles and priority order
     type_styles = {
         "critical": {
             "icon": "⚠",
             "bg": RED,
             "fg": WHITE,
             "prefix": "║ CRITICAL ║",
+            "priority": 0,
         },
         "warning": {
             "icon": "⚡",
             "bg": YELLOW,
             "fg": BG,
             "prefix": "│",
+            "priority": 1,
         },
         "info": {
             "icon": "●",
             "bg": ACCENT,
             "fg": BG,
             "prefix": "│",
+            "priority": 2,
         },
         "success": {
             "icon": "✓",
             "bg": GREEN,
             "fg": BG,
             "prefix": "│",
+            "priority": 3,
         },
     }
 
-    # Get primary alert style
-    primary = alerts[0]
+    # Sort alerts by priority (critical first)
+    def get_priority(alert: dict) -> int:
+        alert_type = alert.get("type", "info")
+        return type_styles.get(alert_type, type_styles["info"])["priority"]
+
+    sorted_alerts = sorted(alerts, key=get_priority)
+    primary = sorted_alerts[0]
     style = type_styles.get(primary["type"], type_styles["info"])
 
     # Build toast content

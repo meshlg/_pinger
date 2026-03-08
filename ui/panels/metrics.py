@@ -53,32 +53,32 @@ def render_metrics_panel(
     cur_txt = (
         f"[bold {WHITE}]{current}[/bold {WHITE}] {t('ms')}"
         if current != t("na")
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     best = (
         f"[{GREEN}]{snap['min_latency']:.1f}[/{GREEN}]"
         if snap["min_latency"] != float("inf")
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     peak = (
         f"[{RED}]{snap['max_latency']:.1f}[/{RED}]"
         if snap["max_latency"] > 0
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     med_txt = (
         f"[{WHITE}]{med:.1f}[/{WHITE}]"
         if latencies
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     avg_txt = (
         f"[{YELLOW}]{avg:.1f}[/{YELLOW}]"
         if snap["success"] > 0
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     p95_txt = (
         f"[{WHITE}]{p95:.1f}[/{WHITE}]"
         if latencies
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
 
     if snap["threshold_states"].get("high_avg_latency") and snap["success"]:
@@ -87,15 +87,14 @@ def render_metrics_panel(
     jit_txt = (
         f"[{WHITE}]{jit:.1f}[/{WHITE}]"
         if jit > 0
-        else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     )
     if snap["threshold_states"].get("high_jitter"):
         jit_txt = f"[bold {RED}]{jit:.1f} (!)[/bold {RED}]"
 
     inner_w = max(20, width - 4)
     items: list[Table | Text] = []
-
-    # ── Latency section ──
+    # Latency section
     items.append(section_header(t("lat"), inner_w))
 
     if tier == "compact":
@@ -123,10 +122,10 @@ def render_metrics_panel(
     # Sparklines: single-row for standard/wide, compact for compact, hidden for minimal
     if h_tier in ("short", "standard", "full") and tier != "compact":
         # Calculate available width for the sparkline characters:
-        # subtract panel padding (4), indent (2), label, arrow " ›" and gap (2)
+        # subtract panel padding (4), indent (2), label, arrow and gap (2)
         lat_label = t("latency_chart")
         jit_label = t("jitter")
-        label_overhead = len(lat_label) + 5  # "  label ›  "
+        label_overhead = len(lat_label) + 5  # "  label >  "
         spark_w = max(10, width - 4 - label_overhead)
 
         items.append(Text(""))
@@ -134,12 +133,12 @@ def render_metrics_panel(
         # Single-row latency sparkline
         if latencies:
             items.append(Text.from_markup(
-                f"  [{TEXT_DIM}]{lat_label} ›[/{TEXT_DIM}] "
+                f"  [{TEXT_DIM}]{lat_label} >[/{TEXT_DIM}] "
                 f"{sparkline(list(latencies), width=spark_w)}"
             ))
         else:
             items.append(Text.from_markup(
-                f"  [{TEXT_DIM}]{lat_label} ›[/{TEXT_DIM}] [{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
+                f"  [{TEXT_DIM}]{lat_label} >[/{TEXT_DIM}] [{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
             ))
 
         # Single-row jitter sparkline
@@ -147,23 +146,22 @@ def render_metrics_panel(
         jit_spark_w = max(10, width - 4 - jit_overhead)
         if jitter_hist:
             items.append(Text.from_markup(
-                f"  [{TEXT_DIM}]{jit_label} ›[/{TEXT_DIM}] "
+                f"  [{TEXT_DIM}]{jit_label} >[/{TEXT_DIM}] "
                 f"{sparkline(list(jitter_hist), width=jit_spark_w)}"
             ))
         else:
             items.append(Text.from_markup(
-                f"  [{TEXT_DIM}]{jit_label} ›[/{TEXT_DIM}] [{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
+                f"  [{TEXT_DIM}]{jit_label} >[/{TEXT_DIM}] [{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
             ))
     elif tier == "compact" and h_tier in ("short", "standard", "full"):
-        # Compact sparklines on one line: "L:▁▂▃ J:▁▂"
+        # Compact sparklines on one line
         spark_w = max(8, (width - 16) // 2)
-        lat_sp = sparkline(list(latencies), width=spark_w) if latencies else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
-        jit_sp = sparkline(list(jitter_hist), width=spark_w) if jitter_hist else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
+        lat_sp = sparkline(list(latencies), width=spark_w) if latencies else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
+        jit_sp = sparkline(list(jitter_hist), width=spark_w) if jitter_hist else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
         items.append(Text.from_markup(
             f"  [{TEXT_DIM}]L:[/{TEXT_DIM}]{lat_sp} [{TEXT_DIM}]J:[/{TEXT_DIM}]{jit_sp}"
         ))
-
-    # ── Stats section ──
+    # Stats section
     items.append(section_header(t("stats"), inner_w))
     success_rate = (snap["success"] / snap["total"] * 100) if snap["total"] else 0.0
     loss_total = (snap["failure"] / snap["total"] * 100) if snap["total"] else 0.0
@@ -222,8 +220,8 @@ def render_metrics_panel(
 
     items.append(Text(""))
     items.append(Text.from_markup(
-        f"  [{TEXT_DIM}]{t('consecutive')}:[/{TEXT_DIM}] {cons_txt}"
-        f"    [{TEXT_DIM}]{t('max_label')}:[/{TEXT_DIM}] {max_cons_txt}"
+        f" [{TEXT_DIM}]{t('consecutive')}:[/{TEXT_DIM}] {cons_txt}"
+        f" [{TEXT_DIM}]{t('max_label')}:[/{TEXT_DIM}] {max_cons_txt}"
     ))
 
     return Panel(

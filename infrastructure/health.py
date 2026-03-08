@@ -75,7 +75,31 @@ class RateLimiter:
         """Remove entries older than the window."""
         cutoff = time.time() - window_seconds
         return [ts for ts in entries if ts > cutoff]
-    
+
+    def _drop_ip_state(self, ip: str) -> None:
+        """Remove all tracking state for a specific IP."""
+        self._requests.pop(ip, None)
+        self._failed_auth.pop(ip, None)
+        self._blocked.pop(ip, None)
+
+    def _enforce_capacity(self, incoming_ip: str) -> None:
+        """Bound memory usage by capping tracked IP entries."""
+        if incoming_ip in self._requests or len(self._requests) < self._max_tracked_ips:
+            return
+
+        # Try regular stale cleanup first before evicting active entries.
+        self._maybe_purge_stale_ips()
+        if len(self._requests) < self._max_tracked_ips:
+            return
+
+        # Evict least-recently-seen IP to make room for new traffic.
+        oldest_ip = min(
+            self._requests.items(),
+            key=lambda item: item[1][-1] if item[1] else 0.0,
+        )[0]
+        self._drop_ip_state(oldest_ip)
+        logging.debug(f"RateLimiter evicted IP state due to capacity limit: {oldest_ip}")
+
     def _maybe_purge_stale_ips(self) -> None:
         """Periodically remove IPs with no recent activity to bound memory usage.
         
@@ -135,7 +159,8 @@ class RateLimiter:
                 remaining = int(self._blocked[ip] - now)
                 return False, f"IP blocked for {remaining}s due to too many failed auth attempts"
             
-            # Cleanup and count recent requests
+            # Bound tracked-IP memory and then count recent requests.
+            self._enforce_capacity(ip)
             self._requests[ip] = self._cleanup_old_entries(self._requests[ip], 60.0)
             self._requests[ip].append(now)
             
@@ -151,6 +176,7 @@ class RateLimiter:
         HEALTH_AUTH_FAILURES_TOTAL.inc()
         
         with self._lock:
+            self._enforce_capacity(ip)
             self._failed_auth[ip] = self._cleanup_old_entries(self._failed_auth[ip], 60.0)
             self._failed_auth[ip].append(now)
             

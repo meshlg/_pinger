@@ -5,6 +5,9 @@ import re
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Get project root directory (parent of config/ directory)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 class Settings(BaseSettings):
     """
     Application configuration settings using Pydantic Settings.
@@ -14,7 +17,7 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Version
     # ─────────────────────────────────────────────────────────────────────────────
-    VERSION: str = "2.5.4.0134"
+    VERSION: str = "2.5.4.1753"
 
     # ─────────────────────────────────────────────────────────────────────────────
     # Language Detection
@@ -246,8 +249,8 @@ class Settings(BaseSettings):
     # ─────────────────────────────────────────────────────────────────────────────
     # Logging
     # ─────────────────────────────────────────────────────────────────────────────
-    LOG_DIR: str = Field(default=os.path.expanduser("~/.pinger"))
-    LOG_FILE: str = Field(default_factory=lambda: os.path.join(os.path.expanduser("~/.pinger"), "ping_monitor.log"))
+    LOG_DIR: str = Field(default=_PROJECT_ROOT)
+    LOG_FILE: str = Field(default_factory=lambda: os.path.join(_PROJECT_ROOT, "ping_monitor.log"))
     LOG_LEVEL: str = "INFO"
     LOG_TRUNCATE_ON_START: bool = True
 

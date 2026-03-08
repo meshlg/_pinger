@@ -40,10 +40,7 @@ class RouteAnalyzerTask(BackgroundTask):
         self.traceroute_service = traceroute_service
 
     async def execute(self) -> None:
-        traceroute_output = await self.run_blocking(
-            self.traceroute_service.run_traceroute,
-            TARGET_IP,
-        )
+        traceroute_output = await self.traceroute_service.run_traceroute_async(TARGET_IP)
 
         hops = self.route_analyzer.parse_traceroute_output(traceroute_output)
         analysis = self.route_analyzer.analyze_route(hops)

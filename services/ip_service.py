@@ -189,9 +189,9 @@ class IPService:
 
                 # Try HTTP fallback when HTTPS is blocked / unavailable.
                 if http_url:
-                    logging.warning(
+                    logging.info(
                         f"HTTPS unreachable for {https_url}, falling back to HTTP. "
-                        f"Connection is NOT encrypted — use a VPN for full security."
+                        f"API endpoint does not support HTTPS."
                     )
                     start_time = time.perf_counter()
                     try:

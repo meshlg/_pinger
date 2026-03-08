@@ -285,9 +285,10 @@ class StatsRepository:
                 self._stats["dns_status"] = t("failed")
                 self._stats["dns_resolve_time"] = None
             else:
-                # Use average response time across all successful queries
-                avg_time = sum(r["response_time_ms"] for r in successful if r["response_time_ms"]) / len(successful)
-                self._stats["dns_resolve_time"] = avg_time
+                # Use average response time across successful queries that reported latency.
+                # This avoids skew/ZeroDivision when some successful records have no timing.
+                times = [r.get("response_time_ms") for r in successful if r.get("response_time_ms") is not None]
+                self._stats["dns_resolve_time"] = (sum(times) / len(times)) if times else None
                 # Status is ok only if all types succeeded
                 self._stats["dns_status"] = t("ok") if len(successful) == len(dns_results) else t("slow")
 

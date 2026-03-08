@@ -154,11 +154,11 @@ class GeoService:
 
         info = None
 
-        # Log warning about HTTP usage (once per session)
+        # Log info about HTTP usage (once per session)
         if not GeoService._WARNED_HTTP:
             logger.info(
                 "Using HTTP for ip-api.com geolocation (free tier). "
-                "Connection is NOT encrypted — use a VPN for enhanced security."
+                "API endpoint does not support HTTPS."
             )
             GeoService._WARNED_HTTP = True
 

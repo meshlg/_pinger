@@ -214,6 +214,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "dns_status_poor": "Плохо",
         "dns_status_critical": "Критично",
         "avg_short": "Средний",
+        # ── VPN status ──
+        "no_vpn": "без VPN",
     },
     "en": {
         # ── General ──
@@ -416,6 +418,8 @@ LANG: Dict[str, Dict[str, str]] = {
         "dns_status_poor": "Poor",
         "dns_status_critical": "Critical",
         "avg_short": "Average",
+        # ── VPN status ──
+        "no_vpn": "no VPN",
     },
 }
 

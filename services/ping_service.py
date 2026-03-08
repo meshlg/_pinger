@@ -50,12 +50,12 @@ class PingService:
                 cached = self._dns_cache.get(cache_key)
                 if cached and (time.time() - cached["timestamp"]) < 60.0:
                     return cached["is_ipv6"]
-            
+
             try:
                 loop = asyncio.get_running_loop()
                 # socket.getaddrinfo is blocking, run in executor
                 infos = await loop.run_in_executor(
-                    None, 
+                    None,
                     lambda: socket.getaddrinfo(host, None)
                 )
                 is_ipv6 = any(info[0] == socket.AF_INET6 for info in infos)
@@ -74,7 +74,7 @@ class PingService:
             if pythonping_ping is None:
                 return False, None
             resp = pythonping_ping(host, count=1, timeout=1)
-            
+
             # Try to extract latency from response
             for attr in ("rtt_avg_ms", "rtt_avg", "avg_rtt", "rtt_ms", "rtt"):
                 if hasattr(resp, attr):
@@ -82,13 +82,13 @@ class PingService:
                         return True, float(getattr(resp, attr))
                     except Exception:
                         continue
-            
+
             # Try iterating response
             try:
                 iterator = iter(resp)
             except TypeError:
                 iterator = None
-            
+
             if iterator is not None:
                 for item in resp:
                     for attr in ("time_elapsed_ms", "time_elapsed", "rtt_ms", "rtt"):
@@ -103,7 +103,7 @@ class PingService:
                     match = re.search(r"time[=<]?\s*([0-9]+[.,]?[0-9]*)", str(item), re.IGNORECASE)
                     if match:
                         return True, float(match.group(1).replace(",", "."))
-            
+
             # Try parsing string representation
             match_resp = re.search(
                 r"time[=<]?\s*([0-9]+[.,]?[0-9]*)",
@@ -112,7 +112,7 @@ class PingService:
             )
             if match_resp:
                 return True, float(match_resp.group(1).replace(",", "."))
-            
+
             logging.warning("pythonping produced no latency info")
             return False, None
         except Exception as exc:
@@ -124,19 +124,19 @@ class PingService:
         ping_cmd = shutil.which("ping")
         if not ping_cmd:
             return None
-            
+
         # Security check: prevent argument injection
         if host.strip().startswith("-"):
             logging.error(f"Security: Invalid host '{host}' (starts with hyphen)")
             return None
-        
+
         # We assume is_ipv6 is passed or we default to False if unknown in async context
         # (calling sync _detect_ipv6 here would block)
         if is_ipv6 is None:
-             # Safety fallback - assume IPv4 if not provided, 
+             # Safety fallback - assume IPv4 if not provided,
              # preventing blocking call. Caller should resolve first.
              is_ipv6 = False
-        
+
         if sys.platform == "win32":
             cmd = [ping_cmd, "-n", "1", "-w", "1000", host]
             encoding = "oem"
@@ -146,12 +146,12 @@ class PingService:
             else:
                 cmd = [ping_cmd, "-c", "1", host]
             encoding = "utf-8"
-        
+
         # Use creationflags on Windows to prevent orphan processes
         kwargs: dict[str, Any] = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-            
+
         return cmd, encoding, kwargs
 
     # _run_ping_command (sync) removed.
@@ -163,9 +163,9 @@ class PingService:
 
         built = self._build_ping_command(host, is_ipv6)
         if not built:
-            return None
+            return None, None
         cmd, encoding, kwargs = built
-        
+
         try:
             # timeout=2.0 seconds matches synchronous timeout
             stdout, _, returncode = await self.process_manager.run_command(
@@ -186,17 +186,17 @@ class PingService:
         """Ping a host asynchronously and return (success, latency_ms)."""
         # Basic check for ping availability
         if not self._check_ping_available():
-            # todo: implement pythonping async fallback? for now just return failure or use sync fallback in executor?
-            # pythonping is blocking. simpler to fail or wrap it.
-            # For now, let's assume system ping is available as PER REQUIREMENTS.
-            return False, None
+            if not PYTHONPING_AVAILABLE:
+                return False, None
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, lambda: self._ping_with_pythonping(host))
 
         is_ipv6 = await self._detect_ipv6_async(host)
-        
+
         stdout, returncode = await self._run_ping_command_async(host, is_ipv6)
         if stdout is None:
             return False, None
-            
+
         return self._parse_ping_output(stdout, returncode)
 
     def _parse_ping_output(self, stdout: str, returncode: int | None = 0) -> Tuple[bool, Optional[float]]:
@@ -227,10 +227,10 @@ class PingService:
         )
         if match_time:
             return True, float(match_time.group(1).replace(",", "."))
-        
+
         if re.search(r"time\s*<\s*1\s*(?:ms|мс)?", stdout, re.IGNORECASE):
             return True, 0.5
-        
+
         match_avg = re.search(
             r"(?:Average|Среднее)\s*[=:]?\s*([0-9]+)[.,]?[0-9]*\s*(?:ms|мс)?",
             stdout,
@@ -238,7 +238,7 @@ class PingService:
         )
         if match_avg:
             return True, float(match_avg.group(1))
-        
+
         # If we got output but couldn't parse latency, treat as failure
         # to avoid false-positive success with zero latency.
         if stdout.strip():
@@ -249,17 +249,17 @@ class PingService:
     async def extract_ttl_async(self, host: str) -> tuple[int | None, int | None]:
         """
         Extract TTL from ping response and estimate hop count asynchronously.
-        
+
         Args:
             host: Target host to ping
-            
+
         Returns:
             Tuple of (ttl, estimated_hops) or (None, None) on error
         """
         stdout, _ = await self._run_ping_command_async(host)
         if stdout is None:
             return None, None
-        
+
         ttl_match = re.search(r"TTL[=:\s]+(\d+)", stdout, re.IGNORECASE)
         if ttl_match:
             ttl = int(ttl_match.group(1))

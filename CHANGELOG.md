@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4.1753]
+
+### Fixed
+
+- **Fixed toast notification color not reflecting alert severity** in [`ui/panels/toast.py`](ui/panels/toast.py):
+  - Added priority-based sorting for alert types: critical (0) > warning (1) > info (2) > success (3).
+  - Toast now displays the highest-priority alert first, ensuring the panel color matches the most severe active alert.
+  - Previously, the first alert in the list was used regardless of severity, often resulting in yellow (warning) styling even when critical alerts were present.
+
+### Changed
+
+- **Changed log file directory to project root** in [`config/settings_model.py`](config/settings_model.py):
+  - `LOG_DIR` and `LOG_FILE` now default to the project root directory instead of `~/.pinger`.
+  - Logs are now written to `ping_monitor.log` in the same directory as the main application files.
+
+- **Clarified HTTP usage log messages** in [`services/geo_service.py`](services/geo_service.py) and [`services/ip_service.py`](services/ip_service.py):
+  - Changed misleading "use a VPN" recommendation to accurate "API endpoint does not support HTTPS".
+  - Changed log level from WARNING to INFO for HTTP fallback messages.
+
+### Added
+
+- **Added VPN detection service** in [`services/vpn_detector.py`](services/vpn_detector.py):
+  - Cross-platform VPN connection detection using multiple methods:
+    - Network interface analysis (TUN/TAP/WireGuard/ppp detection)
+    - Windows-specific VPN adapter pattern matching
+    - Routing table analysis for VPN interfaces
+    - VPN process detection (OpenVPN, WireGuard, NordVPN, etc.)
+  - Returns `VPNStatus` dataclass with connection details:
+    - `is_connected`: boolean status
+    - `interface_name`: detected VPN interface (if any)
+    - `detection_method`: method used for detection
+    - `confidence`: detection confidence (0.0-1.0)
+  - Simple API: `is_vpn_connected()` and `get_vpn_status()` functions.
+
+- **Added VPN status indicator to UI** in [`ui/panels/metrics.py`](ui/panels/metrics.py):
+  - Displays 🔒 VPN when connected, 🔓 без VPN when not connected.
+  - Shown in the "ЗАДЕРЖКА & СТАТИСТИКА" panel after consecutive losses.
+  - Added translations for VPN status in [`config/i18n.py`](config/i18n.py).
+
 ## [2.5.4.0134]
 
 ### Fixed
