@@ -10,18 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from ui.theme import (
-    ACCENT,
-    ACCENT_DIM,
-    BG,
-    GREEN,
-    HeightTier,
-    LayoutTier,
-    RED,
-    TEXT_DIM,
-    WHITE,
-    YELLOW,
-)
+from ui.theme import ACCENT, ACCENT_DIM, BG, GREEN, HeightTier, LayoutTier, RED, TEXT_DIM, WHITE, YELLOW
 from ui.helpers import lat_color, render_trend_arrow, sparkline
 
 try:
@@ -33,67 +22,38 @@ if TYPE_CHECKING:
     from stats_repository import StatsSnapshot
 
 
-def render_hop_panel(
-    snap: StatsSnapshot, width: int, tier: LayoutTier, h_tier: HeightTier
-) -> Panel:
+DOT = "\u25cf"
+SEPARATOR = "\u2502"
+
+
+def _fmt_latency(value: Any) -> str:
+    if value is None:
+        return f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
+    color = lat_color(float(value))
+    return f"[{color}]{float(value):.0f}[/{color}]"
+
+
+def render_hop_panel(snap: StatsSnapshot, width: int, tier: LayoutTier, h_tier: HeightTier) -> Panel:
     """Render the hop health table panel."""
     connection_lost = bool(snap.get("threshold_states", {}).get("connection_lost", False))
     hops = snap.get("hop_monitor_hops", [])
     discovering = snap.get("hop_monitor_discovering", False)
-    panel_style = f"on {BG}"
-    title = f"[bold {WHITE}]{t('hop_health')}[/bold {WHITE}]"
-    border = ACCENT_DIM
 
     if connection_lost:
-        return Panel(
-            Text.from_markup(f"  [{RED}]{t('status_disconnected')}[/{RED}]"),
-            title=title, title_align="left", border_style=border,
-            box=box.SIMPLE, width=width, style=f"on {BG}",
-            padding=(0, 1),
-        )
+        body = Text.from_markup(f"  [{RED}]{t('status_disconnected')}[/{RED}]")
+        return Panel(body, title=f"[bold {ACCENT}]{t('hop_health')}[/bold {ACCENT}]", title_align="left", border_style=ACCENT_DIM, box=box.ROUNDED, width=width, style=f"on {BG}", padding=(0, 1))
 
     if discovering and not hops:
-        return Panel(
-            Text.from_markup(f"  [{TEXT_DIM}]{t('hop_discovering')}[/{TEXT_DIM}]"),
-            title=title, title_align="left", border_style=border,
-            box=box.SIMPLE, width=width, style=f"on {BG}",
-            padding=(0, 1),
-        )
-    if not hops:
-        return Panel(
-            Text.from_markup(f"  [{TEXT_DIM}]{t('hop_none')}[/{TEXT_DIM}]"),
-            title=title, title_align="left", border_style=border,
-            box=box.SIMPLE, width=width, style=f"on {BG}",
-            padding=(0, 1),
-        )
+        body = Text.from_markup(f"  [{TEXT_DIM}]{t('hop_discovering')}[/{TEXT_DIM}]")
+        return Panel(body, title=f"[bold {ACCENT}]{t('hop_health')}[/bold {ACCENT}]", title_align="left", border_style=ACCENT_DIM, box=box.ROUNDED, width=width, style=f"on {BG}", padding=(0, 1))
 
-    # Adaptive columns based on width tier
+    if not hops:
+        body = Text.from_markup(f"  [{TEXT_DIM}]{t('hop_none')}[/{TEXT_DIM}]")
+        return Panel(body, title=f"[bold {ACCENT}]{t('hop_health')}[/bold {ACCENT}]", title_align="left", border_style=ACCENT_DIM, box=box.ROUNDED, width=width, style=f"on {BG}", padding=(0, 1))
+
     show_extended = tier != "compact"
     show_geo = tier == "wide"
 
-    tbl = Table(
-        show_header=True, header_style=f"bold {TEXT_DIM}",
-        box=box.SIMPLE_HEAD, padding=(0, 1), expand=True,
-        border_style=ACCENT_DIM,
-    )
-    tbl.add_column(t("hop_col_num"), style=TEXT_DIM, width=3, justify="right", no_wrap=True)
-    tbl.add_column("", width=1, justify="center", no_wrap=True)
-    if show_extended:
-        tbl.add_column(t("hop_col_min"), width=6, justify="right", no_wrap=True)
-    tbl.add_column(t("hop_col_avg"), width=6, justify="right", no_wrap=True)
-    tbl.add_column(t("hop_col_last"), width=6, justify="right", no_wrap=True)
-    if show_extended:
-        tbl.add_column(t("hop_col_delta"), width=7, justify="right", no_wrap=True)
-        tbl.add_column(t("hop_col_jitter"), width=8, justify="right", no_wrap=True)
-    tbl.add_column(t("hop_col_loss"), width=6, justify="right", no_wrap=True)
-    if show_extended:
-        tbl.add_column("⠿", width=8, justify="left", no_wrap=True)  # sparkline trend
-    if show_geo:
-        tbl.add_column(t("hop_col_asn"), width=28, justify="left", no_wrap=True, overflow="ellipsis")
-        tbl.add_column(t("hop_col_loc"), width=8, justify="left", no_wrap=True)
-    tbl.add_column(t("hop_col_host"), ratio=1, no_wrap=True, overflow="ellipsis")
-
-    # Limit hops based on height
     if h_tier == "minimal":
         max_hops = 5
     elif h_tier == "short":
@@ -102,122 +62,124 @@ def render_hop_panel(
         max_hops = len(hops)
     display_hops = hops[:max_hops]
 
+    table = Table(
+        show_header=True,
+        header_style=f"bold {WHITE}",
+        box=box.SIMPLE_HEAVY,
+        padding=(0, 1),
+        expand=True,
+        border_style=ACCENT_DIM,
+    )
+    table.add_column(t("hop_col_num"), style=TEXT_DIM, width=3, justify="right", no_wrap=True)
+    table.add_column("", width=1, justify="center", no_wrap=True)
+    if show_extended:
+        table.add_column(t("hop_col_min"), width=5, justify="right", no_wrap=True)
+    table.add_column(t("hop_col_avg"), width=5, justify="right", no_wrap=True)
+    table.add_column(t("hop_col_last"), width=5, justify="right", no_wrap=True)
+    if show_extended:
+        table.add_column(t("hop_col_delta"), width=6, justify="right", no_wrap=True)
+        table.add_column(t("hop_col_jitter"), width=6, justify="right", no_wrap=True)
+    table.add_column(t("hop_col_loss"), width=6, justify="right", no_wrap=True)
+    if show_extended:
+        table.add_column(t("ui_trend"), width=8, justify="left", no_wrap=True)
+    if show_geo:
+        table.add_column(t("hop_col_asn"), width=24, overflow="ellipsis", no_wrap=True)
+        table.add_column(t("hop_col_loc"), width=8, no_wrap=True)
+    table.add_column(t("hop_col_host"), ratio=1, overflow="ellipsis")
+
     worst_hop = None
-    worst_lat = 0.0
+    worst_value = 0.0
 
     for hop in display_hops:
-        hop_num = hop["hop"]
-        lat = hop.get("last_latency")
-        avg_h = hop.get("avg_latency", 0.0)
-        mn = hop.get("min_latency")
-        ok = hop.get("last_ok", True)
-        loss = hop.get("loss_pct", 0.0)
+        hop_num = hop.get("hop", "?")
+        last_latency = hop.get("last_latency")
+        avg_latency = hop.get("avg_latency")
+        min_latency = hop.get("min_latency")
+        loss_pct = float(hop.get("loss_pct", 0.0) or 0.0)
+        jitter = float(hop.get("jitter", 0.0) or 0.0)
+        delta = float(hop.get("latency_delta", 0.0) or 0.0)
+        ok = bool(hop.get("last_ok", True))
+        hostname = hop.get("hostname") or hop.get("ip", "?")
         ip = hop.get("ip", "?")
-        hostname = hop.get("hostname", ip)
-        jitter_h = hop.get("jitter", 0.0)
-        delta = hop.get("latency_delta", 0.0)
         country_code = hop.get("country_code", "")
         asn = hop.get("asn", "")
 
-        # Clean ASN
-        if asn:
-            asn_clean = asn
-            for suffix in [" Inc.", " LLC", " Ltd", " Limited", " Corporation", " Corp.", " AB", " AG", " BV"]:
-                asn_clean = asn_clean.replace(suffix, "").replace(suffix.upper(), "")
-            asn_display = asn_clean if asn_clean.upper().startswith("AS") else f"AS{asn_clean}"
-        else:
-            asn_display = ""
-
-        # Host text
-        host_txt = f"{hostname} [{TEXT_DIM}][{ip}][/{TEXT_DIM}]" if (hostname and hostname != ip) else ip
-
-        # Status dot
         if not ok:
-            dot = f"[{RED}]●[/{RED}]"
-        elif loss > 0:
-            dot = f"[{YELLOW}]●[/{YELLOW}]"
+            dot = f"[{RED}]{DOT}[/{RED}]"
+        elif loss_pct > 0:
+            dot = f"[{YELLOW}]{DOT}[/{YELLOW}]"
         else:
-            dot = f"[{GREEN}]●[/{GREEN}]"
+            dot = f"[{GREEN}]{DOT}[/{GREEN}]"
 
-        def _lf(val: Any) -> str:
-            if val is None:
-                return f"[{RED}]*[/{RED}]"
-            c = lat_color(val)
-            return f"[{c}]{val:.0f}[/{c}]"
-
-        last_txt = f"[{RED}]*[/{RED}]" if (not ok or lat is None) else _lf(lat)
-
-        # Loss text
-        if loss > 10:
-            loss_txt = f"[{RED}]{loss:.0f}![/{RED}]"
-        elif loss > 0:
-            loss_txt = f"[{YELLOW}]{loss:.0f}%[/{YELLOW}]"
+        if loss_pct >= 10:
+            loss_txt = f"[{RED}]{loss_pct:.0f}%[/{RED}]"
+        elif loss_pct > 0:
+            loss_txt = f"[{YELLOW}]{loss_pct:.0f}%[/{YELLOW}]"
         else:
-            loss_txt = f"[{GREEN}]{loss:.0f}%[/{GREEN}]"
+            loss_txt = f"[{GREEN}]{loss_pct:.0f}%[/{GREEN}]"
 
-        row_style = TEXT_DIM if (not ok and hop.get("total_pings", 0) > 2) else ""
-
+        host_txt = f"{hostname} [{TEXT_DIM}]{ip}[/{TEXT_DIM}]" if hostname != ip else ip
         row: list[str] = [str(hop_num), dot]
+
         if show_extended:
-            row.append(_lf(mn))
-        row.extend([_lf(avg_h if avg_h > 0 else None), last_txt])
+            row.append(_fmt_latency(min_latency))
+        row.append(_fmt_latency(avg_latency))
+        row.append(_fmt_latency(last_latency if ok else None))
+
         if show_extended:
-            trend = render_trend_arrow(delta)
+            arrow = render_trend_arrow(delta)
             if delta > 0:
-                d_txt = f"[{YELLOW}]{trend}+{delta:.0f}[/{YELLOW}]"
+                delta_txt = f"[{YELLOW}]{arrow}+{delta:.0f}[/{YELLOW}]"
             elif delta < 0:
-                d_txt = f"[{GREEN}]{trend}{delta:.0f}[/{GREEN}]"
+                delta_txt = f"[{GREEN}]{arrow}{delta:.0f}[/{GREEN}]"
             else:
-                d_txt = f"[{TEXT_DIM}]{trend}—[/{TEXT_DIM}]"
-            j_txt = f"[{TEXT_DIM}]{jitter_h:.0f}[/{TEXT_DIM}]" if jitter_h > 0 else f"[{TEXT_DIM}]—[/{TEXT_DIM}]"
-            row.extend([d_txt, j_txt])
+                delta_txt = f"[{TEXT_DIM}]{arrow}0[/{TEXT_DIM}]"
+            jitter_txt = f"[{TEXT_DIM}]{jitter:.0f}[/{TEXT_DIM}]" if jitter > 0 else f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
+            row.extend([delta_txt, jitter_txt])
+
         row.append(loss_txt)
+
         if show_extended:
-            # Mini sparkline from latency history
-            lat_hist = hop.get("latency_history", [])
-            if lat_hist and len(lat_hist) >= 2:
-                # Take last 8 samples for compact sparkline
-                samples = [float(v) for v in lat_hist[-8:] if v is not None]
-                if samples:
-                    sl_color = lat_color(avg_h if avg_h > 0 else (lat or 0))
-                    row.append(f"[{sl_color}]{sparkline(samples, 8)}[/{sl_color}]")
-                else:
-                    row.append(f"[{TEXT_DIM}]·[/{TEXT_DIM}]")
-            else:
-                row.append(f"[{TEXT_DIM}]·[/{TEXT_DIM}]")
+            history = [float(v) for v in hop.get("latency_history", [])[-8:] if v is not None]
+            row.append(sparkline(history, 8) if len(history) >= 2 else f"[{TEXT_DIM}]-[/{TEXT_DIM}]")
+
         if show_geo:
-            row.append(f"[{TEXT_DIM}]{asn_display}[/{TEXT_DIM}]")
+            row.append(f"[{TEXT_DIM}]{asn}[/{TEXT_DIM}]" if asn else "")
             row.append(f"[{TEXT_DIM}]{country_code}[/{TEXT_DIM}]" if country_code else "")
+
         row.append(host_txt)
-        tbl.add_row(*row, style=row_style)
+        table.add_row(*row)
 
         if not ok:
             worst_hop = hop
-            worst_lat = float("inf")
-        elif lat is not None and lat > worst_lat:
-            worst_lat = lat
+            worst_value = float("inf")
+        elif last_latency is not None and float(last_latency) > worst_value:
             worst_hop = hop
+            worst_value = float(last_latency)
 
-    items: list[Table | Text] = [tbl]
+    items: list[Table | Text] = [table]
 
     if len(hops) > max_hops:
-        more_txt = t("more_hops").format(count=len(hops) - max_hops)
-        items.append(Text.from_markup(f"  [{TEXT_DIM}]+{more_txt}[/{TEXT_DIM}]"))
+        items.append(Text.from_markup(f"  [{TEXT_DIM}]+{t('more_hops').format(count=len(hops) - max_hops)}[/{TEXT_DIM}]"))
 
-    if worst_hop and worst_lat > HOP_LATENCY_GOOD:
-        w_ip = worst_hop.get("ip", "?")
-        w_num = worst_hop.get("hop", "?")
-        if worst_lat == float("inf"):
-            items.append(Text.from_markup(f"  [{RED}]{t('hop_worst')}: #{w_num} {w_ip} — {t('hop_down')}[/{RED}]"))
+    if worst_hop and worst_value > HOP_LATENCY_GOOD:
+        hop_no = worst_hop.get("hop", "?")
+        hop_ip = worst_hop.get("ip", "?")
+        if worst_value == float("inf"):
+            items.append(Text.from_markup(f"  [{RED}]{t('hop_worst')}: #{hop_no} {hop_ip} {t('hop_down')}[/{RED}]"))
         else:
-            items.append(Text.from_markup(f"  [{YELLOW}]{t('hop_worst')}: #{w_num} {w_ip} — {worst_lat:.0f} {t('ms')}[/{YELLOW}]"))
+            items.append(Text.from_markup(f"  [{YELLOW}]{t('hop_worst')}: #{hop_no} {hop_ip} {worst_value:.0f} {t('ms')}[/{YELLOW}]"))
 
     if discovering:
-        items.append(Text.from_markup(f"  [{TEXT_DIM} italic]{t('hop_discovering')}[/{TEXT_DIM} italic]"))
+        items.append(Text.from_markup(f"  [{TEXT_DIM}]{t('hop_discovering')}[/{TEXT_DIM}]"))
 
     return Panel(
         Group(*items),
-        title=title, title_align="left", border_style=border,
-        box=box.SIMPLE, width=width, style=panel_style,
+        title=f"[bold {ACCENT}]{t('hop_health')}[/bold {ACCENT}]",
+        title_align="left",
+        border_style=ACCENT_DIM,
+        box=box.ROUNDED,
+        width=width,
+        style=f"on {BG}",
         padding=(0, 1),
     )

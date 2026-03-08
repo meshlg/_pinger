@@ -9,6 +9,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ui.theme import (
+    ACCENT,
     ACCENT_DIM,
     BAR_EMPTY,
     BAR_FULL,
@@ -24,32 +25,21 @@ from ui.theme import (
 )
 
 try:
-    from config import (
-        HOP_LATENCY_GOOD,
-        HOP_LATENCY_WARN,
-        ensure_utc,
-        t,
-    )
+    from config import HOP_LATENCY_GOOD, HOP_LATENCY_WARN, ensure_utc, t
 except ImportError:
-    from ..config import (  # type: ignore[no-redef]
-        HOP_LATENCY_GOOD,
-        HOP_LATENCY_WARN,
-        ensure_utc,
-        t,
-    )
+    from ..config import HOP_LATENCY_GOOD, HOP_LATENCY_WARN, ensure_utc, t  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from stats_repository import StatsSnapshot
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Utility
-# ═══════════════════════════════════════════════════════════════════════════════
+UP_ARROW = "\u2191"
+DOWN_ARROW = "\u2193"
+RIGHT_ARROW = "\u2192"
+ELLIPSIS = "\u2026"
+RULE = "\u2500"
+MID_DOT = "\u00b7"
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Formatting helpers
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def fmt_uptime(start_time: datetime | None) -> str:
     """Format duration since *start_time* as a human-readable string."""
@@ -102,13 +92,13 @@ def progress_bar(pct: float, width: int = 20, color: str = GREEN) -> str:
 
 
 def sparkline(values: list[float], width: int = 40) -> str:
-    """Render a colour-coded Unicode sparkline from *values*."""
+    """Render a color-coded Unicode sparkline from *values*."""
     if not values:
         return f"[{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
     data = values[-width:]
     if len(data) < 2:
         return f"[{TEXT_DIM}]{t('waiting')}[/{TEXT_DIM}]"
-    # removing zero values for more accurate scaling
+
     valid_data = [v for v in data if v > 0]
     if not valid_data:
         return f"[{TEXT_DIM}]{t('waiting')}[/{TEXT_DIM}]"
@@ -116,15 +106,15 @@ def sparkline(values: list[float], width: int = 40) -> str:
     mn, mx = min(valid_data), max(valid_data)
     rng = mx - mn if mx != mn else 1.0
     chars: list[str] = []
-    for i, v in enumerate(data):
-        if v == 0:
-            # for zero values, we use the lowest symbol
-            idx = 0
-        else:
-            idx = int((v - mn) / rng * (len(SPARK_CHARS) - 1))
-        idx = max(0, min(idx, len(SPARK_CHARS) - 1))
-        rel = (v - mn) / rng if v > 0 else 0
 
+    for idx, value in enumerate(data):
+        if value == 0:
+            spark_idx = 0
+        else:
+            spark_idx = int((value - mn) / rng * (len(SPARK_CHARS) - 1))
+        spark_idx = max(0, min(spark_idx, len(SPARK_CHARS) - 1))
+
+        rel = (value - mn) / rng if value > 0 else 0.0
         if rel < 0.4:
             color = GREEN
         elif rel < 0.7:
@@ -132,12 +122,9 @@ def sparkline(values: list[float], width: int = 40) -> str:
         else:
             color = RED
 
-        # Add a visual indicator to the very last bar
-        is_last = (i == len(data) - 1)
-        char = SPARK_CHARS[idx]
-
-        if is_last:
-            chars.append(f"[bold {color} reverse]{char}[/bold {color} reverse]")
+        char = SPARK_CHARS[spark_idx]
+        if idx == len(data) - 1:
+            chars.append(f"[bold {color}]{char}[/bold {color}]")
         else:
             chars.append(f"[{color}]{char}[/{color}]")
 
@@ -145,28 +132,22 @@ def sparkline(values: list[float], width: int = 40) -> str:
 
 
 def sparkline_mini(history: list[float]) -> str:
-    """Render mini chart from latency history using Unicode box characters."""
+    """Render a tiny, six-point history sparkline."""
     if not history or len(history) < 2:
         return ""
-    min_val, max_val = min(history), max(history)
-    range_val = max_val - min_val if max_val != min_val else 1
-    box_chars = " ▁▂▃▅▇"
-    result: list[str] = []
-    recent = history[-6:]
-    for val in recent:
-        idx = min(5, int((val - min_val) / range_val * 5))
-        result.append(box_chars[idx])
-    return "".join(result)
+    data = history[-6:]
+    mn, mx = min(data), max(data)
+    rng = mx - mn if mx != mn else 1.0
+    chars = " " + SPARK_CHARS[:5]
+    out: list[str] = []
+    for value in data:
+        spark_idx = min(5, int((value - mn) / rng * 5))
+        out.append(chars[spark_idx])
+    return "".join(out)
 
 
 def sparkline_double(values: list[float], width: int = 40) -> tuple[str, str]:
-    """Render a two-row sparkline with ~16 vertical levels.
-
-    Uses upper-half (▀), lower-half (▄), full (█) and space blocks to produce
-    two rows whose combined height gives finer granularity than a single row.
-
-    Returns (top_row, bottom_row) as Rich-markup strings.
-    """
+    """Render a two-row sparkline with extra vertical resolution."""
     if not values:
         empty = f"[{TEXT_DIM}]{t('no_data')}[/{TEXT_DIM}]"
         return (empty, "")
@@ -182,19 +163,14 @@ def sparkline_double(values: list[float], width: int = 40) -> tuple[str, str]:
 
     mn, mx = min(valid_data), max(valid_data)
     rng = mx - mn if mx != mn else 1.0
-
     top_chars: list[str] = []
-    bot_chars: list[str] = []
+    bottom_chars: list[str] = []
 
-    for i, v in enumerate(data):
-        # Normalise to 0..15 (16 levels across two rows of 8)
-        if v == 0:
-            level = 0
-        else:
-            level = int((v - mn) / rng * 15)
+    for idx, value in enumerate(data):
+        level = 0 if value == 0 else int((value - mn) / rng * 15)
         level = max(0, min(level, 15))
 
-        rel = (v - mn) / rng if v > 0 else 0
+        rel = (value - mn) / rng if value > 0 else 0.0
         if rel < 0.4:
             color = GREEN
         elif rel < 0.7:
@@ -202,40 +178,32 @@ def sparkline_double(values: list[float], width: int = 40) -> tuple[str, str]:
         else:
             color = RED
 
-        is_last = (i == len(data) - 1)
-        style_pre = f"bold {color} reverse" if is_last else color
-        style_suf = f"bold {color} reverse" if is_last else color
-
-        # Bottom row encodes levels 0-7; top row encodes levels 8-15
         if level <= 7:
-            bot_char = SPARK_CHARS[level]
-            top_char = " "
+            top = " "
+            bottom = SPARK_CHARS[level]
         else:
-            bot_char = SPARK_CHARS[7]  # full block in bottom
-            top_char = SPARK_CHARS[level - 8]
+            top = SPARK_CHARS[level - 8]
+            bottom = SPARK_CHARS[-1]
 
-        top_chars.append(f"[{style_pre}]{top_char}[/{style_suf}]")
-        bot_chars.append(f"[{style_pre}]{bot_char}[/{style_suf}]")
+        style = f"bold {color}" if idx == len(data) - 1 else color
+        top_chars.append(f"[{style}]{top}[/{style}]")
+        bottom_chars.append(f"[{style}]{bottom}[/{style}]")
 
-    return ("".join(top_chars), "".join(bot_chars))
+    return ("".join(top_chars), "".join(bottom_chars))
 
 
-def mini_gauge(value: float, max_val: float = 100.0, width: int = 10,
-               color: str = GREEN) -> str:
-    """Render a compact inline gauge: ◉ 97.2% ━━━━━━━━╌╌
-
-    *value* is displayed as-is and used to fill the bar proportionally.
-    """
+def mini_gauge(value: float, max_val: float = 100.0, width: int = 10, color: str = GREEN) -> str:
+    """Render a compact inline gauge."""
     pct = max(0.0, min(value / max_val, 1.0))
     filled = int(round(pct * width))
     empty = width - filled
 
     if pct >= 0.95:
-        icon = "◉"
-    elif pct >= 0.80:
-        icon = "◎"
+        icon = "\u25c9"
+    elif pct >= 0.8:
+        icon = "\u25ce"
     else:
-        icon = "◗"
+        icon = "\u25cc"
 
     bar = f"[{color}]{BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{BAR_EMPTY * empty}[/{ACCENT_DIM}]"
     return f"[{color}]{icon}[/{color}] [{color}]{value:.1f}%[/{color}] {bar}"
@@ -244,20 +212,16 @@ def mini_gauge(value: float, max_val: float = 100.0, width: int = 10,
 def dns_mini_bar(ms: float | None, max_ms: float = 200.0, width: int = 6) -> str:
     """Render a tiny horizontal bar for DNS response time."""
     if ms is None:
-        return f"[{TEXT_DIM}]{'░' * width}[/{TEXT_DIM}]"
+        return f"[{TEXT_DIM}]{BAR_EMPTY * width}[/{TEXT_DIM}]"
     pct = max(0.0, min(ms / max_ms, 1.0))
     filled = int(round(pct * width))
     empty = width - filled
     color = GREEN if ms < 50 else (YELLOW if ms < 150 else RED)
-    return f"[{color}]{'█' * filled}{'░' * empty}[/{color}]"
+    return f"[{color}]{BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{BAR_EMPTY * empty}[/{ACCENT_DIM}]"
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Table builders
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def kv_table(width: int, key_width: int = 14) -> Table:
-    """Create a two-column key/value Rich Table."""
+    """Create a two-column key/value Rich table."""
     tbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
     tbl.add_column("k", style=TEXT_DIM, width=key_width, no_wrap=True)
     tbl.add_column("v", width=max(10, width - key_width - 3), no_wrap=True)
@@ -265,7 +229,7 @@ def kv_table(width: int, key_width: int = 14) -> Table:
 
 
 def dual_kv_table(width: int) -> Table:
-    """Create a four-column dual key/value Rich Table."""
+    """Create a four-column dual key/value Rich table."""
     tbl = Table(show_header=False, box=None, padding=(0, 1), width=width)
     col_w = max(8, (width - 6) // 4)
     tbl.add_column("k1", style=TEXT_DIM, width=col_w, no_wrap=True)
@@ -276,33 +240,37 @@ def dual_kv_table(width: int) -> Table:
 
 
 def section_header(label: str, width: int) -> Text:
-    """Render a styled section-header line."""
-    line_len = max(0, width - len(label) - 7)
-    return Text.from_markup(f"  [{ACCENT_DIM}]── {label} {'─' * line_len}[/{ACCENT_DIM}]")
+    """Render a quiet premium section divider."""
+    text = Text()
+    text.append("  ")
+    text.append(label.upper(), style=f"bold {WHITE}")
+    remaining = max(0, width - len(label) - 5)
+    if remaining:
+        text.append(" ")
+        text.append(RULE * remaining, style=ACCENT_DIM)
+    return text
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Misc helpers
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def truncate(text: str, max_len: int) -> str:
     """Truncate text with ellipsis if it exceeds *max_len*."""
     if len(text) <= max_len:
         return text
-    return text[:max_len - 1] + "…"
+    if max_len <= 1:
+        return text[:max_len]
+    return text[: max_len - 1] + ELLIPSIS
 
 
 def render_trend_arrow(delta: float, threshold: float = 2.0) -> str:
-    """Render trend arrow based on delta value."""
+    """Render a trend arrow based on delta value."""
     if delta > threshold:
-        return "↑"
-    elif delta < -threshold:
-        return "↓"
-    return "→"
+        return UP_ARROW
+    if delta < -threshold:
+        return DOWN_ARROW
+    return RIGHT_ARROW
 
 
 def lat_color(val: float | None) -> str:
-    """Return a Rich colour string based on latency thresholds."""
+    """Return a color string based on latency thresholds."""
     if val is None:
         return RED
     if val > HOP_LATENCY_WARN:
@@ -313,7 +281,7 @@ def lat_color(val: float | None) -> str:
 
 
 def get_connection_state(snap: StatsSnapshot) -> tuple[str, str, str]:
-    """Return (label, color, icon) tuple describing current connection state."""
+    """Return ``(label, color, icon)`` for the current connection state."""
     if snap["threshold_states"]["connection_lost"]:
         return t("status_disconnected"), RED, DOT_WARN
     recent = snap["recent_results"]

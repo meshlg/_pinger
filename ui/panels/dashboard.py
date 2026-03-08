@@ -6,19 +6,11 @@ from typing import TYPE_CHECKING
 
 from rich import box
 from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
-from ui.theme import (
-    ACCENT_DIM,
-    BG,
-    CRITICAL_BG,
-    GREEN,
-    LayoutTier,
-    RED,
-    TEXT_DIM,
-    WHITE,
-    YELLOW,
-)
-from ui.helpers import fmt_uptime, get_connection_state, sparkline
+from ui.theme import ACCENT, ACCENT_DIM, BG, CRITICAL_BG, GREEN, LayoutTier, RED, TEXT_DIM, WHITE, YELLOW
+from ui.helpers import fmt_uptime, get_connection_state
 
 try:
     from config import t
@@ -29,103 +21,94 @@ if TYPE_CHECKING:
     from stats_repository import StatsSnapshot
 
 
+TREND_UP = "\u2197"
+TREND_DOWN = "\u2198"
+TREND_FLAT = "\u2192"
+DOT = "\u25cf"
+
+
 def _trend_icon(recent: list[bool]) -> str:
-    """Return ▲/▼/► trend icon based on recent results pattern."""
+    """Return an at-a-glance trend icon for recent results."""
     if len(recent) < 4:
-        return "►"
-    last_q = recent[-4:]
-    prev_q = recent[-8:-4] if len(recent) >= 8 else recent[:4]
-    last_ok = sum(1 for r in last_q if r)
-    prev_ok = sum(1 for r in prev_q if r)
+        return TREND_FLAT
+    last_window = recent[-4:]
+    prev_window = recent[-8:-4] if len(recent) >= 8 else recent[:4]
+    last_ok = sum(1 for value in last_window if value)
+    prev_ok = sum(1 for value in prev_window if value)
     if last_ok > prev_ok:
-        return "▲"
-    elif last_ok < prev_ok:
-        return "▼"
-    return "►"
+        return TREND_UP
+    if last_ok < prev_ok:
+        return TREND_DOWN
+    return TREND_FLAT
 
 
-def _result_dots(recent: list[bool], max_dots: int = 20) -> str:
-    """Render recent results as coloured dots (●/○)."""
+def _result_strip(recent: list[bool], max_dots: int = 18) -> str:
+    """Render the recent history as a compact signal strip."""
     dots = recent[-max_dots:]
+    if not dots:
+        return f"[{TEXT_DIM}]{t('ui_signal_none')}[/{TEXT_DIM}]"
     parts: list[str] = []
     for ok in dots:
-        if ok:
-            parts.append(f"[{GREEN}]●[/{GREEN}]")
-        else:
-            parts.append(f"[{RED}]●[/{RED}]")
+        color = GREEN if ok else RED
+        parts.append(f"[{color}]{DOT}[/{color}]")
     return "".join(parts)
 
 
 def render_dashboard(snap: StatsSnapshot, width: int, tier: LayoutTier) -> Panel:
-    """Render the compact status dashboard bar."""
+    """Render the hero telemetry strip."""
     label, color, icon = get_connection_state(snap)
     current = snap["last_latency_ms"]
-    ping_txt = f"{current}" if current != t("na") else "—"
+    ping_txt = f"{current}" if current != t("na") else "-"
 
     recent = snap["recent_results"]
     loss30 = recent.count(False) / len(recent) * 100 if recent else 0.0
-    l_color = GREEN if loss30 < 1 else (YELLOW if loss30 < 5 else RED)
-    loss_txt = f"{loss30:.1f}%"
-
+    loss_color = GREEN if loss30 < 1 else (YELLOW if loss30 < 5 else RED)
     uptime_txt = fmt_uptime(snap["start_time"])
-    ip_val = snap["public_ip"]
-    lbl_ping = f"{t('ping').upper()}:"
-    lbl_loss = f"{t('loss').upper()}:"
-    lbl_up = f"{t('uptime').upper()}:"
-    lbl_ip = f"{t('ip_label').upper()}:"
-    cc = f" [{snap['country_code']}]" if snap["country_code"] else ""
+    jitter = snap.get("jitter", 0.0)
+    jitter_txt = f"{jitter:.1f}" if jitter > 0 else "-"
 
-    # Trend icon for latency direction
     trend = _trend_icon(recent)
-    trend_color = GREEN if trend == "▲" else (RED if trend == "▼" else TEXT_DIM)
+    if trend == TREND_UP:
+        trend_color = GREEN
+    elif trend == TREND_DOWN:
+        trend_color = RED
+    else:
+        trend_color = TEXT_DIM
 
-    warmup = snap.get("threshold_warmup", {})
-    warmup_part = ""
-    warmup_part_compact = ""
-    if warmup:
-        max_req = 0
-        curr_samples = 0
-        for v in warmup.values():
-            if v["min_samples"] > max_req:
-                max_req = v["min_samples"]
-                curr_samples = v["samples"]
-        if max_req > 0:
-            warmup_part = f"  [{ACCENT_DIM}]│[/{ACCENT_DIM}]  [{TEXT_DIM}]{t('warmup_status')}:[/{TEXT_DIM}] [{YELLOW}]{curr_samples}/{max_req}[/{YELLOW}]"
-            warmup_part_compact = f"  [{ACCENT_DIM}]│[/{ACCENT_DIM}]  [{YELLOW}]{t('warmup_compact')}:{curr_samples}/{max_req}[/{YELLOW}]"
-
-    sep = f"  [{ACCENT_DIM}]│[/{ACCENT_DIM}]  "
+    history = _result_strip(recent)
+    bg_color = CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else BG
 
     if tier == "compact":
-        parts = (
-            f"  [bold {color}]{icon} {label}[/bold {color}]{sep}"
-            f"[{TEXT_DIM}]{lbl_ping}[/{TEXT_DIM}] [bold {WHITE}]{ping_txt}[/bold {WHITE}] [{trend_color}]{trend}[/{trend_color}]{sep}"
-            f"[{TEXT_DIM}]{lbl_loss}[/{TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
-            f"{warmup_part_compact}"
-        )
-        bg_col = CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else BG
-        return Panel(
-            parts, border_style=color, box=box.SIMPLE, width=width,
-            style=f"on {bg_col}",
-            padding=(0, 1),
+        body = Text.from_markup(
+            f"[bold {color}]{icon} {label}[/bold {color}]  "
+            f"[{TEXT_DIM}]{t('ui_live')}[/{TEXT_DIM}] [bold {WHITE}]{ping_txt}[/bold {WHITE}] [{TEXT_DIM}]{t('ms')}[/{TEXT_DIM}]  "
+            f"[{TEXT_DIM}]{t('loss')}[/{TEXT_DIM}] [bold {loss_color}]{loss30:.1f}%[/bold {loss_color}]"
         )
     else:
-        # Build recent results dots (last 20)
-        dots = _result_dots(recent, max_dots=20) if recent else ""
-        dots_section = f"{sep}{dots}" if dots else ""
-
-        parts = (
-            f"  [bold {color}]{icon} {label}[/bold {color}]"
-            f"{sep}[{TEXT_DIM}]{lbl_ping}[/{TEXT_DIM}] [bold {WHITE}]{ping_txt}[/bold {WHITE}] [{TEXT_DIM}]{t('ms')}[/{TEXT_DIM}] [{trend_color}]{trend}[/{trend_color}]"
-            f"{sep}[{TEXT_DIM}]{lbl_loss}[/{TEXT_DIM}] [bold {l_color}]{loss_txt}[/bold {l_color}]"
-            f"{sep}[{TEXT_DIM}]{lbl_up}[/{TEXT_DIM}] [{WHITE}]{uptime_txt}[/{WHITE}]"
-            f"{sep}[{TEXT_DIM}]{lbl_ip}[/{TEXT_DIM}] [{WHITE}]🌐 {ip_val}{cc}[/{WHITE}]"
-            f"{warmup_part}"
-            f"{dots_section}"
+        grid = Table.grid(expand=True)
+        grid.add_column(ratio=3)
+        grid.add_column(ratio=2, justify="right")
+        left = Text.from_markup(
+            f"[bold {color}]{icon} {label}[/bold {color}]  "
+            f"[{TEXT_DIM}]{t('ui_live_latency')}[/{TEXT_DIM}] [bold {WHITE}]{ping_txt}[/bold {WHITE}] [{TEXT_DIM}]{t('ms')}[/{TEXT_DIM}]  "
+            f"[{trend_color}]{trend}[/{trend_color}]"
         )
-
-        bg_col = CRITICAL_BG if snap.get("threshold_states", {}).get("connection_lost") else BG
-        return Panel(
-            parts, border_style=color, box=box.SIMPLE, width=width,
-            style=f"on {bg_col}",
-            padding=(0, 1),
+        right = Text.from_markup(
+            f"[{TEXT_DIM}]{t('jitter')}[/{TEXT_DIM}] [{WHITE}]{jitter_txt}[/{WHITE}] [{TEXT_DIM}]{t('ms')}[/{TEXT_DIM}]  "
+            f"[{TEXT_DIM}]{t('loss')}[/{TEXT_DIM}] [bold {loss_color}]{loss30:.1f}%[/bold {loss_color}]"
         )
+        grid.add_row(left, right)
+        grid.add_row(
+            Text.from_markup(f"[{TEXT_DIM}]{t('uptime')}[/{TEXT_DIM}] [{WHITE}]{uptime_txt}[/{WHITE}]"),
+            Text.from_markup(f"[{ACCENT}]{t('ui_history')}[/{ACCENT}] {history}"),
+        )
+        body = grid
+
+    return Panel(
+        body,
+        border_style=color if snap.get("threshold_states", {}).get("connection_lost") else ACCENT_DIM,
+        box=box.ROUNDED,
+        width=width,
+        style=f"on {bg_color}",
+        padding=(0, 1),
+    )
