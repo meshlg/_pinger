@@ -127,7 +127,7 @@ class Monitor:
         self.hop_monitor_service = HopMonitorService(executor=self.executor)
         # Enable geolocation for hop monitoring (requires requests library)
         self.hop_monitor_service.enable_geo()
-        
+
         # Analyzers
         self.problem_analyzer = ProblemAnalyzer(stats_repo=self.stats_repo)
         self.route_analyzer = RouteAnalyzer()

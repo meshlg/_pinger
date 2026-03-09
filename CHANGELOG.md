@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.5.1619]
+
+### Added
+
+- **Added full country name display for public IP** in [`ui/panels/header.py`](ui/panels/header.py):
+  - Falls back to country code if full name is not available.
+
+### Changed
+
+- **Reordered IP providers to prioritize country info** in [`services/ip_service.py`](services/ip_service.py):
+  - Providers that return country information (ip-api.com, ip.sb, ipapi.co) are now tried first.
+  - Providers without country info (ipify.org, icanhazip.com, ipecho.net) are now fallbacks.
+  - This ensures the full country name is displayed in the UI header.
+
 ## [2.5.4.2147]
 
 ### New UI

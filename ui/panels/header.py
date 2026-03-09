@@ -27,8 +27,15 @@ def render_header(snap: StatsSnapshot, width: int, tier: LayoutTier) -> Panel:
     latest_version = snap.get("latest_version")
     version_up_to_date = snap.get("version_up_to_date", False)
     public_ip = snap.get("public_ip") or t("na")
+    country = snap.get("country")
     country_code = snap.get("country_code")
-    location = f"{public_ip} [{country_code}]" if country_code else str(public_ip)
+    # Show full country name if available, otherwise show country code, otherwise just IP
+    if country and country != "..." and country != "N/A":
+        location = f"{public_ip} ({country})"
+    elif country_code:
+        location = f"{public_ip} [{country_code}]"
+    else:
+        location = str(public_ip)
 
     if latest_version:
         version_text = f"[{TEXT_DIM}]v{VERSION}[/{TEXT_DIM}] [{YELLOW}]{t('ui_update')} {latest_version}[/{YELLOW}]"
@@ -38,9 +45,9 @@ def render_header(snap: StatsSnapshot, width: int, tier: LayoutTier) -> Panel:
         version_text = f"[{TEXT_DIM}]v{VERSION}[/{TEXT_DIM}]"
 
     title = Text.from_markup(
+        f"[bold {ACCENT}]{t('ui_app_name')}[/bold {ACCENT}] - "
         f"[bold {WHITE}]{t('title')}[/bold {WHITE}] "
-        f"[{ACCENT}]//[/{ACCENT}] "
-        f"[bold {ACCENT}]{TARGET_IP}[/bold {ACCENT}]"
+        f"[bold {YELLOW}]{TARGET_IP}[/bold {YELLOW}]"
     )
 
     if tier == "compact":

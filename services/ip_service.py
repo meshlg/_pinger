@@ -25,57 +25,61 @@ from infrastructure.metrics import IP_PROVIDER_REQUESTS_TOTAL, IP_PROVIDER_LATEN
 # We use HTTP as primary URL for ip-api.com to avoid unnecessary failed requests.
 # Providers are ordered by reliability and feature set.
 _IP_PROVIDERS: list[dict[str, Any]] = [
-    # ipify.org - MOST RELIABLE, supports HTTPS on free tier, unlimited requests
-    {
-        "url": "https://api.ipify.org/?format=json",
-        "http_fallback": "http://api.ipify.org/?format=json",
-        "ip": "ip",
-        "country": None,
-        "country_code": None,
-    },
-    # ip-api.com - FREE TIER DOES NOT SUPPORT HTTPS! Use HTTP directly.
-    # HTTPS returns 403 Forbidden on free tier.
-    # Provides country info (unlike ipify).
-    {
-        "url": "http://ip-api.com/json/",  # HTTP only on free tier!
-        "http_fallback": None,  # No fallback needed - already HTTP
-        "ip": "query",
-        "country": "country",
-        "country_code": "countryCode",
-    },
-    # icanhazip.com - very reliable, supports HTTPS on free tier
-    {
-        "url": "https://icanhazip.com/",
-        "http_fallback": "http://icanhazip.com/",
-        "ip": None,  # returns plain text IP
-        "country": None,
-        "country_code": None,
-    },
-    # ipecho.net - supports HTTPS on free tier
-    {
-        "url": "https://ipecho.net/plain",
-        "http_fallback": "http://ipecho.net/plain",
-        "ip": None,  # returns plain text IP
-        "country": None,
-        "country_code": None,
-    },
-    # ipapi.co - supports HTTPS but has monthly limit (1000 requests/month)
-    # May return 429 when limit exceeded. Listed as fallback.
-    {
-        "url": "https://ipapi.co/json/",
-        "http_fallback": "http://ipapi.co/json/",
-        "ip": "ip",
-        "country": "country_name",
-        "country_code": "country_code",
-    },
-    # ip.sb - supports HTTPS on free tier, good for Asia region
-    {
-        "url": "https://api.ip.sb/geoip",
-        "http_fallback": "http://api.ip.sb/geoip",
-        "ip": "ip",
-        "country": "country",
-        "country_code": "country_code",
-    },
+# ip-api.com - FREE TIER DOES NOT SUPPORT HTTPS! Use HTTP directly.
+# HTTPS returns 403 Forbidden on free tier.
+# Provides country info - listed FIRST to get country name.
+{
+    "url": "http://ip-api.com/json/", # HTTP only on free tier!
+    "http_fallback": None, # No fallback needed - already HTTP
+    "ip": "query",
+    "country": "country",
+    "country_code": "countryCode",
+},
+# ip.sb - supports HTTPS on free tier, good for Asia region
+# Provides country info.
+{
+    "url": "https://api.ip.sb/geoip",
+    "http_fallback": "http://api.ip.sb/geoip",
+    "ip": "ip",
+    "country": "country",
+    "country_code": "country_code",
+},
+# ipapi.co - supports HTTPS but has monthly limit (1000 requests/month)
+# May return 429 when limit exceeded. Provides country info.
+{
+    "url": "https://ipapi.co/json/",
+    "http_fallback": "http://ipapi.co/json/",
+    "ip": "ip",
+    "country": "country_name",
+    "country_code": "country_code",
+},
+# ipify.org - MOST RELIABLE, supports HTTPS on free tier, unlimited requests
+# Listed as fallback because it does NOT provide country info.
+{
+    "url": "https://api.ipify.org/?format=json",
+    "http_fallback": "http://api.ipify.org/?format=json",
+    "ip": "ip",
+    "country": None,
+    "country_code": None,
+},
+# icanhazip.com - very reliable, supports HTTPS on free tier
+# Listed as fallback because it does NOT provide country info.
+{
+    "url": "https://icanhazip.com/",
+    "http_fallback": "http://icanhazip.com/",
+    "ip": None, # returns plain text IP
+    "country": None,
+    "country_code": None,
+},
+# ipecho.net - supports HTTPS on free tier
+# Listed as fallback because it does NOT provide country info.
+{
+    "url": "https://ipecho.net/plain",
+    "http_fallback": "http://ipecho.net/plain",
+    "ip": None, # returns plain text IP
+    "country": None,
+    "country_code": None,
+},
 ]
 
 # Exception types that indicate the HTTPS connection itself failed

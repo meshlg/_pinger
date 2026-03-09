@@ -15,6 +15,7 @@ from .settings import CURRENT_LANGUAGE, SUPPORTED_LANGUAGES
 LANG: Dict[str, Dict[str, str]] = {
     "ru": {
         # ── General ──
+        "ui_app_name": "PingerPy",
         "title": "Сетевой монитор",
         "start": "Запуск сетевого монитора для {target}...",
         "stop": "Мониторинг остановлен.",
@@ -234,6 +235,7 @@ LANG: Dict[str, Dict[str, str]] = {
     },
     "en": {
         # ── General ──
+        "ui_app_name": "PingerPy",
         "title": "Network Monitor",
         "start": "Starting network monitor for {target}...",
         "stop": "Monitoring stopped.",
