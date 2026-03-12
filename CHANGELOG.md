@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.6.1819]
+
+### Fixed
+
+- **Fixed `ensure_utc()` returning naive datetime** in [`config/types.py`](config/types.py:19):
+  - Changed from `dt.astimezone()` to `dt.replace(tzinfo=timezone.utc)` for naive datetimes.
+  - Previously, naive datetimes were converted to local timezone instead of UTC, causing incorrect time calculations.
+
+- **Fixed silent exception swallowing in `shutdown()`** in [`monitor.py`](monitor.py:245):
+  - Added logging for all previously silent `except Exception: pass` blocks.
+  - Errors during ProcessManager cleanup, executor force shutdown, and handler flushing are now logged at DEBUG level.
+
+- **Fixed direct access to private `_recent_results` field** in [`core/alert_handler.py`](core/alert_handler.py:170):
+  - Changed `self.stats_repo._recent_results` to `self.stats_repo.get_recent_results()`.
+  - This ensures proper encapsulation and thread-safe access.
+
+- **Extracted magic numbers to named constants** in [`ui/helpers.py`](ui/helpers.py:1):
+  - Added `SPARKLINE_LOW_THRESHOLD = 0.4` and `SPARKLINE_HIGH_THRESHOLD = 0.7` constants.
+  - Replaced hardcoded values in sparkline rendering functions.
+
+- **Added missing type hint for `ping_result` parameter** in [`core/alert_handler.py`](core/alert_handler.py:49):
+  - Added `PingResult` type annotation to `process_alerts()` method.
+
+- **Fixed potential division by zero in DNS cache efficiency** in [`services/dns_service.py`](services/dns_service.py:506):
+  - Added explicit `is not None` checks before division operation.
+  - Previously, falsy values (0.0) could bypass the check and cause incorrect calculations.
+
+- **Added logging for silent exception in DNS simple resolve** in [`services/dns_service.py`](services/dns_service.py:593):
+  - Changed empty `except Exception: pass` to log the error at DEBUG level.
+  - This helps with debugging DNS resolution issues.
+
+- **Removed unused jitter cache fields** in [`ui/core.py`](ui/core.py:25):
+  - Removed `_cached_jitter`, `_last_jitter_update`, and `_jitter_cache_interval` fields.
+  - These fields were declared but never used in the code.
+
+- **Added missing type hints** in [`single_instance.py`](single_instance.py:194):
+  - Added type annotations to `__exit__` method parameters.
+
+- **Improved error handling in DNS updates** in [`stats_repository.py`](stats_repository.py:252):
+  - Added validation for empty results in `update_dns_detailed()`, `update_dns_benchmark()`, and `update_dns_health()`.
+  - Added try-except blocks with logging for invalid data formats.
+  - Added validation for required fields in DNS health data.
+
+- **Added comprehensive test coverage** in [`tests/`](tests/):
+  - Added [`test_stats_repository.py`](tests/test_stats_repository.py) with 40+ tests covering all StatsRepository methods.
+  - Added [`test_config_types.py`](tests/test_config_types.py) with 9 tests for `ensure_utc()` function.
+  - Added [`test_ui_helpers.py`](tests/test_ui_helpers.py) with 30+ tests for UI helper functions.
+  - Added [`test_single_instance.py`](tests/test_single_instance.py) with 15+ tests for single instance enforcement.
+  - Added [`test_alert_handler.py`](tests/test_alert_handler.py) with 15+ tests for alert handling logic.
+  - Added [`test_dns_service.py`](tests/test_dns_service.py) with 25+ tests for DNS service functionality.
+  - Total test count increased from 37 to 199 tests.
+
 ## [2.5.5.1619]
 
 ### Added

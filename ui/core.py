@@ -28,9 +28,6 @@ class MonitorUI:
     def __init__(self, console: Console, data_provider: StatsDataProvider) -> None:
         self.console = console
         self._data_provider = data_provider
-        self._cached_jitter: float = 0.0
-        self._last_jitter_update: float = 0.0
-        self._jitter_cache_interval: float = 5.0
 
     @property
     def data_provider(self) -> StatsDataProvider:

@@ -40,6 +40,10 @@ ELLIPSIS = "\u2026"
 RULE = "\u2500"
 MID_DOT = "\u00b7"
 
+# Sparkline color thresholds
+SPARKLINE_LOW_THRESHOLD = 0.4
+SPARKLINE_HIGH_THRESHOLD = 0.7
+
 
 def fmt_uptime(start_time: datetime | None) -> str:
     """Format duration since *start_time* as a human-readable string."""
@@ -115,9 +119,9 @@ def sparkline(values: list[float], width: int = 40) -> str:
         spark_idx = max(0, min(spark_idx, len(SPARK_CHARS) - 1))
 
         rel = (value - mn) / rng if value > 0 else 0.0
-        if rel < 0.4:
+        if rel < SPARKLINE_LOW_THRESHOLD:
             color = GREEN
-        elif rel < 0.7:
+        elif rel < SPARKLINE_HIGH_THRESHOLD:
             color = YELLOW
         else:
             color = RED
@@ -171,9 +175,9 @@ def sparkline_double(values: list[float], width: int = 40) -> tuple[str, str]:
         level = max(0, min(level, 15))
 
         rel = (value - mn) / rng if value > 0 else 0.0
-        if rel < 0.4:
+        if rel < SPARKLINE_LOW_THRESHOLD:
             color = GREEN
-        elif rel < 0.7:
+        elif rel < SPARKLINE_HIGH_THRESHOLD:
             color = YELLOW
         else:
             color = RED

@@ -255,8 +255,8 @@ class Monitor:
         # Kill any async processes managed by ProcessManager
         try:
             self.process_manager.cleanup_sync()
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug(f"ProcessManager cleanup error: {exc}")
         
         # Cancel any pending executor tasks
         for task in list(self._executor_tasks):
@@ -289,8 +289,8 @@ class Monitor:
                         self.executor.shutdown(wait=False, cancel_futures=True)
                     else:
                         self.executor.shutdown(wait=False)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(f"Executor force shutdown error: {exc}")
         except Exception as exc:
             logging.warning(f"Executor shutdown error: {exc}")
         
@@ -327,8 +327,8 @@ class Monitor:
             for handler in logging.root.handlers:
                 try:
                     handler.flush()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logging.debug(f"Handler flush error: {exc}")
             
             # Attempt to join remaining threads with a short timeout
             for t in alive:

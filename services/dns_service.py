@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import random
 import socket
 import statistics
@@ -503,7 +504,7 @@ class DNSService:
                 elif br.get("test_type") == "uncached" and br.get("avg_ms"):
                     uncached_avg = br["avg_ms"]
             
-            if cached_avg and uncached_avg and uncached_avg > 0:
+            if cached_avg is not None and uncached_avg is not None and uncached_avg > 0:
                 cache_efficiency = max(0, (uncached_avg - cached_avg) / uncached_avg * 100)
         
         # Calculate jitter from benchmark std_dev
@@ -590,6 +591,6 @@ class DNSService:
             if results:
                 r = results[0]
                 return r.success, r.response_time_ms, r.status
-        except Exception:
-            pass
+        except Exception as exc:
+            logging.debug(f"DNS resolve simple failed: {exc}")
         return False, None, t("failed")

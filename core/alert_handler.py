@@ -48,7 +48,7 @@ class AlertHandler:
     
     def process_alerts(
         self,
-        ping_result,
+        ping_result: PingResult,
         high_latency_triggered: bool,
         packet_loss_triggered: bool,
     ) -> None:
@@ -168,7 +168,7 @@ class AlertHandler:
             
             # Get loss percentage from recent results
             with self.stats_repo.lock:
-                recent = self.stats_repo._recent_results
+                recent = self.stats_repo.get_recent_results()
                 if recent:
                     loss_pct = (recent.count(False) / len(recent)) * 100
                 else:

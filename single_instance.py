@@ -191,7 +191,7 @@ class SingleInstance:
             raise RuntimeError(f"Another instance is already running (lock: {self.lock_path})")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object) -> None:
         self.release()
 
 

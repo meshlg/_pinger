@@ -1,6 +1,7 @@
 """Stats repository for clean data access."""
 from __future__ import annotations
 
+import logging
 import threading
 import statistics
 from collections import deque
@@ -262,19 +263,28 @@ class StatsRepository:
                 - records: list
                 - error: str | None
         """
+        if not dns_results:
+            logging.debug("update_dns_detailed called with empty results")
+            return
+            
         with self._lock:
             # Store detailed results by record type
-            self._stats["dns_results"] = {
-                r["record_type"]: {
-                    "success": r["success"],
-                    "response_time_ms": r.get("response_time_ms"),
-                    "status": r["status"],
-                    "ttl": r.get("ttl"),
-                    "record_count": len(r.get("records", [])),
-                    "error": r.get("error"),
+            try:
+                self._stats["dns_results"] = {
+                    r["record_type"]: {
+                        "success": r["success"],
+                        "response_time_ms": r.get("response_time_ms"),
+                        "status": r["status"],
+                        "ttl": r.get("ttl"),
+                        "record_count": len(r.get("records", [])),
+                        "error": r.get("error"),
+                    }
+                    for r in dns_results
+                    if "record_type" in r and "success" in r and "status" in r
                 }
-                for r in dns_results
-            }
+            except (KeyError, TypeError) as exc:
+                logging.warning(f"Invalid DNS results format: {exc}")
+                return
             
             # Calculate overall status
             successful = [r for r in dns_results if r["success"]]
@@ -311,24 +321,33 @@ class StatsRepository:
                 - status: str
                 - error: str | None
         """
+        if not benchmark_results:
+            logging.debug("update_dns_benchmark called with empty results")
+            return
+            
         with self._lock:
-            self._stats["dns_benchmark"] = {
-                r["test_type"]: {
-                    "server": r.get("server", "system"),
-                    "domain": r["domain"],
-                    "queries": r.get("queries", 0),
-                    "min_ms": r.get("min_ms"),
-                    "avg_ms": r.get("avg_ms"),
-                    "max_ms": r.get("max_ms"),
-                    "std_dev": r.get("std_dev"),
-                    "reliability": r.get("reliability", 0.0),
-                    "response_time_ms": r.get("response_time_ms"),
-                    "success": r["success"],
-                    "status": r["status"],
-                    "error": r.get("error"),
+            try:
+                self._stats["dns_benchmark"] = {
+                    r["test_type"]: {
+                        "server": r.get("server", "system"),
+                        "domain": r["domain"],
+                        "queries": r.get("queries", 0),
+                        "min_ms": r.get("min_ms"),
+                        "avg_ms": r.get("avg_ms"),
+                        "max_ms": r.get("max_ms"),
+                        "std_dev": r.get("std_dev"),
+                        "reliability": r.get("reliability", 0.0),
+                        "response_time_ms": r.get("response_time_ms"),
+                        "success": r["success"],
+                        "status": r["status"],
+                        "error": r.get("error"),
+                    }
+                    for r in benchmark_results
+                    if "test_type" in r and "domain" in r and "success" in r and "status" in r
                 }
-                for r in benchmark_results
-            }
+            except (KeyError, TypeError) as exc:
+                logging.warning(f"Invalid DNS benchmark results format: {exc}")
+                return
 
     def update_dns_health(self, dns_health: dict[str, Any]) -> None:
         """Update aggregated DNS health metrics.
@@ -344,8 +363,22 @@ class StatsRepository:
                 - cache_efficiency: float | None (0-100)
                 - status: str ("excellent", "good", "fair", "poor", "critical")
         """
+        if not dns_health:
+            logging.debug("update_dns_health called with empty data")
+            return
+            
         with self._lock:
-            self._stats["dns_health"] = dict(dns_health)
+            try:
+                # Validate required fields
+                required_fields = ["score", "reliability", "records_ok", "records_total", "status"]
+                for field in required_fields:
+                    if field not in dns_health:
+                        raise KeyError(f"Missing required field: {field}")
+                
+                self._stats["dns_health"] = dict(dns_health)
+            except (KeyError, TypeError) as exc:
+                logging.warning(f"Invalid DNS health data format: {exc}")
+                return
 
     def update_mtu(self, local_mtu: int | None, path_mtu: int | None, status: str) -> None:
         """Update MTU info."""

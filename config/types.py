@@ -17,11 +17,12 @@ from .i18n import t
 # ─────────────────────────────────────────────────────────────────────────────
 
 def ensure_utc(dt: datetime | None) -> datetime | None:
-    """Convert datetime to timezone-aware UTC. If naive, assume local time and convert."""
+    """Convert datetime to timezone-aware UTC. If naive, assume UTC."""
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.astimezone()
+        from datetime import timezone
+        return dt.replace(tzinfo=timezone.utc)
     return dt
 
 
