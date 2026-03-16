@@ -491,6 +491,29 @@ class TestStatsRepository:
         repo.set_traceroute_running(False)
         assert repo.is_traceroute_running() is False
 
+    def test_update_app_traffic_accumulates(self) -> None:
+        """Test application traffic accumulation."""
+        repo = StatsRepository()
+
+        repo.update_app_traffic(128, 256)
+        repo.update_app_traffic(64, 32)
+
+        snapshot = repo.get_snapshot()
+        assert snapshot["app_bytes_sent"] == 192
+        assert snapshot["app_bytes_recv"] == 288
+
+    def test_refresh_system_traffic_uses_session_baseline(self) -> None:
+        """Test system traffic is stored relative to first successful sample."""
+        repo = StatsRepository()
+
+        repo.sample_system_traffic = lambda: (1000, 2000)  # type: ignore[method-assign]
+        first = repo.refresh_system_traffic()
+        repo.sample_system_traffic = lambda: (1600, 2900)  # type: ignore[method-assign]
+        second = repo.refresh_system_traffic()
+
+        assert first == (0, 0)
+        assert second == (600, 900)
+
     def test_set_mtu_status_change_time(self) -> None:
         """Test MTU status change time."""
         repo = StatsRepository()

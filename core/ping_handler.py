@@ -19,6 +19,8 @@ class PingResult:
     success: bool
     latency: float | None
     target: str
+    sent_bytes: int = 0
+    recv_bytes: int = 0
     
     @property
     def is_timeout(self) -> bool:
@@ -43,10 +45,12 @@ class PingHandler:
     async def execute_async(self, executor) -> PingResult:
         """Execute ping asynchronously."""
         # Use new async method directly
-        success, latency = await self.ping_service.ping_host_async(self.target_ip)
-        
+        success, latency, sent_bytes, recv_bytes = await self.ping_service.ping_host_async(self.target_ip)
+
         return PingResult(
             success=success,
             latency=latency,
             target=self.target_ip,
+            sent_bytes=sent_bytes,
+            recv_bytes=recv_bytes,
         )

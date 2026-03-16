@@ -54,6 +54,13 @@ class DNSMonitorTask(BackgroundTask):
 
             self.stats_repo.update_dns_detailed(results_dict)
 
+            app_sent_bytes = len(results_dict) * 80
+            app_recv_bytes = sum(
+                96 + sum(len(str(record)) for record in result.get("records", []))
+                for result in results_dict
+                if result.get("success")
+            )
+
             # Run benchmark tests (Cached/Uncached/DotCom)
             benchmark_dict = None  # Initialized before conditional for clarity
             if ENABLE_DNS_BENCHMARK:
@@ -83,6 +90,12 @@ class DNSMonitorTask(BackgroundTask):
                 ]
 
                 self.stats_repo.update_dns_benchmark(benchmark_dict)
+                app_sent_bytes += len(benchmark_dict) * 80
+                app_recv_bytes += sum(
+                    96
+                    for result in benchmark_dict
+                    if result.get("success")
+                )
 
             # Calculate and store DNS health metrics
             dns_health = self.dns_service.calculate_dns_health(
@@ -90,6 +103,7 @@ class DNSMonitorTask(BackgroundTask):
                 benchmark_dict,
             )
             self.stats_repo.update_dns_health(dns_health)
+            self.stats_repo.update_app_traffic(app_sent_bytes, app_recv_bytes)
 
         except Exception as exc:
             logging.error(f"DNS monitor failed: {exc}")

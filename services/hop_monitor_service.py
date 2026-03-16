@@ -14,7 +14,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 from config import (
     TARGET_IP,
@@ -22,6 +22,9 @@ from config import (
     HOP_PING_TIMEOUT,
     t,
 )
+
+HOP_PING_SENT_BYTES = 60
+HOP_PING_RECV_BYTES = 60
 from infrastructure import get_process_manager
 
 
@@ -140,7 +143,7 @@ class HopMonitorService:
 
     LATENCY_HISTORY_SIZE = 30
 
-    def __init__(self, executor: ThreadPoolExecutor) -> None:
+    def __init__(self, executor: ThreadPoolExecutor, traffic_callback: Callable[[int, int], None] | None = None) -> None:
         self._executor = executor
         self._lock = threading.RLock()
         self._hops: List[HopStatus] = []
@@ -149,6 +152,7 @@ class HopMonitorService:
         self._last_discovery: float = 0.0
         self._rediscovery_requested = threading.Event()
         self._on_hop_callback = None  # called when a new hop is discovered
+        self._traffic_callback = traffic_callback
         self._geo_service = None  # lazy-loaded geolocation service
         self.process_manager = get_process_manager()
 
@@ -369,6 +373,9 @@ class HopMonitorService:
         tasks = [_ping_with_limit(hop.ip) for hop in hops]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        sent_total = 0
+        recv_total = 0
+
         for hop, result in zip(hops, results):
             try:
                 if isinstance(result, Exception):
@@ -378,10 +385,16 @@ class HopMonitorService:
                     if result:
                         ok, latency = result
                         self._update_hop_status(hop, ok, latency)
+                        sent_total += HOP_PING_SENT_BYTES
+                        if ok:
+                            recv_total += HOP_PING_RECV_BYTES
                     else:
                         self._update_hop_status(hop, False, None)
             except Exception as exc:
                 logging.debug(f"Error updating hop status: {exc}")
+
+        if self._traffic_callback and (sent_total or recv_total):
+            self._traffic_callback(sent_total, recv_total)
 
     async def _ping_host(self, ip: str) -> Tuple[bool, Optional[float]]:
         """Single ping to a hop IP with fast timeout."""

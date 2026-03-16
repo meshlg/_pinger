@@ -80,6 +80,11 @@ LANG: Dict[str, Dict[str, str]] = {
         "loss_30m": "Потери 30м",
         "consecutive": "Подряд потерь",
         "max_label": "Макс",
+        "traffic": "Трафик",
+        "traffic_app": "Приложение",
+        "traffic_system": "Общий",
+        "traffic_up": "↑",
+        "traffic_down": "↓",
         # ── MTU / TTL ──
         "mtu": "MTU",
         "path_mtu": "Path MTU",
@@ -301,6 +306,11 @@ LANG: Dict[str, Dict[str, str]] = {
         "loss_30m": "Loss 30m",
         "consecutive": "Consecutive",
         "max_label": "Max",
+        "traffic": "Traffic",
+        "traffic_app": "App",
+        "traffic_system": "System",
+        "traffic_up": "↑",
+        "traffic_down": "↓",
         # ── MTU / TTL ──
         "mtu": "MTU",
         "path_mtu": "Path MTU",

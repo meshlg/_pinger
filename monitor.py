@@ -109,7 +109,8 @@ class Monitor:
         
         # Data repository
         self.stats_repo = StatsRepository()
-        
+        self.stats_repo.refresh_system_traffic()
+
         # Process Manager
         self.process_manager = get_process_manager()
         
@@ -124,7 +125,10 @@ class Monitor:
         )
         
         # Hop monitor
-        self.hop_monitor_service = HopMonitorService(executor=self.executor)
+        self.hop_monitor_service = HopMonitorService(
+            executor=self.executor,
+            traffic_callback=self.stats_repo.update_app_traffic,
+        )
         # Enable geolocation for hop monitoring (requires requests library)
         self.hop_monitor_service.enable_geo()
 
@@ -378,6 +382,8 @@ class Monitor:
             alert_on_packet_loss=ALERT_ON_PACKET_LOSS,
         )
         
+        self.stats_repo.update_app_traffic(result.sent_bytes, result.recv_bytes)
+
         # 3. Handle alerts (AlertHandler - SRP)
         self._alert_handler.process_alerts(result, high_lat, loss)
         
@@ -398,7 +404,9 @@ class Monitor:
                 self._ping_counter = 0
                 self._check_memory_and_cleanup()
                 self._check_instance_notifications()
-        
+
+        self.stats_repo.refresh_system_traffic()
+
         return result.success, result.latency
 
     def _check_memory_and_cleanup(self) -> None:

@@ -370,6 +370,10 @@ class FakeStatsProvider(StatsDataProvider):
             "latest_version": None,
             "version_check_time": datetime.now(timezone.utc) - timedelta(minutes=15),
             "version_up_to_date": True,
+            "app_bytes_sent": 512 * 1024,
+            "app_bytes_recv": 2 * 1024 * 1024,
+            "system_bytes_sent": 18 * 1024 * 1024,
+            "system_bytes_recv": 145 * 1024 * 1024,
         }
 
 

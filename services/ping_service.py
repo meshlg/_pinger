@@ -12,6 +12,12 @@ import threading
 import time
 from typing import Any, Callable, Optional, Tuple
 
+PING_REQUEST_OVERHEAD_IPV4 = 28
+PING_REQUEST_OVERHEAD_IPV6 = 48
+PING_DEFAULT_PAYLOAD_BYTES = 32
+PING_RESPONSE_IP_HEADER_IPV4 = 20
+PING_RESPONSE_IP_HEADER_IPV6 = 40
+
 from config import TARGET_IP
 from infrastructure import get_process_manager
 
@@ -156,6 +162,14 @@ class PingService:
 
     # _run_ping_command (sync) removed.
 
+    def estimate_ping_traffic(self, is_ipv6: bool, success: bool) -> tuple[int, int]:
+        """Estimate bytes sent/received for a single ping attempt."""
+        request_overhead = PING_REQUEST_OVERHEAD_IPV6 if is_ipv6 else PING_REQUEST_OVERHEAD_IPV4
+        response_ip_header = PING_RESPONSE_IP_HEADER_IPV6 if is_ipv6 else PING_RESPONSE_IP_HEADER_IPV4
+        sent_bytes = request_overhead + PING_DEFAULT_PAYLOAD_BYTES
+        recv_bytes = response_ip_header + 8 + PING_DEFAULT_PAYLOAD_BYTES if success else 0
+        return sent_bytes, recv_bytes
+
     async def _run_ping_command_async(self, host: str, is_ipv6: bool | None = None) -> Tuple[str | None, int | None]:
         """Execute system ping command asynchronously."""
         if is_ipv6 is None:
@@ -182,22 +196,28 @@ class PingService:
             logging.error(f"async ping command failed: {exc}")
             return None, None
 
-    async def ping_host_async(self, host: str) -> Tuple[bool, Optional[float]]:
-        """Ping a host asynchronously and return (success, latency_ms)."""
+    async def ping_host_async(self, host: str) -> Tuple[bool, Optional[float], int, int]:
+        """Ping a host asynchronously and return success, latency, and estimated traffic."""
         # Basic check for ping availability
         if not self._check_ping_available():
             if not PYTHONPING_AVAILABLE:
-                return False, None
+                return False, None, 0, 0
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, lambda: self._ping_with_pythonping(host))
+            success, latency = await loop.run_in_executor(None, lambda: self._ping_with_pythonping(host))
+            is_ipv6 = await self._detect_ipv6_async(host)
+            sent_bytes, recv_bytes = self.estimate_ping_traffic(is_ipv6, success)
+            return success, latency, sent_bytes, recv_bytes
 
         is_ipv6 = await self._detect_ipv6_async(host)
 
         stdout, returncode = await self._run_ping_command_async(host, is_ipv6)
         if stdout is None:
-            return False, None
+            sent_bytes, _ = self.estimate_ping_traffic(is_ipv6, False)
+            return False, None, sent_bytes, 0
 
-        return self._parse_ping_output(stdout, returncode)
+        success, latency = self._parse_ping_output(stdout, returncode)
+        sent_bytes, recv_bytes = self.estimate_ping_traffic(is_ipv6, success)
+        return success, latency, sent_bytes, recv_bytes
 
     def _parse_ping_output(self, stdout: str, returncode: int | None = 0) -> Tuple[bool, Optional[float]]:
 

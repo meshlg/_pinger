@@ -96,6 +96,10 @@ class StatsDict(TypedDict):
     latest_version: str | None
     version_check_time: datetime | None
     version_up_to_date: bool
+    app_bytes_sent: int
+    app_bytes_recv: int
+    system_bytes_sent: int | None
+    system_bytes_recv: int | None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,6 +179,10 @@ def create_stats() -> StatsDict:
         "latest_version": None,
         "version_check_time": None,
         "version_up_to_date": False,
+        "app_bytes_sent": 0,
+        "app_bytes_recv": 0,
+        "system_bytes_sent": None,
+        "system_bytes_recv": None,
     }
 
 

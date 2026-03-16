@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7.2125]
+
+- **Added traffic accounting to the metrics panel** in [`ui/panels/metrics.py`](ui/panels/metrics.py:138):
+  - Added a dedicated traffic section in the left column for estimated app traffic and total session traffic across all interfaces.
+- **Tracked application and system traffic in snapshots** in [`stats_repository.py`](stats_repository.py:79):
+  - Added cumulative app traffic counters and session-based system traffic totals to the shared stats snapshot.
+  - System traffic is sampled via `psutil.net_io_counters()` and normalized against the first successful sample of the current session.
+- **Estimated app-generated traffic from ping, DNS, and hop monitoring** in [`services/ping_service.py`](services/ping_service.py:15), [`core/dns_monitor_task.py`](core/dns_monitor_task.py:57), and [`services/hop_monitor_service.py`](services/hop_monitor_service.py:26):
+  - Ping traffic uses protocol-aware byte estimates for IPv4/IPv6.
+  - DNS and hop monitoring contribute lightweight estimated request/response volumes.
+- **Updated UI helper and repository tests** in [`tests/test_ui_helpers.py`](tests/test_ui_helpers.py:117) and [`tests/test_stats_repository.py`](tests/test_stats_repository.py:494):
+  - Added coverage for byte formatting and traffic counter accumulation/baseline behavior.
+
 ## [2.5.7.1753]
 
 ### Changed
@@ -14,8 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added a shared width clamp so long terminal rows stay visually balanced.
 - **Aligned the 30-minute loss gauge inline with its percentage** in [`ui/panels/metrics.py`](ui/panels/metrics.py:109):
   - The `loss_30m` bar now renders on the same row immediately after the percentage value, matching the other status indicators.
-- **Updated UI helper tests for slim gauges** in [`tests/test_ui_helpers.py`](tests/test_ui_helpers.py:126):
-  - Added assertions for the new slim glyphs and width clamping behavior.
   - Stabilized time-based tests by switching overflow-prone `datetime.replace()` usage to `timedelta`.
 
 ## [2.5.6.1819]

@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ui.theme import ACCENT, ACCENT_DIM, BG_PANEL, GREEN, HeightTier, LayoutTier, RED, TEXT_DIM, WHITE, YELLOW
-from ui.helpers import mini_gauge, progress_bar, section_header, sparkline
+from ui.helpers import fmt_bytes, mini_gauge, progress_bar, section_header, sparkline
 
 try:
     from config import t
@@ -27,6 +27,16 @@ def _value_or_dash(value: float | None, color: str = WHITE, suffix: str = "") ->
     if value is None:
         return f"[{TEXT_DIM}]-[/{TEXT_DIM}]"
     return f"[{color}]{value:.1f}[/{color}]{suffix}"
+
+
+def _traffic_markup(sent_bytes: int | None, recv_bytes: int | None) -> str:
+    """Render compact bidirectional traffic summary."""
+    up = fmt_bytes(sent_bytes)
+    down = fmt_bytes(recv_bytes)
+    return (
+        f"[{WHITE}]{t('traffic_up')} {up}[/{WHITE}] "
+        f"[{TEXT_DIM}]{t('traffic_down')} {down}[/{TEXT_DIM}]"
+    )
 
 
 def render_metrics_panel(snap: StatsSnapshot, width: int, tier: LayoutTier, h_tier: HeightTier) -> Panel:
@@ -124,6 +134,15 @@ def render_metrics_panel(snap: StatsSnapshot, width: int, tier: LayoutTier, h_ti
         f"  [{TEXT_DIM}]{t('consecutive')}[/{TEXT_DIM}] {cons_markup}  "
         f"[{TEXT_DIM}]{t('max_label')}[/{TEXT_DIM}] [{RED}]{snap['max_consecutive_losses']}[/{RED}]"
     ))
+
+    items.append(Text(""))
+    items.append(section_header(t("traffic"), inner_w))
+    traffic = Table(show_header=False, box=None, padding=(0, 1), width=width)
+    traffic.add_column("k", style=TEXT_DIM, width=max(11, width // 5), no_wrap=True)
+    traffic.add_column("v", width=max(10, width - max(11, width // 5) - 3), no_wrap=True)
+    traffic.add_row(f"{t('traffic_app')}:", _traffic_markup(snap.get("app_bytes_sent"), snap.get("app_bytes_recv")))
+    traffic.add_row(f"{t('traffic_system')}:", _traffic_markup(snap.get("system_bytes_sent"), snap.get("system_bytes_recv")))
+    items.append(traffic)
 
     return Panel(
         Group(*items),

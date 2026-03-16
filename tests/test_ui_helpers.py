@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from ui.helpers import (
     fmt_uptime,
     fmt_since,
+    fmt_bytes,
     progress_bar,
     sparkline,
     sparkline_mini,
@@ -112,6 +113,22 @@ class TestFmtSince:
             # Result is localized, just check it contains the number
             assert "5" in result
             assert len(result) > 0
+
+
+class TestFmtBytes:
+    """Test fmt_bytes helper."""
+
+    def test_none_input(self) -> None:
+        """Test that None returns localized N/A."""
+        assert fmt_bytes(None) == "N/A"
+
+    def test_bytes_input(self) -> None:
+        """Test formatting in bytes."""
+        assert fmt_bytes(512) == "512 B"
+
+    def test_kibibytes_input(self) -> None:
+        """Test formatting in KiB."""
+        assert fmt_bytes(2048) == "2.0 KiB"
 
 
 class TestProgressBar:

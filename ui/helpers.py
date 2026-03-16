@@ -95,6 +95,23 @@ def fmt_since(ts: datetime | None) -> str:
     return f"{sec // 86400}{t('time_d')} {(sec % 86400) // 3600}{t('time_h')} {t('ago')}"
 
 
+def fmt_bytes(num_bytes: int | None) -> str:
+    """Format byte count with IEC units for compact terminal UI."""
+    if num_bytes is None:
+        return t("na")
+
+    value = float(max(0, num_bytes))
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+
 def progress_bar(pct: float, width: int = 20, color: str = GREEN) -> str:
     """Render a slim Rich-markup progress bar."""
     width = _status_gauge_width(width)
@@ -315,6 +332,7 @@ __all__ = [
     "ensure_utc",
     "fmt_uptime",
     "fmt_since",
+    "fmt_bytes",
     "progress_bar",
     "sparkline",
     "sparkline_mini",
