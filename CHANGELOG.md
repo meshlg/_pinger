@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7.1753]
+
+### Changed
+
+- **Refined terminal status progress bars** in [`ui/helpers.py`](ui/helpers.py:42):
+  - Replaced heavy block glyphs with slimmer line-based bars for connection and DNS gauges.
+  - Added a shared width clamp so long terminal rows stay visually balanced.
+- **Aligned the 30-minute loss gauge inline with its percentage** in [`ui/panels/metrics.py`](ui/panels/metrics.py:109):
+  - The `loss_30m` bar now renders on the same row immediately after the percentage value, matching the other status indicators.
+- **Updated UI helper tests for slim gauges** in [`tests/test_ui_helpers.py`](tests/test_ui_helpers.py:126):
+  - Added assertions for the new slim glyphs and width clamping behavior.
+  - Stabilized time-based tests by switching overflow-prone `datetime.replace()` usage to `timedelta`.
+
 ## [2.5.6.1819]
 
 ### Fixed

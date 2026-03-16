@@ -39,10 +39,18 @@ RIGHT_ARROW = "\u2192"
 ELLIPSIS = "\u2026"
 RULE = "\u2500"
 MID_DOT = "\u00b7"
+SLIM_BAR_FULL = "\u2501"
+SLIM_BAR_EMPTY = "\u2500"
+MAX_STATUS_GAUGE_WIDTH = 28
 
 # Sparkline color thresholds
 SPARKLINE_LOW_THRESHOLD = 0.4
 SPARKLINE_HIGH_THRESHOLD = 0.7
+
+
+def _status_gauge_width(width: int) -> int:
+    """Clamp status gauge width for a cleaner terminal layout."""
+    return max(1, min(width, MAX_STATUS_GAUGE_WIDTH))
 
 
 def fmt_uptime(start_time: datetime | None) -> str:
@@ -88,11 +96,12 @@ def fmt_since(ts: datetime | None) -> str:
 
 
 def progress_bar(pct: float, width: int = 20, color: str = GREEN) -> str:
-    """Render a Rich-markup progress bar."""
+    """Render a slim Rich-markup progress bar."""
+    width = _status_gauge_width(width)
     pct = max(0.0, min(pct, 100.0))
     filled = int(round(pct / 100.0 * width))
     empty = width - filled
-    return f"[{color}]{BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{BAR_EMPTY * empty}[/{ACCENT_DIM}]"
+    return f"[{color}]{SLIM_BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{SLIM_BAR_EMPTY * empty}[/{ACCENT_DIM}]"
 
 
 def sparkline(values: list[float], width: int = 40) -> str:
@@ -198,6 +207,7 @@ def sparkline_double(values: list[float], width: int = 40) -> tuple[str, str]:
 
 def mini_gauge(value: float, max_val: float = 100.0, width: int = 10, color: str = GREEN) -> str:
     """Render a compact inline gauge."""
+    width = _status_gauge_width(width)
     pct = max(0.0, min(value / max_val, 1.0))
     filled = int(round(pct * width))
     empty = width - filled
@@ -209,19 +219,20 @@ def mini_gauge(value: float, max_val: float = 100.0, width: int = 10, color: str
     else:
         icon = "\u25cc"
 
-    bar = f"[{color}]{BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{BAR_EMPTY * empty}[/{ACCENT_DIM}]"
+    bar = f"[{color}]{SLIM_BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{SLIM_BAR_EMPTY * empty}[/{ACCENT_DIM}]"
     return f"[{color}]{icon}[/{color}] [{color}]{value:.1f}%[/{color}] {bar}"
 
 
 def dns_mini_bar(ms: float | None, max_ms: float = 200.0, width: int = 6) -> str:
     """Render a tiny horizontal bar for DNS response time."""
+    width = _status_gauge_width(width)
     if ms is None:
-        return f"[{TEXT_DIM}]{BAR_EMPTY * width}[/{TEXT_DIM}]"
+        return f"[{TEXT_DIM}]{SLIM_BAR_EMPTY * width}[/{TEXT_DIM}]"
     pct = max(0.0, min(ms / max_ms, 1.0))
     filled = int(round(pct * width))
     empty = width - filled
     color = GREEN if ms < 50 else (YELLOW if ms < 150 else RED)
-    return f"[{color}]{BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{BAR_EMPTY * empty}[/{ACCENT_DIM}]"
+    return f"[{color}]{SLIM_BAR_FULL * filled}[/{color}][{ACCENT_DIM}]{SLIM_BAR_EMPTY * empty}[/{ACCENT_DIM}]"
 
 
 def kv_table(width: int, key_width: int = 14) -> Table:

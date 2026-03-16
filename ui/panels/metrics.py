@@ -107,9 +107,9 @@ def render_metrics_panel(snap: StatsSnapshot, width: int, tier: LayoutTier, h_ti
             f"  [{TEXT_DIM}]{t('success_rate')}[/{TEXT_DIM}] {mini_gauge(success_rate, width=gauge_w, color=sr_color)}"
         ))
         items.append(Text.from_markup(
-            f"  [{TEXT_DIM}]{t('loss_30m')}[/{TEXT_DIM}] [{loss_color}]{loss30:.1f}%[/{loss_color}]"
+            f"  [{TEXT_DIM}]{t('loss_30m')}[/{TEXT_DIM}] [{loss_color}]{loss30:.1f}%[/{loss_color}] "
+            f"{progress_bar(loss30, width=gauge_w, color=loss_color)}"
         ))
-        items.append(Text.from_markup(f"  {progress_bar(loss30, width=gauge_w, color=loss_color)}"))
 
     cons = snap["consecutive_losses"]
     if snap["threshold_states"]["connection_lost"]:

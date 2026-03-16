@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from ui.helpers import (
     fmt_uptime,
     fmt_since,
@@ -94,7 +94,7 @@ class TestFmtSince:
         import unittest.mock
         now = datetime.now(timezone.utc)
         with unittest.mock.patch('ui.helpers.datetime') as mock_dt:
-            mock_dt.now.return_value = now.replace(second=now.second + 10)
+            mock_dt.now.return_value = now + timedelta(seconds=10)
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
             result = fmt_since(now)
             # Result is localized, just check it contains the number
@@ -106,7 +106,7 @@ class TestFmtSince:
         import unittest.mock
         now = datetime.now(timezone.utc)
         with unittest.mock.patch('ui.helpers.datetime') as mock_dt:
-            mock_dt.now.return_value = now.replace(minute=now.minute + 5)
+            mock_dt.now.return_value = now + timedelta(minutes=5)
             mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
             result = fmt_since(now)
             # Result is localized, just check it contains the number
@@ -128,6 +128,15 @@ class TestProgressBar:
         result = progress_bar(50.0, width=10)
         assert "[" in result
         assert "]" in result
+        assert "━" in result
+        assert "─" in result
+        assert "█" not in result
+
+    def test_width_is_clamped(self) -> None:
+        """Test progress bar width is capped for cleaner layout."""
+        result = progress_bar(50.0, width=100)
+        assert result.count("━") == 14
+        assert result.count("─") == 14
 
     def test_hundred_percent(self) -> None:
         """Test progress bar at 100%."""
@@ -236,6 +245,14 @@ class TestMiniGauge:
         result = mini_gauge(50.0, width=10)
         assert "[" in result
         assert "]" in result
+        assert "━" in result
+        assert "─" in result
+        assert "█" not in result
+
+    def test_width_is_clamped(self) -> None:
+        """Test mini_gauge width is capped for cleaner layout."""
+        result = mini_gauge(100.0, width=100)
+        assert result.count("━") == 28
 
     def test_hundred_percent(self) -> None:
         """Test mini_gauge at 100%."""
@@ -252,6 +269,12 @@ class TestDnsMiniBar:
         result = dns_mini_bar(None, width=6)
         assert "[" in result
         assert "]" in result
+        assert "─" in result
+
+    def test_width_is_clamped(self) -> None:
+        """Test dns_mini_bar width is capped for cleaner layout."""
+        result = dns_mini_bar(None, width=100)
+        assert result.count("─") == 28
 
     def test_zero_ms(self) -> None:
         """Test dns_mini_bar with 0ms."""
